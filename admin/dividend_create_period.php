@@ -1,5 +1,5 @@
 <?php
-// dividend_create_period.php — สร้างงวดปันผลใหม่ (รองรับ 3 ตาราง)
+// dividend_create_period.php — สร้างงวดปันผลใหม่
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 
@@ -9,7 +9,7 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
-// ตรวจสอบสิทธิ์
+// ตรวจสอบสิทธิ์ (เฉพาะ admin)
 if (!in_array($_SESSION['role'], ['admin', 'manager'])) {
     header('Location: dividend.php?err=คุณไม่มีสิทธิ์สร้างงวดปันผล');
     exit();
@@ -52,6 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'ปีไม่ถูกต้อง (ต้องอยู่ระหว่าง 2020-2050)';
     }
 
+    // Validate วันที่
     if (empty($start_date) || empty($end_date)) {
         $errors[] = 'กรุณาระบุวันที่เริ่มต้นและวันที่สิ้นสุด';
     } else {
@@ -67,6 +68,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // if ($total_profit <= 0) {
+    //     $errors[] = 'กำไรสุทธิต้องมากกว่า 0 บาท';
+    // }
+
     if ($dividend_rate <= 0 || $dividend_rate > 100) {
         $errors[] = 'อัตราปันผลต้องอยู่ระหว่าง 0.1-100%';
     }
@@ -76,7 +81,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header("Location: dividend.php?err=" . urlencode($error_message));
         exit();
     }
-
     try {
         // เริ่ม Transaction
         $pdo->beginTransaction();
@@ -91,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             throw new Exception("มีงวดปันผลของปี {$year} อยู่ในระบบแล้ว (แต่ละปีสามารถมีได้เพียง 1 งวด)");
         }
 
-        // 2) นับจำนวนหุ้นรวมทั้งหมด (3 ตาราง)
+        // 2) นับจำนวนหุ้นรวมทั้งหมด
         $total_shares = 0;
 
         // 2.1) สมาชิก
@@ -121,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($total_shares <= 0) {
-            throw new Exception('ไม่พบหุ้นในระบบ กรุณาเพิ่มผู้ถือหุ้นก่อนสร้างงวดปันผล');
+            throw new Exception('ไม่พบหุ้นในระบบ กรุณาเพิ่มสมาชิกที่มีหุ้นก่อนสร้างงวดปันผล');
         }
 
         // 3) คำนวณปันผล
@@ -130,26 +134,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // 4) สร้างงวดปันผล
         $insert_period_stmt = $pdo->prepare("
-            INSERT INTO dividend_periods 
-            (year, start_date, end_date, period_name, total_profit, dividend_rate, 
-             total_shares_at_time, total_dividend_amount, dividend_per_share, 
-             status, created_at, approved_by)
-            VALUES 
-            (:year, :start_date, :end_date, :name, :profit, :rate, 
-             :shares, :total_dividend, :per_share, 
-             'pending', NOW(), NULL)
+        INSERT INTO dividend_periods 
+        (year, start_date, end_date, period_name, total_profit, dividend_rate, 
+        total_shares_at_time, total_dividend_amount, dividend_per_share, 
+        status, created_at, approved_by)
+        VALUES 
+        (:year, :start_date, :end_date, :name, :profit, :rate, 
+        :shares, :total_dividend, :per_share, 
+        'pending', NOW(), NULL)
         ");
 
         $insert_period_stmt->execute([
-            ':year' => $year,
-            ':start_date' => $start_date,
-            ':end_date' => $end_date,
-            ':name' => $period_name ?: "ปันผลประจำปี {$year}",
-            ':profit' => $total_profit,
-            ':rate' => $dividend_rate,
-            ':shares' => $total_shares,
-            ':total_dividend' => $total_dividend_amount,
-            ':per_share' => $dividend_per_share
+        ':year' => $year,
+        ':start_date' => $start_date,
+        ':end_date' => $end_date,
+        ':name' => $period_name ?: "ปันผลประจำปี {$year}",
+        ':profit' => $total_profit,
+        ':rate' => $dividend_rate,
+        ':shares' => $total_shares,
+        ':total_dividend' => $total_dividend_amount,
+        ':per_share' => $dividend_per_share
         ]);
 
         $period_id = $pdo->lastInsertId();
@@ -175,7 +179,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $insert_payment_stmt->execute([
                 ':period_id' => $period_id,
-                ':member_id' => $member['id'],  // ← ใช้ members.id โดยตรง
+                ':member_id' => $member['id'],
                 ':shares' => $member['shares'],
                 ':amount' => $dividend_amount
             ]);
@@ -202,7 +206,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $insert_payment_stmt->execute([
                     ':period_id' => $period_id,
-                    ':member_id' => $manager['id'],  // ← ใช้ managers.id โดยตรง
+                    ':member_id' => $manager['id'],
                     ':shares' => $manager['shares'],
                     ':amount' => $dividend_amount
                 ]);
@@ -234,7 +238,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $insert_payment_stmt->execute([
                     ':period_id' => $period_id,
-                    ':member_id' => $committee['id'],  // ← ใช้ committees.id โดยตรง
+                    ':member_id' => $committee['id'],
                     ':shares' => $committee['shares'],
                     ':amount' => $dividend_amount
                 ]);
@@ -245,7 +249,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             error_log("Committee dividend payment error: " . $e->getMessage());
         }
 
-        // 6) บันทึก Log
+        // 6) บันทึก Log (ถ้ามีตาราง)
         try {
             $log_check = $pdo->query("SHOW TABLES LIKE 'activity_logs'")->fetch();
             if ($log_check) {
@@ -268,11 +272,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->commit();
 
         // Redirect พร้อมข้อความสำเร็จ
-        $success_message = "✅ สร้างงวดปันผลปี {$year} สำเร็จ! จำนวน {$member_count} คน | หุ้นรวม {$total_shares} หุ้น | ยอดรวม ฿" . number_format($total_dividend_amount, 2);
+        $success_message = "✅ สร้างงวดปันผลปี {$year} สำเร็จ! จำนวน {$member_count} คน | ยอดรวม ฿" . number_format($total_dividend_amount, 2);
         header("Location: dividend.php?ok=" . urlencode($success_message));
         exit();
 
     } catch (Exception $e) {
+        // Rollback on error
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
         }
@@ -282,6 +287,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit();
 
     } catch (Throwable $e) {
+        // Rollback on critical error
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
         }
@@ -292,26 +298,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
 } else {
+    // ถ้าไม่ใช่ POST ให้กลับไปหน้า dividend
     header('Location: dividend.php');
     exit();
 }
-```
-
----
-
-## **🎯 สรุป:**
-
-### **ข้อดีของวิธีนี้:**
-✅ **ไม่ต้อง INSERT ซ้ำ** - ใช้ข้อมูลที่มีอยู่แล้ว  
-✅ **แยกตารางชัดเจน** - แต่ละบทบาทมีตารางของตัวเอง  
-✅ **ง่ายต่อการจัดการ** - แก้ไขที่เดียว ไม่ซ้ำซ้อน  
-✅ **รองรับหุ้นแยก** - แต่ละคนมีหุ้นได้อิสระจากบทบาท
-
-### **ตัวอย่างผลลัพธ์:**
-```
-dividend_payments:
-id | period_id | member_id | member_type | shares | amount
-1  | 10        | 1         | member      | 1      | 11,764.71
-2  | 10        | 7         | member      | 1      | 11,764.71
-3  | 10        | 12        | manager     | 10     | 117,647.06
-4  | 10        | 1         | committee   | 5      | 58,823.53
