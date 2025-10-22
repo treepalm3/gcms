@@ -1,0 +1,214 @@
+:root{
+  --sand:#E2D4B7; --cafe:#513F32; --steel:#68727A; --teal:#36535E;
+  --navy:#212845; --gold:#CCA43B; --mint:#20A39E; --amber:#B66D0D; --choco:#3D2B1F;
+
+  --font-heading:"Prompt","Noto Sans Thai",system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --font-body:"Noto Sans Thai","Prompt",system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+
+  --bg:#F6F1E8; --surface:#ffffff; --surface-glass:rgba(255,255,255,.95);
+  --border:#cc8f26; --radius:14px;
+  --shadow:0 8px 24px rgba(33,40,69,.12);
+  --hover-shadow:0 16px 40px rgba(33,40,69,.18);
+  --ease:all .3s ease;
+}
+
+/* ===== Base / Typography ===== */
+*{box-sizing:border-box}
+body{
+  font-family:var(--font-body); font-weight:400; letter-spacing:.1px;
+  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+  background:var(--bg); color:var(--navy); margin:0; line-height:1.65;
+}
+h1,h2,h3,h4,h5,h6,
+.navbar .navbar-brand, .sidebar a, .side-brand span, .main-header h2, .stat-card h5{
+  font-family:var(--font-heading); letter-spacing:.2px;
+}
+
+/* ===== Sidebar (Desktop column) ===== */
+.sidebar{
+  display:flex; flex-direction:column;
+  background:linear-gradient(180deg,#fff,rgba(226,212,183,.35));
+  min-height:100vh; box-shadow:4px 0 20px rgba(0,0,0,.06);
+  padding-bottom:1rem;
+}
+.side-brand{ display:flex; align-items:center; gap:.5rem; color:var(--teal); font-weight:800; margin:0 8px 6px; }
+.sidebar-menu{ display:flex; flex-direction:column; flex:1 1 auto; }
+.sidebar a{
+  display:flex; align-items:center; gap:10px; padding:12px 16px; margin:3px 8px;
+  color:var(--teal); text-decoration:none; font-weight:600;
+  border-left:4px solid transparent; border-radius:10px;
+  transition:var(--ease); position:relative;
+}
+.sidebar a i{min-width:18px}
+.sidebar a:hover, .sidebar a.active{
+  background:linear-gradient(90deg,rgba(32,163,158,.12),rgba(204,164,59,.12));
+  color:var(--navy); border-left-color:var(--gold);
+  box-shadow:0 3px 10px rgba(33,40,69,.08); transform:translateX(6px);
+}
+.sidebar .logout{
+  margin-top:auto; margin:10px 10px 6px; padding:12px 14px; text-align:center;
+  background:linear-gradient(90deg,var(--gold),var(--amber));
+  color:#1b1b1b; border-radius:12px; font-weight:800; text-decoration:none;
+  box-shadow:var(--shadow);
+}
+.sidebar .logout:hover{ filter:brightness(1.05); }
+
+/* ===== Page Header ===== */
+.main-header{
+  display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;
+  padding:1.25rem; margin-bottom:1.25rem;
+  background:var(--surface-glass); border:1px solid var(--border);
+  border-radius:var(--radius); box-shadow:var(--shadow);
+}
+.main-header h2{
+  margin:0; background:linear-gradient(90deg,var(--navy),var(--teal));
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+}
+.update-time{color:var(--steel); font-weight:500}
+
+/* ===== Stat Cards ===== */
+.stats-grid{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+  gap:1.25rem; margin-bottom:2rem;
+}
+
+.stat-card{
+  background:var(--surface-glass); border:1px solid var(--border);
+  border-radius:var(--radius); padding:1.25rem; 
+  box-shadow:var(--shadow); transition:var(--ease); position:relative; overflow:hidden;
+}
+
+.stat-card:hover{transform:translateY(-4px); box-shadow:var(--hover-shadow)}
+.stat-card h5{margin:0 0 .5rem; color:var(--steel); display:flex; gap:.5rem; align-items:center;}
+.stat-card h3{
+  margin:.15rem 0 .25rem; font-size:1.9rem; font-weight:800;
+  background:linear-gradient(90deg,var(--navy),var(--teal));
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent; 
+}
+.stat-card p{margin:0; color:var(--teal)}
+
+/* ===== Utilities ===== */
+.text-primary{color:var(--teal)!important }
+.text-success{color:var(--mint)!important}
+.text-info{color:var(--gold)!important}
+.text-warning{color:var(--amber)!important}
+
+/* ===== Charts ===== */
+.row-charts .stat-card{height:100%}
+.chart-wrap{position:relative; width:100%; height:260px}
+@media (min-width: 992px){ .chart-wrap{height:300px} }
+.chart-wrap canvas{width:100%!important; height:100%!important}
+
+/* ===== Footer ===== */
+.footer{
+  background:var(--navy); color:#CCA43B; text-align:center;
+  padding:1.2rem 0; margin-top:2rem; border-top:1px solid rgba(255,255,255,.12);
+}
+
+/* ===== Responsive tweaks ===== */
+@media (max-width: 768px){
+  .main-header{flex-direction:column; gap:.75rem; text-align:center}
+  .stats-grid{grid-template-columns:1fr}
+}
+
+ /* ===== Offcanvas Sidebar: scroll only the menu ===== */
+ #offcanvasSidebar .sidebar{
+  /* override ของคลาส .sidebar เดิมสำหรับใน offcanvas */
+  min-height: 0;          /* สำคัญ: อนุญาตให้ย่อใน flex container */
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;       /* กันไม่ให้ทั้งแผงเลื่อน */
+  padding-bottom: .5rem;
+}
+
+#offcanvasSidebar .sidebar-menu{
+  flex: 1 1 auto;         /* กินพื้นที่ที่เหลือทั้งหมด */
+  overflow-y: auto;       /* เลื่อนเฉพาะเมนู */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;  /* ลื่นบน iOS */
+  padding-right: .25rem;  /* เผื่อพื้นที่สกอลล์บาร์ */
+  max-height: 100%;
+}
+
+/* แต่ง scrollbar (เลือกได้) */
+#offcanvasSidebar .sidebar-menu::-webkit-scrollbar{ width: 8px; }
+#offcanvasSidebar .sidebar-menu::-webkit-scrollbar-thumb{
+  background: rgba(33,40,69,.25); border-radius: 8px;
+}
+#offcanvasSidebar .sidebar-menu:hover::-webkit-scrollbar-thumb{
+  background: rgba(33,40,69,.35);
+}
+#offcanvasSidebar .sidebar-menu{ scrollbar-width: thin; scrollbar-color: rgba(33,40,69,.3) transparent; }
+
+/* ปุ่มออกจากระบบให้ชิดล่างเหมือนเดิม */
+#offcanvasSidebar .logout{
+  margin-top: auto;
+}
+
+/* ให้ตัว Offcanvas สูงเท่า viewport จริง ๆ ของมือถือ */
+#offcanvasSidebar{
+  height: 100dvh;   /* เบราว์เซอร์ใหม่ */
+  height: 100svh;   /* fallback iOS ใหม่ */
+}
+
+/* อนุญาตให้เมนูย่อและเกิดสกอลล์ได้ใน flex container */
+#offcanvasSidebar .sidebar-menu{
+  min-height: 0;    /* สำคัญสุด ๆ */
+  /* (ถ้ามี max-height:100% อยู่ จะคงไว้หรือเอาออกก็ได้) */
+}
+
+.offcanvas-header {
+  background:linear-gradient(135deg,var(--navy),var(--teal)) !important;
+}
+
+.offcanvas-title {
+  color:#fff;
+}
+
+.itim-regular {
+  font-family: "Itim", cursive;
+  font-weight: 400;
+  font-style: normal;
+}
+
+
+/* ========= Navbar ========= */ 
+.navbar.bg-primary{ /* override bootstrap */ background:linear-gradient(135deg,var(--navy),var(--teal)) !important; } 
+.navbar, .navbar *{ color:#fff; } .navbar .navbar-brand{font-weight:700;letter-spacing:.2px} 
+.navbar .form-control{ background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25); color:#fff; border-radius:10px; } 
+.navbar .form-control::placeholder{color:rgba(255,255,255,.8)} 
+.navbar .btn-outline-light{border-color:rgba(255,255,255,.6)} 
+.navbar .btn-outline-light:hover{background:rgba(255,255,255,.15)}
+
+
+/* วงกลมแบบแก้ว */
+.btn-nav-circle, .avatar-circle{
+  width:44px;height:44px;border-radius:999px;
+  display:grid;place-items:center;
+  background:radial-gradient(circle at 30% 30%,rgba(255,255,255,.16),rgba(255,255,255,.08));
+  border:1px solid rgba(255,255,255,.14);
+  color:#fff; box-shadow:0 6px 16px rgba(0,0,0,.20);
+  backdrop-filter:saturate(160%) blur(8px);
+  -webkit-backdrop-filter:saturate(160%) blur(8px);
+}
+.btn-nav-circle{ padding:0; }
+.btn-nav-circle i{ font-size:1.1rem; }
+
+/* badge สีแดงมุมขวาบน */
+.notif-badge{
+  position:absolute; top:-4px; right:-4px;
+  background:#ff4d5a;
+  font-weight:800; font-size:.72rem; padding:.15rem .4rem;
+  box-shadow:0 2px 6px rgba(0,0,0,.25);
+}
+
+/* ชื่อ/บทบาท */
+.nav-identity .nav-name{ color:#fff; font-weight:800; font-size:1.25rem; line-height:1.05; }
+.nav-identity .nav-sub{ color:rgba(255,255,255,.85); font-weight:600; margin-top:2px; }
+
+/* ปรับขนาดบนจอเล็ก */
+@media (max-width:575.98px){
+  .btn-nav-circle,.avatar-circle{ width:40px;height:40px; }
+}
+

@@ -1,0 +1,48 @@
+/* =========================================================
+   Sales Log Page — match admin_dashboard.css
+   ========================================================= */
+   :root{
+    --sand:#E2D4B7; --cafe:#513F32; --steel:#68727A; --teal:#36535E;
+    --navy:#212845; --gold:#CCA43B; --mint:#20A39E; --amber:#B66D0D; --choco:#3D2B1F;
+    --border:#E9E1D3; --glass:rgba(255,255,255,.95); --shadow:0 8px 24px rgba(33,40,69,.12);
+    --hover:0 16px 40px rgba(33,40,69,.18); --r:14px;
+  }
+  
+  /* Panel */
+  .panel{
+    background:var(--glass);
+    border:1px solid var(--border);
+    border-radius:var(--r);
+    box-shadow:var(--shadow);
+    padding:1.1rem;
+  }
+  .panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem}
+  .panel-head h5{margin:0;color:var(--steel);font-weight:700}
+  
+  /* Table area */
+  .log-table-wrap{max-height:65vh; overflow:auto}
+  .table thead th{color:var(--steel); font-weight:700}
+  .table > :not(caption) > * > *{background:transparent}
+  .table tbody tr:hover{background:rgba(32,163,158,.06)}
+  
+  /* Sticky head nice border */
+  thead.sticky-top{top:0; z-index:2}
+  
+  /* Badges color are inherited from theme classes already */
+  
+  /* Offcanvas (scroll menu only) */
+  #offcanvasSidebar{height:100dvh;height:100svh}
+  #offcanvasSidebar .offcanvas-header{
+    background:var(--navy); color:#fff; border-bottom:1px solid rgba(255,255,255,.12);
+  }
+  #offcanvasSidebar .offcanvas-body{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  #offcanvasSidebar .sidebar-menu{flex:1 1 auto;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch}
+  #offcanvasSidebar .logout{margin-top:auto}
+  
+  /* Print list: hide nav & buttons */
+  @media print{
+    .navbar, .sidebar, .offcanvas, .panel-head div, .footer { display:none !important; }
+    .panel, .stat-card { box-shadow:none !important; border:1px solid #ddd !important; }
+    main { padding:0 !important; }
+  }
+  

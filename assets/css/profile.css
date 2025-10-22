@@ -1,0 +1,68 @@
+/* assets/css/profile.css */
+/* ใช้กับหน้าโปรไฟล์เท่านั้น (ผูกกับคลาส body.profile-page) */
+.profile-page {
+    font-family: var(--font-body);
+    background: var(--bg);
+  }
+  
+  /* การ์ดทั่วไปในหน้าโปรไฟล์ */
+  .profile-page .card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface-glass);
+    box-shadow: var(--shadow);
+  }
+  
+  /* อวาตาร์ตัวอักษร */
+  .profile-page .avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--navy), var(--teal));
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 26px;
+    box-shadow: 0 6px 16px rgba(0,0,0,.18);
+  }
+  
+  /* ป้ายบทบาท */
+  .profile-page .badge-role {
+    font-size: .85rem;
+    background: linear-gradient(90deg, var(--gold), var(--amber));
+    color: #1b1b1b;
+    font-weight: 800;
+    border: 1px solid rgba(0,0,0,.06);
+  }
+  
+  /* ชื่อหัวข้อในฟอร์ม */
+  .profile-page .form-section-title {
+    font-weight: 700;
+    color: var(--teal);
+  }
+  
+  /* ปุ่มบันทึก/เปลี่ยนรหัสผ่าน – ให้กลืนธีม */
+  .profile-page .btn-primary {
+    background: linear-gradient(135deg, var(--navy), var(--teal));
+    border: 0;
+  }
+  .profile-page .btn-warning {
+    background: linear-gradient(135deg, var(--gold), var(--amber));
+    border: 0;
+    color: #1b1b1b;
+  }
+  
+  /* รายการข้อมูลย่อย */
+  .profile-page .list-unstyled.small li i {
+    color: var(--steel);
+    margin-right: .35rem;
+  }
+  
+  /* จอเล็ก */
+  @media (max-width: 576px) {
+    .profile-page .card { border-radius: 12px; }
+    .profile-page .avatar { width: 56px; height: 56px; font-size: 22px; }
+  }
+  
