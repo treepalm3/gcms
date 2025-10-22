@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once __DIR__ . '/../../config/db.php'; // $pdo
+require_once __DIR__ . '/../config/db.php'; // $pdo
 
 // 1. ตรวจสอบ Method และ CSRF Token
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {

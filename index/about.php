@@ -12,8 +12,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <!-- ✅ Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
-  <link rel="stylesheet" href="../../assets/css/coop-landing.css" />
-  <link rel="stylesheet" href="../../assets/css/about.css" />
+  <link rel="stylesheet" href="../assets/css/coop-landing.css" />
+  <link rel="stylesheet" href="../assets/css/about.css" />
   <style>
     html, body {
       font-family: 'Prompt', system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans Thai', sans-serif;

@@ -14,7 +14,7 @@ $status = $_GET['status'] ?? '';
   <title>ลืมรหัสผ่าน — สหกรณ์ชุมชนบ้านภูเขาทอง</title>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-  <link rel="stylesheet" href="../../assets/css/login.css" />
+  <link rel="stylesheet" href="../assets/css/login.css" />
   <style> body { font-family: 'Prompt', sans-serif; } </style>
 </head>
 <body>
