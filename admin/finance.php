@@ -18,7 +18,7 @@ try {
   $current_role = $_SESSION['role'] ?? '';
   if ($current_role !== 'admin') { header('Location: /index/login.php?err=คุณไม่มีสิทธิ์เข้าถึงหน้านี้'); exit(); }
 } catch (Throwable $e) { header('Location: /index/login.php?err=เกิดข้อผิดพลาดของระบบ'); exit(); }
-
+ 
 if (empty($_SESSION['csrf_token'])) { $_SESSION['csrf_token'] = bin2hex(random_bytes(32)); }
 
 /* ===== Helpers ===== */
@@ -38,7 +38,7 @@ if (!function_exists('column_exists')) {
     return (int)$st->fetchColumn() > 0;
   }
 }
-function nf($n,$d=2){ return number_format((float)$n,$d,'.',','); }
+function nf($n, $d=2){ return number_format((float)$n, $d, '.', ','); }
 function ymd($s){ $t=strtotime($s); return $t? date('Y-m-d',$t) : null; }
 
 /* ===== ค่าพื้นฐาน ===== */
@@ -47,7 +47,7 @@ try {
   $st = $pdo->query("SELECT site_name FROM settings WHERE id=1");
   if ($r = $st->fetch(PDO::FETCH_ASSOC)) $site_name = $r['site_name'] ?: $site_name;
 } catch (Throwable $e) {}
-
+ 
 $stationId = 1;
 try {
   if (table_exists($pdo,'settings')) {
@@ -55,7 +55,7 @@ try {
     if ($sid !== false) $stationId = (int)$sid;
   }
 } catch (Throwable $e) {}
-
+ 
 /* ===== กำหนดช่วงวันที่ "ส่วนกลางของทั้งหน้า" ===== */
 $quick = $_GET['gp_quick'] ?? ''; // today|yesterday|7d|30d|this_month|last_month|this_year|all
 $in_from = ymd($_GET['gp_from'] ?? '');
@@ -64,20 +64,20 @@ $in_to   = ymd($_GET['gp_to']   ?? '');
 $today = new DateTime('today');
 $from = null; $to = null;
 
-switch ($quick) {
-  case 'today':      $from=$today; $to=clone $today; break;
-  case 'yesterday':  $from=(clone $today)->modify('-1 day'); $to=(clone $today)->modify('-1 day'); break;
-  case '7d':         $from=(clone $today)->modify('-6 day'); $to=$today; break;
-  case '30d':        $from=(clone $today)->modify('-29 day'); $to=$today; break;
-  case 'this_month': $from=new DateTime(date('Y-m-01')); $to=$today; break;
-  case 'last_month': $from=new DateTime(date('Y-m-01', strtotime('first day of last month'))); $to=new DateTime(date('Y-m-t', strtotime('last day of last month'))); break;
-  case 'this_year':  $from=new DateTime(date('Y-01-01')); $to=$today; break;
-  case 'all':        $from=null; $to=null; break;
-  default:
-    if ($in_from) $from = new DateTime($in_from);
-    if ($in_to)   $to   = new DateTime($in_to);
-    if (!$from && !$to) { $from=(clone $today)->modify('-6 day'); $to=$today; } // ดีฟอลต์ 7 วัน
-    break;
+if ($in_from && $in_to) {
+    $from = new DateTime($in_from);
+    $to = new DateTime($in_to);
+} else {
+    switch ($quick) {
+      case 'today':      $from=$today; $to=clone $today; break;
+      case 'yesterday':  $from=(clone $today)->modify('-1 day'); $to=(clone $today)->modify('-1 day'); break;
+      case '30d':        $from=(clone $today)->modify('-29 day'); $to=$today; break;
+      case 'this_month': $from=new DateTime(date('Y-m-01')); $to=$today; break;
+      case 'last_month': $from=new DateTime(date('Y-m-01', strtotime('first day of last month'))); $to=new DateTime(date('Y-m-t', strtotime('last day of last month'))); break;
+      case 'this_year':  $from=new DateTime(date('Y-01-01')); $to=$today; break;
+      case 'all':        $from=null; $to=null; break;
+      default:           $from=(clone $today)->modify('-6 day'); $to=$today; $quick = '7d'; break; // Default 7 วัน
+    }
 }
 if ($from && $to && $to < $from) { $tmp=$from; $from=$to; $to=$tmp; }
 if ($from && $to) { // จำกัดช่วงสูงสุด ~1 ปี
@@ -86,7 +86,7 @@ if ($from && $to) { // จำกัดช่วงสูงสุด ~1 ปี
 }
 $rangeFromStr = $from ? $from->format('Y-m-d') : null;
 $rangeToStr   = $to   ? $to->format('Y-m-d')   : null;
-
+ 
 /* ===== ธงโหมด ===== */
 $has_ft  = table_exists($pdo,'financial_transactions');
 $has_gpv = table_exists($pdo,'v_sales_gross_profit');
@@ -118,9 +118,8 @@ try {
     // เงื่อนไขช่วง + สถานี (ถ้ามีคอลัมน์)
     $w = 'WHERE 1=1'; $p=[];
     if ($ft_has_station) { $w .= " AND ft.station_id = :sid"; $p[':sid'] = $stationId; }
-    if ($rangeFromStr && $rangeToStr) { $w.=" AND DATE(ft.transaction_date) BETWEEN :f AND :t"; $p[':f']=$rangeFromStr; $p[':t']=$rangeToStr; }
-    elseif ($rangeFromStr)           { $w.=" AND DATE(ft.transaction_date) >= :f"; $p[':f']=$rangeFromStr; }
-    elseif ($rangeToStr)             { $w.=" AND DATE(ft.transaction_date) <= :t"; $p[':t']=$rangeToStr; }
+    if ($rangeFromStr) { $w.=" AND DATE(ft.transaction_date) >= :f"; $p[':f']=$rangeFromStr; }
+    if ($rangeToStr)   { $w.=" AND DATE(ft.transaction_date) <= :t"; $p[':t']=$rangeToStr; }
 
     $stmt = $pdo->prepare("
       SELECT COALESCE(ft.transaction_code, CONCAT('FT-', ft.id)) AS id,
@@ -270,10 +269,9 @@ try {
     $unionSQL = implode("\nUNION ALL\n", $parts);
 
     // WHERE วันที่ (outer)
-    $w = 'WHERE 1=1'; $p = $paramsU;
-    if ($rangeFromStr && $rangeToStr) { $w.=" AND DATE(x.date) BETWEEN :f AND :t"; $p[':f']=$rangeFromStr; $p[':t']=$rangeToStr; }
-    elseif ($rangeFromStr)           { $w.=" AND DATE(x.date) >= :f"; $p[':f']=$rangeFromStr; }
-    elseif ($rangeToStr)             { $w.=" AND DATE(x.date) <= :t"; $p[':t']=$rangeToStr; }
+    $w = 'WHERE 1=1'; $p = $paramsU; // Start with UNION params
+    if ($rangeFromStr) { $w.=" AND DATE(x.date) >= :f"; $p[':f']=$rangeFromStr; }
+    if ($rangeToStr)   { $w.=" AND DATE(x.date) <= :t"; $p[':t']=$rangeToStr; }
 
     $stmt = $pdo->prepare("SELECT * FROM ( $unionSQL ) x $w ORDER BY x.date DESC, x.id DESC LIMIT 500");
     $stmt->execute($p);
@@ -439,8 +437,8 @@ try {
   if ($has_ft) {
     $q = $pdo->prepare("
       SELECT DATE(transaction_date) d,
-             SUM(CASE WHEN type='income'  THEN amount ELSE 0 END) inc,
-             SUM(CASE WHEN type='expense' THEN amount ELSE 0 END) exp
+             COALESCE(SUM(CASE WHEN type='income'  THEN amount ELSE 0 END), 0) inc,
+             COALESCE(SUM(CASE WHEN type='expense' THEN amount ELSE 0 END), 0) exp
       FROM financial_transactions
       ".($ft_has_station?" WHERE station_id=:sid ":" WHERE 1=1 ")."
         ".($rangeFromStr?" AND DATE(transaction_date) >= :f":"")."
@@ -448,8 +446,8 @@ try {
       GROUP BY DATE(transaction_date)
       ORDER BY DATE(transaction_date)
     ");
-    $p=[]; if($ft_has_station) $p[':sid']=$stationId; if($rangeFromStr) $p[':f']=$rangeFromStr; if($rangeToStr) $p[':t']=$rangeToStr;
-    $q->execute($p);
+    $p_graph=[]; if($ft_has_station) $p_graph[':sid']=$stationId; if($rangeFromStr) $p_graph[':f']=$rangeFromStr; if($rangeToStr) $p_graph[':t']=$rangeToStr;
+    $q->execute($p_graph);
     while ($r=$q->fetch(PDO::FETCH_ASSOC)) { $d=$r['d']; if(isset($days[$d])) { $days[$d]['income']=(float)$r['inc']; $days[$d]['expense']=(float)$r['exp']; } }
   } else {
     $stInc = $pdo->prepare("
@@ -460,8 +458,8 @@ try {
         ".($rangeToStr  ?" AND DATE(sale_date) <= :t":"")."
       GROUP BY DATE(sale_date)
     ");
-    $p=[]; if($has_sales_station) $p[':sid']=$stationId; if($rangeFromStr) $p[':f']=$rangeFromStr; if($rangeToStr) $p[':t']=$rangeToStr;
-    $stInc->execute($p);
+    $p_graph=[]; if($has_sales_station) $p_graph[':sid']=$stationId; if($rangeFromStr) $p_graph[':f']=$rangeFromStr; if($rangeToStr) $p_graph[':t']=$rangeToStr;
+    $stInc->execute($p_graph);
     while ($r=$stInc->fetch(PDO::FETCH_ASSOC)) { $d=$r['d']; if(isset($days[$d])) $days[$d]['income']=(float)$r['v']; }
 
     $stExpR = $pdo->prepare("
@@ -472,8 +470,8 @@ try {
         ".($rangeToStr  ?" AND DATE(fr.received_date) <= :t":"")."
       GROUP BY DATE(fr.received_date)
     ");
-    $p=[":sid"=>$stationId]; if($rangeFromStr) $p[':f']=$rangeFromStr; if($rangeToStr) $p[':t']=$rangeToStr;
-    $stExpR->execute($p);
+    $p_graph=[":sid"=>$stationId]; if($rangeFromStr) $p_graph[':f']=$rangeFromStr; if($rangeToStr) $p_graph[':t']=$rangeToStr;
+    $stExpR->execute($p_graph);
     while ($r=$stExpR->fetch(PDO::FETCH_ASSOC)) { $d=$r['d']; if(isset($days[$d])) $days[$d]['expense'] += (float)$r['v']; }
 
     if (table_exists($pdo,'fuel_lots')) {
@@ -506,9 +504,9 @@ try {
           GROUP BY DATE(received_at)
         ");
       }
-      $p=[":sid"=>$stationId]; if($rangeFromStr) $p[':f']=$rangeFromStr; if($rangeToStr) $p[':t']=$rangeToStr;
-      if (!$has_lot_station && !$has_tank_station) { unset($p[':sid']); }
-      $stExpL->execute($p);
+      $p_graph=[":sid"=>$stationId]; if($rangeFromStr) $p_graph[':f']=$rangeFromStr; if($rangeToStr) $p_graph[':t']=$rangeToStr;
+      if (!$has_lot_station && !$has_tank_station) { unset($p_graph[':sid']); }
+      $stExpL->execute($p_graph);
       while ($r=$stExpL->fetch(PDO::FETCH_ASSOC)) { $d=$r['d']; if(isset($days[$d])) $days[$d]['expense'] += (float)$r['v']; }
     }
   }
@@ -520,9 +518,8 @@ $gp_labels = []; $gp_series = [];
 if ($has_gpv) {
   try {
     $wd = ''; $pp=[':sid'=>$stationId];
-    if ($rangeFromStr && $rangeToStr) { $wd="AND DATE(v.sale_date) BETWEEN :f AND :t"; $pp[':f']=$rangeFromStr; $pp[':t']=$rangeToStr; }
-    elseif ($rangeFromStr)           { $wd="AND DATE(v.sale_date) >= :f"; $pp[':f']=$rangeFromStr; }
-    elseif ($rangeToStr)             { $wd="AND DATE(v.sale_date) <= :t"; $pp[':t']=$rangeToStr; }
+    if ($rangeFromStr) { $wd.=" AND DATE(v.sale_date) >= :f"; $pp[':f']=$rangeFromStr; }
+    if ($rangeToStr)   { $wd.=" AND DATE(v.sale_date) <= :t"; $pp[':t']=$rangeToStr; }
 
     $grp = $pdo->prepare("
       SELECT DATE(v.sale_date) d, COALESCE(SUM(v.total_amount - COALESCE(v.cogs,0)),0) gp
@@ -532,7 +529,7 @@ if ($has_gpv) {
       GROUP BY DATE(v.sale_date)
       ORDER BY DATE(v.sale_date)
     "); $grp->execute($pp);
-    $map = []; while ($r=$grp->fetch(PDO::FETCH_ASSOC)) $map[$r['d']] = (float)$r['gp'];
+    $map = $grp->fetchAll(PDO::FETCH_KEY_PAIR);
 
     $sD = $rangeFromStr ? new DateTime($rangeFromStr) : (new DateTime('today'))->modify('-6 day');
     $eD = $rangeToStr   ? new DateTime($rangeToStr)   : new DateTime('today');
@@ -543,7 +540,7 @@ if ($has_gpv) {
       $gp_series[] = round($map[$d] ?? 0, 2);
       $c->modify('+1 day');
     }
-  } catch (Throwable $e) { $has_gpv = false; }
+  } catch (Throwable $e) { $has_gpv = false; error_log("GPV error: ".$e->getMessage()); }
 }
 
 /* ===== ยอดขายและกำไรรายปี (สำหรับปันผล) ===== */
@@ -744,6 +741,12 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   .text-muted.small {
     font-size: 0.85rem;
   }
+  .filter-bar {
+    background-color: #f8f9fa;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid #dee2e6;
+  }
   </style>
 </head>
 <body>
@@ -812,6 +815,31 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     <main class="col-lg-10 p-4">
       <div class="main-header ">
         <h2 class="mb-0"><i class="fa-solid fa-wallet"></i> การเงินและบัญชี</h2>
+      </div>
+
+      <!-- Date Range Filter -->
+      <div class="filter-bar mb-4">
+        <form method="GET" action="" class="row g-2 align-items-end">
+            <div class="col-md-3 col-lg-2">
+                <label for="gp_from" class="form-label small">จากวันที่</label>
+                <input type="date" class="form-control form-control-sm" name="gp_from" id="gp_from" value="<?= htmlspecialchars($rangeFromStr ?? '') ?>">
+            </div>
+            <div class="col-md-3 col-lg-2">
+                <label for="gp_to" class="form-label small">ถึงวันที่</label>
+                <input type="date" class="form-control form-control-sm" name="gp_to" id="gp_to" value="<?= htmlspecialchars($rangeToStr ?? '') ?>">
+            </div>
+            <div class="col-md-4 col-lg-6">
+                <label class="form-label small d-none d-md-block">&nbsp;</label>
+                <div class="btn-group w-100" role="group">
+                    <a href="?gp_quick=7d" class="btn btn-sm btn-outline-secondary <?= $quick === '7d' ? 'active' : '' ?>">7 วัน</a>
+                    <a href="?gp_quick=30d" class="btn btn-sm btn-outline-secondary <?= $quick === '30d' ? 'active' : '' ?>">30 วัน</a>
+                    <a href="?gp_quick=this_month" class="btn btn-sm btn-outline-secondary <?= $quick === 'this_month' ? 'active' : '' ?>">เดือนนี้</a>
+                    <a href="?gp_quick=last_month" class="btn btn-sm btn-outline-secondary <?= $quick === 'last_month' ? 'active' : '' ?>">เดือนก่อน</a>
+                    <a href="?gp_quick=this_year" class="btn btn-sm btn-outline-secondary <?= $quick === 'this_year' ? 'active' : '' ?>">ปีนี้</a>
+                </div>
+            </div>
+            <div class="col-md-2 col-lg-2"><button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-search"></i> กรอง</button></div>
+        </form>
       </div>
 
       <!-- แผงสรุปรายปี (สำหรับปันผล) -->
@@ -973,29 +1001,28 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
           <div class="tab-pane fade show active" id="stock-price-panel" role="tabpanel">
             <!-- Toolbar ฟิลเตอร์ -->
             <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
-              <div class="d-flex flex-wrap gap-2">
+              <div class="d-flex flex-wrap gap-2 align-items-center">
                 <div class="input-group" style="max-width:320px;">
                   <span class="input-group-text"><i class="bi bi-search"></i></span>
                   <input type="search" id="txnSearch" class="form-control" placeholder="ค้นหา: รหัส/รายละเอียด/อ้างอิง">
                 </div>
-                <div class="col-sm-2">
-                  <select id="filterType" class="form-select">
+                <select id="filterType" class="form-select" style="width:auto;">
                     <option value="">ทุกประเภท</option>
                     <option value="income">รายได้</option>
                     <option value="expense">ค่าใช้จ่าย</option>
-                  </select>
-                </div>
-                <div class="col-sm-2">
-                  <select id="filterCategory" class="form-select">
+                </select>
+                <select id="filterCategory" class="form-select" style="width:auto;">
                     <option value="">ทุกหมวดหมู่</option>
                     <?php
                       $allCats = array_unique(array_merge($categories['income'],$categories['expense']));
                       sort($allCats, SORT_NATURAL | SORT_FLAG_CASE);
                       foreach($allCats as $c) echo '<option value="'.htmlspecialchars($c).'">'.htmlspecialchars($c).'</option>';
                     ?>
-                  </select>
-                </div>
-                <input type="date" id="filterDate" class="form-control" style="max-width:160px;">
+                </select>
+                <input type="date" id="filterDate" class="form-control" style="width:auto;">
+              </div>
+              <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary" id="btnTxnShowAll"><i class="bi bi-arrow-clockwise"></i></button>
                 <?php if ($has_ft): ?>
               <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalAddTransaction"><i class="bi bi-plus-circle me-1"></i> เพิ่มรายการ</button>
               <?php endif; ?>
@@ -1205,10 +1232,15 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 <footer class="footer">© <?= date('Y') ?> <?= htmlspecialchars($site_name) ?> — จัดการการเงินและบัญชี</footer>
 
 <!-- Modals -->
-<div class="modal-body">
-        <?php if (!$has_ft): ?><div class="alert alert-warning">โหมดอ่านอย่างเดียว ไม่สามารถเพิ่มรายการได้</div><?php endif; ?>
-        <div class="row g-3">
-          <div class="col-sm-6">
+<div class="modal fade" id="modalAddTransaction" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <form class="modal-content" id="formAddTransaction" method="post" action="finance_create.php">
+      <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+      <div class="modal-header"><h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>เพิ่มรายการการเงิน</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <?php if (!$has_ft): ?><div class="alert alert-warning">โหมดอ่านอย่างเดียว ไม่สามารถเพิ่มรายการได้</div><?php endif; ?>
+        <div class="row g-3">
+          <div class="col-sm-6">
             <label class="form-label" for="addTransactionCode">รหัสรายการ (ไม่บังคับ)</label>
             <input type="text" class="form-control" name="transaction_code" id="addTransactionCode" placeholder="เว้นว่างเพื่อสร้างอัตโนมัติ" <?= $has_ft?'':'disabled' ?>>
           </div>
@@ -1216,7 +1248,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
             <label class="form-label" for="addTransactionDate">วันที่และเวลา</label>
             <input type="datetime-local" class="form-control" name="transaction_date" id="addTransactionDate" value="<?= date('Y-m-d\TH:i') ?>" required <?= $has_ft?'':'disabled' ?>>
           </div>
-          <div class="col-sm-6">
+          <div class="col-sm-6">
             <label class="form-label" for="addType">ประเภท</label>
             <select name="type" id="addType" class="form-select" required <?= $has_ft?'':'disabled' ?>>
                 <option value="">เลือกประเภท...</option>
@@ -1224,7 +1256,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                 <option value="expense">ค่าใช้จ่าย (Expense)</option>
             </select>
           </div>
-          <div class="col-sm-6">
+          <div class="col-sm-6">
             <label class="form-label" for="addCategory">หมวดหมู่</label>
             <input type="text" class="form-control" name="category" id="addCategory" required list="categoryList" placeholder="เช่น เงินลงทุน, เงินเดือน, ค่าไฟ" <?= $has_ft?'':'disabled' ?>>
             <datalist id="categoryList">
@@ -1244,66 +1276,42 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
             <label class="form-label" for="addDescription">รายละเอียด</label>
             <input type="text" class="form-control" name="description" id="addDescription" required <?= $has_ft?'':'disabled' ?>>
           </div>
-          <div class="col-sm-6">
+          <div class="col-sm-6">
             <label class="form-label" for="addAmount">จำนวนเงิน (บาท)</label>
             <input type="number" class="form-control" name="amount" id="addAmount" step="0.01" min="0" required <?= $has_ft?'':'disabled' ?>>
           </div>
-          <div class="col-sm-6">
+          <div class="col-sm-6">
             <label class="form-label" for="addReference">อ้างอิง (ถ้ามี)</label>
             <input type="text" class="form-control" name="reference_id" id="addReference" <?= $has_ft?'':'disabled' ?>>
           </div>
-        </div>
-      </div>
+        </div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-primary" type="submit" <?= $has_ft?'':'disabled' ?>><i class="bi bi-save2 me-1"></i> บันทึก</button><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">ยกเลิก</button></div>
+    </form>
+  </div>
+</div>
 
-<div class="modal-body">
-        <?php if (!$has_ft): ?><div class="alert alert-warning">โหมดอ่านอย่างเดียว ไม่สามารถเพิ่มรายการได้</div><?php endif; ?>
-        <div class="row g-3">
-          <div class="col-sm-6">
-            <label class="form-label" for="addTransactionCode">รหัสรายการ (ไม่บังคับ)</label>
-            <input type="text" class="form-control" name="transaction_code" id="addTransactionCode" placeholder="เว้นว่างเพื่อสร้างอัตโนมัติ" <?= $has_ft?'':'disabled' ?>>
-          </div>
-          <div class="col-sm-6">
-            <label class="form-label" for="addTransactionDate">วันที่และเวลา</label>
-            <input type="datetime-local" class="form-control" name="transaction_date" id="addTransactionDate" value="<?= date('Y-m-d\TH:i') ?>" required <?= $has_ft?'':'disabled' ?>>
-          </div>
-          <div class="col-sm-6">
-            <label class="form-label" for="addType">ประเภท</label>
-            <select name="type" id="addType" class="form-select" required <?= $has_ft?'':'disabled' ?>>
-                <option value="">เลือกประเภท...</option>
-                <option value="income">รายได้ (Income)</option>
-                <option value="expense">ค่าใช้จ่าย (Expense)</option>
-            </select>
-          </div>
-          <div class="col-sm-6">
-            <label class="form-label" for="addCategory">หมวดหมู่</label>
-            <input type="text" class="form-control" name="category" id="addCategory" required list="categoryList" placeholder="เช่น เงินลงทุน, เงินเดือน, ค่าไฟ" <?= $has_ft?'':'disabled' ?>>
-            <datalist id="categoryList">
-                <option value="เงินลงทุน">
-                <option value="รายได้อื่น">
-                <option value="เงินเดือน">
-                <option value="ค่าสาธารณูปโภค">
-                <option value="ต้นทุนซื้อน้ำมัน">
-                <?php
-                  // ดึงหมวดหมู่ที่มีอยู่จาก PHP (คำนวณไว้แล้ว)
-                  $allCatsModal = array_unique(array_merge($categories['income'],$categories['expense']));
-                  foreach($allCatsModal as $c) echo '<option value="'.htmlspecialchars($c).'">';
-                ?>
-            </datalist>
-          </div>
-          <div class="col-12">
-            <label class="form-label" for="addDescription">รายละเอียด</label>
-            <input type="text" class="form-control" name="description" id="addDescription" required <?= $has_ft?'':'disabled' ?>>
-          </div>
-          <div class="col-sm-6">
-            <label class="form-label" for="addAmount">จำนวนเงิน (บาท)</label>
-            <input type="number" class="form-control" name="amount" id="addAmount" step="0.01" min="0" required <?= $has_ft?'':'disabled' ?>>
-          </div>
-          <div class="col-sm-6">
-            <label class="form-label" for="addReference">อ้างอิง (ถ้ามี)</label>
-            <input type="text" class="form-control" name="reference_id" id="addReference" <?= $has_ft?'':'disabled' ?>>
-          </div>
-        </div>
-      </div>
+<div class="modal fade" id="modalEditTransaction" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <form class="modal-content" id="formEditTransaction" method="post" action="finance_edit.php">
+      <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+      <div class="modal-header"><h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>แก้ไขรายการการเงิน</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <?php if (!$has_ft): ?><div class="alert alert-warning">โหมดอ่านอย่างเดียว ไม่สามารถแก้ไขได้</div><?php endif; ?>
+        <div class="row g-3">
+          <div class="col-sm-6"><label class="form-label">รหัสรายการ</label><input type="text" class="form-control" name="transaction_code" id="editTransactionCode" readonly></div>
+          <div class="col-sm-6"><label class="form-label">วันที่</label><input type="datetime-local" class="form-control" name="transaction_date" id="editDate" required <?= $has_ft?'':'disabled' ?>></div>
+          <div class="col-sm-6"><label class="form-label">ประเภท</label><select name="type" id="editType" class="form-select" required <?= $has_ft?'':'disabled' ?>><option value="income">รายได้</option><option value="expense">ค่าใช้จ่าย</option></select></div>
+          <div class="col-sm-6"><label class="form-label">หมวดหมู่</label><input type="text" class="form-control" name="category" id="editCategory" required list="categoryList" <?= $has_ft?'':'disabled' ?>></div>
+          <div class="col-12"><label class="form-label">รายละเอียด</label><input type="text" class="form-control" name="description" id="editDescription" required <?= $has_ft?'':'disabled' ?>></div>
+          <div class="col-sm-6"><label class="form-label">จำนวนเงิน (บาท)</label><input type="number" class="form-control" name="amount" id="editAmount" step="0.01" min="0" required <?= $has_ft?'':'disabled' ?>></div>
+          <div class="col-sm-6"><label class="form-label">อ้างอิง (ถ้ามี)</label><input type="text" class="form-control" name="reference_id" id="editReference" <?= $has_ft?'':'disabled' ?>></div>
+        </div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-primary" type="submit" <?= $has_ft?'':'disabled' ?>><i class="bi bi-save2 me-1"></i> บันทึก</button><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">ยกเลิก</button></div>
+    </form>
+  </div>
+</div>
 
 <div class="modal fade" id="modalSummary" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
@@ -1324,11 +1332,13 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 
 <div class="modal fade" id="modalDeleteTransaction" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
+    <form class="modal-content" id="deleteForm" method="POST" action="finance_delete.php">
+      <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+      <input type="hidden" name="transaction_code" id="deleteFormCode">
       <div class="modal-header"><h5 class="modal-title text-danger"><i class="bi bi-trash me-2"></i>ลบรายการการเงิน</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
       <div class="modal-body">ต้องการลบรายการ <b id="delTxnId"></b> ใช่หรือไม่?<br><small class="muted">การดำเนินการนี้ไม่สามารถยกเลิกได้</small></div>
-      <div class="modal-footer"><button class="btn btn-danger" id="btnDelTxnConfirm"><i class="bi bi-check2-circle me-1"></i> ลบ</button><button class="btn btn-outline-secondary" data-bs-dismiss="modal">ยกเลิก</button></div>
-    </div>
+      <div class="modal-footer"><button class="btn btn-danger" type="submit"><i class="bi bi-check2-circle me-1"></i> ยืนยันลบ</button><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">ยกเลิก</button></div>
+    </form>
   </div>
 </div>
 
@@ -1385,14 +1395,14 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   const fCat  = document.getElementById('filterCategory');
   const fDate = document.getElementById('filterDate');
   const tbody = document.querySelector('#txnTable tbody');
-
+  
   function normalize(s){ return (s||'').toString().toLowerCase(); }
   function applyFilters(){
     const text = q ? normalize(q.value) : '';
     const type = fType ? fType.value : '';
     const cat  = fCat ? fCat.value : '';
     const date = fDate ? fDate.value : '';
-
+  
   document.getElementById('btnTxnShowAll')?.addEventListener('click', ()=>{
   if (q) q.value = '';
   if (fType) fType.value = '';
@@ -1400,7 +1410,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   if (fDate) fDate.value = '';
   applyFilters();
   });
-
+  
     tbody.querySelectorAll('tr').forEach(tr=>{
       const d = tr.dataset; let ok = true;
       if (type && d.type !== type) ok = false;
@@ -1417,7 +1427,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     });
   }
   [q,fType,fCat,fDate].forEach(el=>el && el.addEventListener('input', applyFilters));
-  applyFilters();
+  if (tbody) applyFilters();
 
   // CSV / Print / Report
   function exportCSV(){
@@ -1491,70 +1501,33 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   const toast = toastEl ? new bootstrap.Toast(toastEl, {delay:2000}) : null;
   function showToast(msg){ if(!toast) return alert(msg); toastMsg.textContent=msg; toast.show(); }
 
-  // เชื่อม API เพิ่ม/แก้/ลบ (ถ้ามี)
-  async function api(action, formData) {
-    const r = await fetch(`/api/finance_api.php?action=${action}`, { method:'POST', body: formData });
-    return await r.json();
-  }
+  // Modal Handlers
   if (canEdit) {
     document.querySelectorAll('#txnTable .btnEdit').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const tr = btn.closest('tr'); const d = tr.dataset;
-        document.getElementById('editId').value = d.id;
-        document.getElementById('editDate').value = (new Date(d.date)).toISOString().slice(0,10);
+        const dt = new Date(d.date);
+        const dtString = dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0') + 'T' + String(dt.getHours()).padStart(2,'0') + ':' + String(dt.getMinutes()).padStart(2,'0');
+        
+        document.getElementById('editTransactionCode').value = d.id;
+        document.getElementById('editDate').value = dtString;
         document.getElementById('editType').value = d.type;
+        document.getElementById('editCategory').value = d.category || '';
         document.getElementById('editDescription').value = d.description || '';
         document.getElementById('editAmount').value = parseFloat(d.amount||'0').toFixed(2);
+        document.getElementById('editReference').value = d.reference || '';
         new bootstrap.Modal(document.getElementById('modalEditTransaction')).show();
       });
     });
-    let delId = null;
+
     document.querySelectorAll('#txnTable .btnDel').forEach(btn=>{
-      btn.addEventListener('click', ()=>{ const tr=btn.closest('tr'); delId=tr.dataset.id; document.getElementById('delTxnId').textContent = delId; new bootstrap.Modal(document.getElementById('modalDeleteTransaction')).show(); });
-    });
-    document.getElementById('btnDelTxnConfirm')?.addEventListener('click', async ()=>{
-      if (!delId) return;
-      const fd = new FormData(); fd.set('transaction_code', delId); fd.set('csrf_token', '<?= $_SESSION['csrf_token'] ?>');
-      const res = await api('delete', fd); if (res.ok) location.reload(); else alert('ลบไม่สำเร็จ: '+(res.error||'')); 
-    });
-    document.getElementById('formAddTransaction')?.addEventListener('submit', async (e)=>{
-      e.preventDefault();
-      // สร้าง FormData จากฟอร์มโดยตรง ซึ่งจะดึงค่า name ทั้งหมด
-      const fd = new FormData(e.currentTarget);
-      
-      // เพิ่ม CSRF token
-      fd.set('csrf_token', '<?= $_SESSION['csrf_token'] ?>');
-
-      // (ทางเลือก) ตรวจสอบค่าก่อนส่ง
-      const type = fd.get('type');
-      const amount = parseFloat(fd.get('amount'));
-      if (!type) {
-          alert('กรุณาเลือกประเภท (รายได้ หรือ ค่าใช้จ่าย)');
-          return;
-      }
-      if (isNaN(amount) || amount <= 0) {
-          alert('กรุณากรอกจำนวนเงินให้ถูกต้อง');
-          return;
-      }
-
-      const res = await api('create', fd);
-      if (res.ok) {
-        showToast(res.message || 'บันทึกรายการสำเร็จ');
-        setTimeout(() => location.reload(), 1500); // Reload เพื่อดูข้อมูลใหม่
-      } else {
-        alert('บันทึกไม่สำเร็จ: '+(res.error||'')); 
-      }
-    });
-    document.getElementById('formEditTransaction')?.addEventListener('submit', async (e)=>{
-      e.preventDefault();
-      const fd = new FormData(e.currentTarget);
-      fd.set('transaction_code', document.getElementById('editId').value);
-      fd.set('transaction_date', document.getElementById('editDate').value);
-      fd.set('type', document.getElementById('editType').value);
-      fd.set('description', document.getElementById('editDescription').value);
-      fd.set('amount', document.getElementById('editAmount').value);
-      const res = await api('update', fd);
-      if (res.ok) location.reload(); else alert('แก้ไขไม่สำเร็จ: '+(res.error||'')); 
+      btn.addEventListener('click', ()=>{ 
+        const tr=btn.closest('tr'); 
+        const code = tr.dataset.id;
+        document.getElementById('delTxnId').textContent = code; 
+        document.getElementById('deleteFormCode').value = code;
+        new bootstrap.Modal(document.getElementById('modalDeleteTransaction')).show(); 
+      });
     });
   }
 
@@ -1569,6 +1542,14 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
       options: { responsive:true, plugins:{ legend:{ position:'bottom' } }, scales:{ y:{ beginAtZero:true } } }
     });
   }
+
+  // Handle toast messages from URL
+  const urlParams = new URLSearchParams(window.location.search);
+  const okMsg = urlParams.get('ok');
+  const errMsg = urlParams.get('err');
+  if (okMsg) { showToast(okMsg); window.history.replaceState({}, document.title, window.location.pathname + window.location.hash); }
+  if (errMsg) { showToast(errMsg, false); window.history.replaceState({}, document.title, window.location.pathname + window.location.hash); }
+
 })();
 </script>
 </body>
