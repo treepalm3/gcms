@@ -1,5 +1,5 @@
 <?php
-// dividend_payout.php — ประมวลผลการจ่ายปันผล (เฉพาะสมาชิก)
+// dividend_payout.php — ประมวลผลการจ่ายปันผล (รองรับทุกประเภท)
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 
@@ -109,13 +109,12 @@ try {
 
     $period_id = (int)$period['id'];
 
-    // 2) อัปเดตสถานะรายการจ่ายปันผลเป็น 'paid' (เฉพาะสมาชิก)
+    // 2) อัปเดตสถานะรายการจ่ายปันผลเป็น 'paid' (ทุกประเภท)
     $update_payments = $pdo->prepare("
         UPDATE dividend_payments 
         SET payment_status = 'paid',
             paid_at = NOW()
         WHERE period_id = :pid
-          AND member_type = 'member'
           AND payment_status = 'approved'
     ");
     $update_payments->execute([':pid' => $period_id]);
@@ -123,7 +122,7 @@ try {
     $affected_rows = $update_payments->rowCount();
 
     if ($affected_rows === 0) {
-        throw new Exception('ไม่มีรายการสมาชิกที่พร้อมจ่าย (ต้องอนุมัติก่อน)');
+        throw new Exception('ไม่มีรายการที่พร้อมจ่าย (ต้องอนุมัติก่อน)');
     }
 
     // 3) อัปเดตสถานะงวดปันผล
@@ -135,21 +134,41 @@ try {
     ");
     $update_period->execute([':pid' => $period_id]);
 
-    // 4) คำนวณยอดรวมที่จ่าย (เฉพาะสมาชิก)
-    $total_stmt = $pdo->prepare("
+    // 4) คำนวณยอดรวมที่จ่ายแยกตามประเภท
+    $summary_stmt = $pdo->prepare("
         SELECT 
-            COUNT(*) as member_count,
-            SUM(dividend_amount) as total_paid
+            member_type,
+            COUNT(*) as count,
+            SUM(dividend_amount) as amount
         FROM dividend_payments
         WHERE period_id = :pid
-          AND member_type = 'member'
           AND payment_status = 'paid'
+        GROUP BY member_type
     ");
-    $total_stmt->execute([':pid' => $period_id]);
-    $totals = $total_stmt->fetch(PDO::FETCH_ASSOC);
+    $summary_stmt->execute([':pid' => $period_id]);
+    $summary = $summary_stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $member_count = (int)($totals['member_count'] ?? 0);
-    $total_paid = (float)($totals['total_paid'] ?? 0);
+    // คำนวณรวมทั้งหมด
+    $total_count = 0;
+    $total_paid = 0;
+    $breakdown = [];
+
+    foreach ($summary as $row) {
+        $type = $row['member_type'];
+        $count = (int)$row['count'];
+        $amount = (float)$row['amount'];
+        
+        $total_count += $count;
+        $total_paid += $amount;
+        
+        $type_name = [
+            'member' => 'สมาชิก',
+            'manager' => 'ผู้บริหาร',
+            'committee' => 'กรรมการ'
+        ][$type] ?? $type;
+        
+        $breakdown[] = "{$type_name} {$count} คน (฿" . number_format($amount, 2) . ")";
+    }
 
     // 5) บันทึก log
     try {
@@ -163,7 +182,7 @@ try {
             ");
             $log_stmt->execute([
                 ':uid' => $_SESSION['user_id'],
-                ':desc' => "จ่ายปันผลปี {$year} ให้สมาชิก {$member_count} คน รวม ฿" . number_format($total_paid, 2)
+                ':desc' => "จ่ายปันผลปี {$year} รวม {$total_count} คน ยอดรวม ฿" . number_format($total_paid, 2) . " (" . implode(', ', $breakdown) . ")"
             ]);
         }
     } catch (Throwable $e) {
@@ -174,13 +193,21 @@ try {
     $pdo->commit();
 
     // ส่งผลลัพธ์สำเร็จ
+    $message = "✅ จ่ายปันผลปี {$year} สำเร็จ!\n";
+    $message .= "รวมทั้งหมด {$total_count} คน | ยอดรวม ฿" . number_format($total_paid, 2);
+    
+    if (!empty($breakdown)) {
+        $message .= "\n\n📊 รายละเอียด:\n" . implode("\n", $breakdown);
+    }
+
     echo json_encode([
         'ok' => true,
-        'message' => "จ่ายปันผลสำเร็จ! จ่ายให้สมาชิก {$member_count} คน รวม ฿" . number_format($total_paid, 2),
+        'message' => $message,
         'data' => [
             'year' => $period['year'],
-            'member_count' => $member_count,
-            'total_paid' => $total_paid
+            'total_count' => $total_count,
+            'total_paid' => $total_paid,
+            'breakdown' => $summary
         ]
     ], JSON_UNESCAPED_UNICODE);
 
