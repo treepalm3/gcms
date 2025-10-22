@@ -50,7 +50,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $errors = [];
     if ($year < 2020 || $year > 2050) $errors[] = 'ปีไม่ถูกต้อง';
     if (empty($start_date) || empty($end_date)) $errors[] = 'กรุณาระบุวันที่เริ่มต้นและสิ้นสุด';
-    else { /* (Date validation logic) */ }
+    else { 
+        $start = strtotime($start_date); $end = strtotime($end_date);
+        if ($start === false || $end === false) $errors[] = 'รูปแบบวันที่ไม่ถูกต้อง';
+        elseif ($end < $start) $errors[] = 'วันที่สิ้นสุดต้องมากกว่าหรือเท่ากับวันที่เริ่มต้น';
+    }
     if ($dividend_rate <= 0 || $dividend_rate > 100) $errors[] = 'อัตราปันผลต้องอยู่ระหว่าง 0.1-100%';
 
     if (!empty($errors)) {
@@ -95,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // 3) คำนวณปันผล
         $total_dividend_amount = $total_profit * ($dividend_rate / 100);
-        $dividend_per_share = $total_dividend_amount / $total_shares;
+        $dividend_per_share = ($total_shares > 0) ? ($total_dividend_amount / $total_shares) : 0; // ป้องกันการหารด้วยศูนย์
 
         // 4) สร้างงวดปันผล
         $insert_period_stmt = $pdo->prepare("
