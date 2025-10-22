@@ -551,90 +551,93 @@ $current_year = date('Y');
 $yearly_sales = 0.0;
 $yearly_cogs = 0.0;
 $yearly_gross_profit = 0.0;
+$yearly_other_income = 0.0; // <-- เพิ่มตัวแปร "รายได้อื่น"
 $yearly_expenses = 0.0;
 $yearly_net_profit = 0.0;
 $yearly_available_for_dividend = 0.0;
 
 try {
-  $year_start = $current_year . '-01-01';
-  $year_end = $current_year . '-12-31';
-  
-  // 1️⃣ ยอดขายรวม
-  $sql_yearly_sales = "
-    SELECT COALESCE(SUM(total_amount), 0) AS total
-    FROM sales
-    WHERE ".($has_sales_station ? "station_id = :sid AND " : "")."
-          DATE(sale_date) BETWEEN :start AND :end
-  ";
-  $stmt_ys = $pdo->prepare($sql_yearly_sales);
+  $year_start = $current_year . '-01-01';
+  $year_end = $current_year . '-12-31';
+  
+  // เตรียมพารามิเตอร์สำหรับ query
   $params_ys = [':start' => $year_start, ':end' => $year_end];
-  if ($has_sales_station) $params_ys[':sid'] = $stationId;
-  $stmt_ys->execute($params_ys);
-  $yearly_sales = (float)$stmt_ys->fetchColumn();
-
-  // 2️⃣ ต้นทุนขาย (COGS)
-  if ($has_gpv) {
-    // ใช้ View ที่มี COGS คำนวณไว้แล้ว
-    $sql_yearly_cogs = "
-      SELECT COALESCE(SUM(v.cogs), 0) AS total
-      FROM v_sales_gross_profit v
-      JOIN sales s ON s.id = v.sale_id
-      WHERE ".($has_sales_station ? "s.station_id = :sid AND " : "")."
-            DATE(s.sale_date) BETWEEN :start AND :end
-    ";
-    $stmt_yc = $pdo->prepare($sql_yearly_cogs);
-    $stmt_yc->execute($params_ys);
-    $yearly_cogs = (float)$stmt_yc->fetchColumn();
-  } else {
-    // ประมาณจากราคาขายเฉลี่ย (สมมติ cost = 85% ของราคาขาย)
-    $yearly_cogs = $yearly_sales * 0.85;
-  }
-  
-  $yearly_gross_profit = $yearly_sales - $yearly_cogs;
-
-  // 3️⃣ ค่าใช้จ่ายดำเนินงาน
-  if ($has_ft) {
-    // ใช้ financial_transactions
-    $sql_yearly_exp = "
-      SELECT COALESCE(SUM(amount), 0) AS total
-      FROM financial_transactions
-      WHERE type = 'expense'
-        ".($ft_has_station ? "AND station_id = :sid " : "")."
-        AND DATE(transaction_date) BETWEEN :start AND :end
-    ";
-    $stmt_ye = $pdo->prepare($sql_yearly_exp);
-    $stmt_ye->execute($params_ys);
-    $yearly_expenses = (float)$stmt_ye->fetchColumn();
-  } else {
-    // รวมจากรับเข้าคลัง + เข้าถัง (แต่ไม่ใช่ COGS)
-    // **หมายเหตุ:** นี่คือต้นทุนซื้อน้ำมัน ไม่ใช่ค่าใช้จ่ายดำเนินงาน
-    // ในระบบจริงควรแยกบันทึกค่าใช้จ่ายอื่นๆ ด้วย
-    
-    $yearly_expenses = 0.0; // เริ่มต้นที่ 0
-    
-    // ถ้าต้องการนับต้นทุนซื้อเป็นค่าใช้จ่าย (ไม่แนะนำ)
-    // $yearly_expenses = $yearly_cogs;
+  if ($has_sales_station || $ft_has_station) {
+      $params_ys[':sid'] = $stationId;
   }
 
-  // 4️⃣ กำไรสุทธิ
-  $yearly_net_profit = $yearly_gross_profit - $yearly_expenses;
-  
-  // 5️⃣ วงเงินปันผล (ตามกฎหมายสหกรณ์)
-  if ($yearly_net_profit > 0) {
-    $reserve_fund = $yearly_net_profit * 0.10;
-    $welfare_fund = $yearly_net_profit * 0.05;
-    $yearly_available_for_dividend = $yearly_net_profit * 0.85;
-  } else {
-    $reserve_fund = 0;
-    $welfare_fund = 0;
-    $yearly_available_for_dividend = 0;
-  }
-  
+  // 1️⃣ ยอดขายรวม (จากตาราง sales)
+  $sql_yearly_sales = "
+    SELECT COALESCE(SUM(total_amount), 0) AS total
+    FROM sales
+    WHERE ".($has_sales_station ? "station_id = :sid AND " : "")."
+          DATE(sale_date) BETWEEN :start AND :end
+  ";
+  $stmt_ys = $pdo->prepare($sql_yearly_sales);
+  $stmt_ys->execute($params_ys);
+  $yearly_sales = (float)$stmt_ys->fetchColumn();
+
+  // 2️⃣ ต้นทุนขาย (COGS) (จากตาราง sales)
+  if ($has_gpv) {
+    $sql_yearly_cogs = "
+      SELECT COALESCE(SUM(v.cogs), 0) AS total
+      FROM v_sales_gross_profit v
+      JOIN sales s ON s.id = v.sale_id
+      WHERE ".($has_sales_station ? "s.station_id = :sid AND " : "")."
+            DATE(s.sale_date) BETWEEN :start AND :end
+    ";
+    $stmt_yc = $pdo->prepare($sql_yearly_cogs);
+    $stmt_yc->execute($params_ys);
+    $yearly_cogs = (float)$stmt_yc->fetchColumn();
+  } else {
+    $yearly_cogs = $yearly_sales * 0.85; // ประมาณการ (ถ้าไม่มี View)
+  }
+  
+  $yearly_gross_profit = $yearly_sales - $yearly_cogs; // กำไรขั้นต้น (จากการขายน้ำมัน)
+
+  // 3️⃣ ดึง "รายได้อื่น" และ "ค่าใช้จ่ายดำเนินงาน" จาก financial_transactions
+  if ($has_ft) {
+    // แก้ไข query ให้ดึงทั้ง income และ expense
+    $sql_ft = "
+      SELECT 
+            COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) AS other_income,
+            COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) AS other_expense
+      FROM financial_transactions
+      WHERE ".($ft_has_station ? "station_id = :sid AND " : "")."
+            DATE(transaction_date) BETWEEN :start AND :end
+    ";
+    $stmt_ft = $pdo->prepare($sql_ft);
+    $stmt_ft->execute($params_ys); // ใช้พารามิเตอร์เดียวกับ $params_ys
+    $ft_results = $stmt_ft->fetch(PDO::FETCH_ASSOC);
+
+    if ($ft_results) {
+        $yearly_other_income = (float)$ft_results['other_income'];
+        $yearly_expenses = (float)$ft_results['other_expense'];
+    }
+  } else {
+    $yearly_other_income = 0.0;
+    $yearly_expenses = 0.0;
+  }
+
+  // 4️⃣ กำไรสุทธิ (คำนวณใหม่)
+  // กำไรสุทธิ = (กำไรขั้นต้นจากน้ำมัน) + (รายได้อื่น) - (ค่าใช้จ่ายดำเนินงาน)
+  $yearly_net_profit = $yearly_gross_profit + $yearly_other_income - $yearly_expenses;
+  
+  // 5️⃣ วงเงินปันผล (ตามกฎหมายสหกรณ์)
+  if ($yearly_net_profit > 0) {
+    $reserve_fund = $yearly_net_profit * 0.10;
+    $welfare_fund = $yearly_net_profit * 0.05;
+    $yearly_available_for_dividend = $yearly_net_profit * 0.85;
+  } else {
+    $reserve_fund = 0;
+    $welfare_fund = 0;
+    $yearly_available_for_dividend = 0;
+  }
+  
 } catch (Throwable $e) {
-  error_log("Yearly calculation error: " . $e->getMessage());
-  // ตั้งค่าเป็น 0 ทั้งหมดกรณีเกิด error
-  $yearly_sales = $yearly_cogs = $yearly_gross_profit = 0;
-  $yearly_expenses = $yearly_net_profit = $yearly_available_for_dividend = 0;
+  error_log("Yearly calculation error: " . $e->getMessage());
+  $yearly_sales = $yearly_cogs = $yearly_gross_profit = 0;
+  $yearly_other_income = $yearly_expenses = $yearly_net_profit = $yearly_available_for_dividend = 0;
 }
 
 // 6️⃣ คำนวณปันผลต่อหุ้น
@@ -1199,27 +1202,55 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 <footer class="footer">© <?= date('Y') ?> <?= htmlspecialchars($site_name) ?> — จัดการการเงินและบัญชี</footer>
 
 <!-- Modals -->
-<div class="modal fade" id="modalAddTransaction" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg">
-    <form class="modal-content" id="formAddTransaction" method="post" action="#" onsubmit="event.preventDefault();">
-      <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
-      <div class="modal-header"><h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>เพิ่มรายการการเงิน</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
-      <div class="modal-body">
-        <?php if (!$has_ft): ?><div class="alert alert-warning">โหมดอ่านอย่างเดียว ไม่สามารถเพิ่มรายการได้</div><?php endif; ?>
-        <div class="row g-3">
-          <div class="col-sm-6"><label class="form-label">รหัสรายการ</label><input type="text" class="form-control" id="addId" required <?= $has_ft?'':'disabled' ?>></div>
-          <div class="col-sm-6"><label class="form-label">วันที่</label><input type="date" class="form-control" id="addDate" value="<?= htmlspecialchars($rangeToStr ?? date('Y-m-d')) ?>" required <?= $has_ft?'':'disabled' ?>></div>
-          <div class="col-sm-6"><label class="form-label">ประเภท</label><select id="addType" class="form-select" required <?= $has_ft?'':'disabled' ?>><option value="">เลือกประเภท</option><option value="income">รายได้</option><option value="expense">ค่าใช้จ่าย</option></select></div>
-          <div class="col-sm-6"><label class="form-label">หมวดหมู่</label><input type="text" class="form-control" name="category" required></div>
-          <div class="col-12"><label class="form-label">รายละเอียด</label><input type="text" class="form-control" id="addDescription" required <?= $has_ft?'':'disabled' ?>></div>
-          <div class="col-sm-6"><label class="form-label">จำนวนเงิน (บาท)</label><input type="number" class="form-control" id="addAmount" step="0.01" min="0" required <?= $has_ft?'':'disabled' ?>></div>
-          <div class="col-sm-6"><label class="form-label">อ้างอิง (ถ้ามี)</label><input type="text" class="form-control" name="reference_id"></div>
-        </div>
-      </div>
-      <div class="modal-footer"><button class="btn btn-primary" type="submit" <?= $has_ft?'':'disabled' ?>><i class="bi bi-save2 me-1"></i> บันทึก</button><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">ยกเลิก</button></div>
-    </form>
-  </div>
-</div>
+<div class="modal-body">
+        <?php if (!$has_ft): ?><div class="alert alert-warning">โหมดอ่านอย่างเดียว ไม่สามารถเพิ่มรายการได้</div><?php endif; ?>
+        <div class="row g-3">
+          <div class="col-sm-6">
+            <label class="form-label" for="addTransactionCode">รหัสรายการ (ไม่บังคับ)</label>
+            <input type="text" class="form-control" name="transaction_code" id="addTransactionCode" placeholder="เว้นว่างเพื่อสร้างอัตโนมัติ" <?= $has_ft?'':'disabled' ?>>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label" for="addTransactionDate">วันที่และเวลา</label>
+            <input type="datetime-local" class="form-control" name="transaction_date" id="addTransactionDate" value="<?= date('Y-m-d\TH:i') ?>" required <?= $has_ft?'':'disabled' ?>>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label" for="addType">ประเภท</label>
+            <select name="type" id="addType" class="form-select" required <?= $has_ft?'':'disabled' ?>>
+                <option value="">เลือกประเภท...</option>
+                <option value="income">รายได้ (Income)</option>
+                <option value="expense">ค่าใช้จ่าย (Expense)</option>
+            </select>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label" for="addCategory">หมวดหมู่</label>
+            <input type="text" class="form-control" name="category" id="addCategory" required list="categoryList" placeholder="เช่น เงินลงทุน, เงินเดือน, ค่าไฟ" <?= $has_ft?'':'disabled' ?>>
+            <datalist id="categoryList">
+                <option value="เงินลงทุน">
+                <option value="รายได้อื่น">
+                <option value="เงินเดือน">
+                <option value="ค่าสาธารณูปโภค">
+                <option value="ต้นทุนซื้อน้ำมัน">
+                <?php
+                  // ดึงหมวดหมู่ที่มีอยู่จาก PHP (คำนวณไว้แล้ว)
+                  $allCatsModal = array_unique(array_merge($categories['income'],$categories['expense']));
+                  foreach($allCatsModal as $c) echo '<option value="'.htmlspecialchars($c).'">';
+                ?>
+            </datalist>
+          </div>
+          <div class="col-12">
+            <label class="form-label" for="addDescription">รายละเอียด</label>
+            <input type="text" class="form-control" name="description" id="addDescription" required <?= $has_ft?'':'disabled' ?>>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label" for="addAmount">จำนวนเงิน (บาท)</label>
+            <input type="number" class="form-control" name="amount" id="addAmount" step="0.01" min="0" required <?= $has_ft?'':'disabled' ?>>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label" for="addReference">อ้างอิง (ถ้ามี)</label>
+            <input type="text" class="form-control" name="reference_id" id="addReference" <?= $has_ft?'':'disabled' ?>>
+          </div>
+        </div>
+      </div>
 
 <div class="modal fade" id="modalEditTransaction" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg">
@@ -1456,16 +1487,33 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
       const res = await api('delete', fd); if (res.ok) location.reload(); else alert('ลบไม่สำเร็จ: '+(res.error||'')); 
     });
     document.getElementById('formAddTransaction')?.addEventListener('submit', async (e)=>{
-      e.preventDefault();
-      const fd = new FormData(e.currentTarget);
-      fd.set('transaction_code', document.getElementById('addId').value.trim());
-      fd.set('transaction_date', document.getElementById('addDate').value);
-      fd.set('type', document.getElementById('addType').value);
-      fd.set('description', document.getElementById('addDescription').value);
-      fd.set('amount', document.getElementById('addAmount').value);
-      const res = await api('create', fd);
-      if (res.ok) location.reload(); else alert('บันทึกไม่สำเร็จ: '+(res.error||'')); 
-    });
+      e.preventDefault();
+      // สร้าง FormData จากฟอร์มโดยตรง ซึ่งจะดึงค่า name ทั้งหมด
+      const fd = new FormData(e.currentTarget);
+      
+      // เพิ่ม CSRF token
+      fd.set('csrf_token', '<?= $_SESSION['csrf_token'] ?>');
+
+      // (ทางเลือก) ตรวจสอบค่าก่อนส่ง
+      const type = fd.get('type');
+      const amount = parseFloat(fd.get('amount'));
+      if (!type) {
+          alert('กรุณาเลือกประเภท (รายได้ หรือ ค่าใช้จ่าย)');
+          return;
+      }
+      if (isNaN(amount) || amount <= 0) {
+          alert('กรุณากรอกจำนวนเงินให้ถูกต้อง');
+          return;
+      }
+
+      const res = await api('create', fd);
+      if (res.ok) {
+        showToast(res.message || 'บันทึกรายการสำเร็จ');
+        setTimeout(() => location.reload(), 1500); // Reload เพื่อดูข้อมูลใหม่
+      } else {
+        alert('บันทึกไม่สำเร็จ: '+(res.error||'')); 
+      }
+    });
     document.getElementById('formEditTransaction')?.addEventListener('submit', async (e)=>{
       e.preventDefault();
       const fd = new FormData(e.currentTarget);
