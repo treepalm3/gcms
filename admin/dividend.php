@@ -70,29 +70,9 @@ try {
         error_log("Error fetching members: " . $e->getMessage());
     }
     
-    // 2.2) ผู้บริหาร - DEBUG VERSION WITH OUTPUT
-    $manager_debug = [];
+    // 2.2) ผู้บริหาร (แสดงในหน้าเว็บ แต่จะปันผลให้ด้วย)
     try {
-        $manager_debug[] = "🔍 Starting manager query...";
-        
-        // ตรวจสอบว่ามีตาราง managers
-        $table_exists = $pdo->query("SHOW TABLES LIKE 'managers'")->fetch();
-        $manager_debug[] = "Table 'managers' exists: " . ($table_exists ? "✅ YES" : "❌ NO");
-        
-        if (!$table_exists) {
-            throw new Exception("Table 'managers' does not exist");
-        }
-        
-        // ตรวจสอบจำนวน
-        $count = $pdo->query("SELECT COUNT(*) FROM managers")->fetchColumn();
-        $manager_debug[] = "Total rows in managers: {$count}";
-        
-        if ($count == 0) {
-            $manager_debug[] = "⚠️ No managers in database";
-        }
-        
-        // Query ข้อมูล
-        $sql = "
+        $stmt = $pdo->query("
             SELECT 
                 mg.id AS member_id,
                 CONCAT('MGR-', LPAD(mg.id, 3, '0')) AS member_code,
@@ -100,33 +80,12 @@ try {
                 mg.shares,
                 'manager' AS member_type
             FROM managers mg
-            LEFT JOIN users u ON mg.user_id = u.id
-        ";
-        
-        $manager_debug[] = "Executing query...";
-        $stmt = $pdo->query($sql);
-        
-        $managers = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        $manager_debug[] = "Query returned: " . count($managers) . " rows";
-        
-        if (!empty($managers)) {
-            $all_members = array_merge($all_members, $managers);
-            $manager_debug[] = "✅ Successfully merged " . count($managers) . " managers";
-            $manager_debug[] = "Manager data: " . json_encode($managers);
-        } else {
-            $manager_debug[] = "⚠️ No managers returned from query";
-        }
-        
-    } catch (PDOException $e) {
-        $manager_debug[] = "❌ PDO Exception: " . $e->getMessage();
-        $manager_debug[] = "Error Code: " . $e->getCode();
+            JOIN users u ON mg.user_id = u.id
+        ");
+        $all_members = array_merge($all_members, $stmt->fetchAll(PDO::FETCH_ASSOC));
     } catch (Throwable $e) {
-        $manager_debug[] = "❌ Throwable Exception: " . $e->getMessage();
+        error_log("Error fetching managers: " . $e->getMessage());
     }
-
-    // เก็บไว้แสดงในหน้าเว็บ
-    if (!isset($debug_info)) $debug_info = [];
-    $debug_info['managers'] = $manager_debug;
     
     // 2.3) กรรมการ
     try {
