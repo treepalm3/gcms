@@ -555,101 +555,117 @@ $yearly_other_income = 0.0; // <-- เพิ่มตัวแปร "ราย�
 $yearly_expenses = 0.0;
 $yearly_net_profit = 0.0;
 $yearly_available_for_dividend = 0.0;
+$sql_yearly_sales = ''; // for debug
+$sql_yearly_cogs = ''; // for debug
+$sql_yearly_exp = ''; // for debug
 
 try {
-  $year_start = $current_year . '-01-01';
-  $year_end = $current_year . '-12-31';
-  
+  $year_start = $current_year . '-01-01';
+  $year_end = $current_year . '-12-31';
+  
   // เตรียมพารามิเตอร์สำหรับ query
   $params_ys = [':start' => $year_start, ':end' => $year_end];
-  if ($has_sales_station || $ft_has_station) {
+  if ($has_sales_station || $ft_has_station) { // <-- เพิ่มเงื่อนไขเผื่อใช้ sid
       $params_ys[':sid'] = $stationId;
   }
 
-  // 1️⃣ ยอดขายรวม (จากตาราง sales)
-  $sql_yearly_sales = "
-    SELECT COALESCE(SUM(total_amount), 0) AS total
-    FROM sales
-    WHERE ".($has_sales_station ? "station_id = :sid AND " : "")."
-          DATE(sale_date) BETWEEN :start AND :end
-  ";
-  $stmt_ys = $pdo->prepare($sql_yearly_sales);
-  $stmt_ys->execute($params_ys);
-  $yearly_sales = (float)$stmt_ys->fetchColumn();
+  // 1️⃣ ยอดขายรวม (จากตาราง sales)
+  $sql_yearly_sales = "
+    SELECT COALESCE(SUM(total_amount), 0) AS total
+    FROM sales
+    WHERE ".($has_sales_station ? "station_id = :sid AND " : "")."
+          DATE(sale_date) BETWEEN :start AND :end
+  ";
+  $stmt_ys = $pdo->prepare($sql_yearly_sales);
+  $stmt_ys->execute($params_ys);
+  $yearly_sales = (float)$stmt_ys->fetchColumn();
 
-  // 2️⃣ ต้นทุนขาย (COGS) (จากตาราง sales)
-  if ($has_gpv) {
-    $sql_yearly_cogs = "
-      SELECT COALESCE(SUM(v.cogs), 0) AS total
-      FROM v_sales_gross_profit v
-      JOIN sales s ON s.id = v.sale_id
-      WHERE ".($has_sales_station ? "s.station_id = :sid AND " : "")."
-            DATE(s.sale_date) BETWEEN :start AND :end
-    ";
-    $stmt_yc = $pdo->prepare($sql_yearly_cogs);
-    $stmt_yc->execute($params_ys);
-    $yearly_cogs = (float)$stmt_yc->fetchColumn();
-  } else {
-    $yearly_cogs = $yearly_sales * 0.85; // ประมาณการ (ถ้าไม่มี View)
-  }
-  
-  $yearly_gross_profit = $yearly_sales - $yearly_cogs; // กำไรขั้นต้น (จากการขายน้ำมัน)
+  // 2️⃣ ต้นทุนขาย (COGS) (จากตาราง sales)
+  if ($has_gpv) {
+    $sql_yearly_cogs = "
+      SELECT COALESCE(SUM(v.cogs), 0) AS total
+      FROM v_sales_gross_profit v
+      JOIN sales s ON s.id = v.sale_id
+      WHERE ".($has_sales_station ? "s.station_id = :sid AND " : "")."
+            DATE(s.sale_date) BETWEEN :start AND :end
+    ";
+    $stmt_yc = $pdo->prepare($sql_yearly_cogs);
+    $stmt_yc->execute($params_ys);
+    $yearly_cogs = (float)$stmt_yc->fetchColumn();
+  } else {
+    $yearly_cogs = $yearly_sales * 0.85; // ประมาณการ (ถ้าไม่มี View)
+  }
+  
+  $yearly_gross_profit = $yearly_sales - $yearly_cogs; // กำไรขั้นต้น (จากการขายน้ำมัน)
 
-  // 3️⃣ ดึง "รายได้อื่น" และ "ค่าใช้จ่ายดำเนินงาน" จาก financial_transactions
-  if ($has_ft) {
+  // 3️⃣ ดึง "รายได้อื่น" และ "ค่าใช้จ่ายดำเนินงาน" จาก financial_transactions
+  if ($has_ft) {
     // แก้ไข query ให้ดึงทั้ง income และ expense
-    $sql_ft = "
-      SELECT 
+    $sql_ft = "
+      SELECT 
             COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) AS other_income,
             COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) AS other_expense
-      FROM financial_transactions
-      WHERE ".($ft_has_station ? "station_id = :sid AND " : "")."
-            DATE(transaction_date) BETWEEN :start AND :end
-    ";
-    $stmt_ft = $pdo->prepare($sql_ft);
-    $stmt_ft->execute($params_ys); // ใช้พารามิเตอร์เดียวกับ $params_ys
+      FROM financial_transactions
+      WHERE ".($ft_has_station ? "station_id = :sid AND " : "")."
+            DATE(transaction_date) BETWEEN :start AND :end
+    ";
+    $stmt_ft = $pdo->prepare($sql_ft);
+    $stmt_ft->execute($params_ys); // ใช้พารามิเตอร์เดียวกับ $params_ys
     $ft_results = $stmt_ft->fetch(PDO::FETCH_ASSOC);
 
     if ($ft_results) {
         $yearly_other_income = (float)$ft_results['other_income'];
         $yearly_expenses = (float)$ft_results['other_expense'];
     }
-  } else {
-    $yearly_other_income = 0.0;
+  } else {
+    $yearly_other_income = 0.0;
     $yearly_expenses = 0.0;
-  }
+  }
 
-  // 4️⃣ กำไรสุทธิ (คำนวณใหม่)
+  // 4️⃣ กำไรสุทธิ (คำนวณใหม่)
   // กำไรสุทธิ = (กำไรขั้นต้นจากน้ำมัน) + (รายได้อื่น) - (ค่าใช้จ่ายดำเนินงาน)
-  $yearly_net_profit = $yearly_gross_profit + $yearly_other_income - $yearly_expenses;
-  
-  // 5️⃣ วงเงินปันผล (ตามกฎหมายสหกรณ์)
-  if ($yearly_net_profit > 0) {
-    $reserve_fund = $yearly_net_profit * 0.10;
-    $welfare_fund = $yearly_net_profit * 0.05;
-    $yearly_available_for_dividend = $yearly_net_profit * 0.85;
-  } else {
-    $reserve_fund = 0;
-    $welfare_fund = 0;
-    $yearly_available_for_dividend = 0;
-  }
-  
+  $yearly_net_profit = $yearly_gross_profit + $yearly_other_income - $yearly_expenses;
+  
+  // 5️⃣ วงเงินปันผล (ตามกฎหมายสหกรณ์)
+  if ($yearly_net_profit > 0) {
+    $reserve_fund = $yearly_net_profit * 0.10;
+    $welfare_fund = $yearly_net_profit * 0.05;
+    $yearly_available_for_dividend = $yearly_net_profit * 0.85;
+  } else {
+    $reserve_fund = 0;
+    $welfare_fund = 0;
+    $yearly_available_for_dividend = 0;
+  }
+  
 } catch (Throwable $e) {
-  error_log("Yearly calculation error: " . $e->getMessage());
-  $yearly_sales = $yearly_cogs = $yearly_gross_profit = 0;
+  error_log("Yearly calculation error: " . $e->getMessage());
+  $yearly_sales = $yearly_cogs = $yearly_gross_profit = 0;
   $yearly_other_income = $yearly_expenses = $yearly_net_profit = $yearly_available_for_dividend = 0;
 }
+/* (สิ้นสุดส่วนที่แก้ไข) */
+
 
 // 6️⃣ คำนวณปันผลต่อหุ้น
 $total_shares = 0;
 $dividend_per_share = 0;
 try {
-  $stmt_shares = $pdo->query("
-    SELECT COALESCE(SUM(shares), 0) 
-    FROM members 
-    WHERE is_active = 1
-  ");
-  $total_shares = (int)$stmt_shares->fetchColumn();
+  // *** แก้ไข: นับหุ้นจากทุกตารางที่มีหุ้น ***
+    $total_shares = 0;
+    // 6.1) สมาชิก
+    $member_shares_stmt = $pdo->query("SELECT COALESCE(SUM(shares), 0) FROM members WHERE is_active = 1");
+    $total_shares += (int)$member_shares_stmt->fetchColumn();
+
+    // 6.2) ผู้บริหาร
+    try {
+        $manager_shares_stmt = $pdo->query("SELECT COALESCE(SUM(shares), 0) FROM managers");
+        $total_shares += (int)$manager_shares_stmt->fetchColumn();
+    } catch (Throwable $e) { error_log("Manager shares error: " . $e->getMessage()); }
+
+    // 6.3) กรรมการ
+    try {
+        $committee_shares_stmt = $pdo->query("SELECT COALESCE(SUM(shares), 0) FROM committees");
+        $total_shares += (int)$committee_shares_stmt->fetchColumn();
+    } catch (Throwable $e) { error_log("Committee shares error: " . $e->getMessage()); }
   
   if ($total_shares > 0 && $yearly_available_for_dividend > 0) {
     $dividend_per_share = $yearly_available_for_dividend / $total_shares;
@@ -658,19 +674,6 @@ try {
   error_log("Shares calculation error: " . $e->getMessage());
 }
 
-// คำนวณปันผลต่อหุ้น (สมมติมีหุ้นทั้งหมด)
-$total_shares = 0;
-$dividend_per_share = 0;
-try {
-  $stmt_shares = $pdo->query("SELECT COALESCE(SUM(shares), 0) FROM members WHERE is_active = 1");
-  $total_shares = (int)$stmt_shares->fetchColumn();
-  
-  if ($total_shares > 0 && $yearly_available_for_dividend > 0) {
-    $dividend_per_share = $yearly_available_for_dividend / $total_shares;
-  }
-} catch (Throwable $e) {
-  error_log("Shares calculation error: " . $e->getMessage());
-}
 
 // **DEBUG: แสดงข้อมูลเพื่อตรวจสอบ**
 if (isset($_GET['debug'])) {
