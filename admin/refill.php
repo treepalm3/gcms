@@ -1,5 +1,5 @@
 <?php
-// refill.php — รับน้ำมันเข้าคลังแบบ Auto เลือกถังจาก fuel_id
+// refill.php — รับน้ำมันเข้าถังโดยตรง (ไม่ผ่านคลัง)
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 
@@ -24,9 +24,10 @@ $supplier_id   = !empty($_POST['supplier_id']) ? (int)$_POST['supplier_id'] : nu
 $notes         = trim((string)($_POST['notes'] ?? ''));
 $received_date = date('Y-m-d H:i:s');
 $user_id       = (int)($_SESSION['user_id']);
+$invoice_no    = trim((string)($_POST['invoice_no'] ?? null)); // (ทางเลือก) เพิ่ม field ใบแจ้งหนี้
 
 if ($fuel_id <= 0 || $amount <= 0) {
-  header('Location: inventory.php?err=ข้อมูลรับไม่ถูกต้อง'); exit;
+  header('Location: inventory.php?err=ข้อมูลรับไม่ถูกต้อง (เชื้อเพลิงหรือจำนวนลิตร)'); exit;
 }
 
 // ดึง station_id (ถ้าไม่มีใน settings ให้เป็น 1)
@@ -53,22 +54,18 @@ try {
   $tanks = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
   if (!$tanks) {
-    throw new RuntimeException('ไม่มีถังสำหรับเชื้อน้ำมันนี้');
+    throw new RuntimeException('ไม่มีถังที่ใช้งานได้สำหรับเชื้อน้ำมันนี้');
   }
 
   // ตรวจความจุรวมว่าง
   $total_free = array_sum(array_map(fn($t)=> (float)$t['free_l'], $tanks));
   if ($total_free + 1e-6 < $amount) { // กัน floating error เล็กน้อย
-    throw new RuntimeException('ปริมาณที่รับมากกว่าพื้นที่ว่างในถังรวม');
+    throw new RuntimeException('ปริมาณที่รับ ('.number_format($amount).' L) มากกว่าพื้นที่ว่างในถังรวม ('.number_format($total_free).' L)');
   }
 
-  // 1) fuel_receives (เก็บ Log หลัก)
-  $insRecv = $pdo->prepare("
-    INSERT INTO fuel_receives (fuel_id, amount, cost, supplier_id, notes, received_date, created_by)
-    VALUES (?,?,?,?,?,?,?)
-  ");
-  $insRecv->execute([$fuel_id, $amount, $unit_cost, $supplier_id, $notes, $received_date, $user_id]);
-  $receive_id = (int)$pdo->lastInsertId();
+  // ===== 1) ข้ามขั้นตอน fuel_receives =====
+  // $receive_id = (int)$pdo->lastInsertId(); // ไม่ใช้ $receive_id อีกต่อไป
+  $receive_id = null; // ตั้งเป็น null
 
   // 2) กระจายลิตรลงถัง + บันทึก lot และ move ต่อถัง
   $remain = $amount;
@@ -83,18 +80,20 @@ try {
     $remain -= $put;
   }
   if ($remain > 1e-6) { // เหลือค้าง แสดงว่า capacity คำนวณเพี้ยน
-    throw new RuntimeException('ไม่สามารถจัดสรรลงถังได้ครบ');
+    throw new RuntimeException('ไม่สามารถจัดสรรลงถังได้ครบ (คำนวณพื้นที่ว่างพลาด)');
   }
 
   // คิดสัดส่วนค่าใช้จ่ายอื่น ๆ ต่อถัง
   $other_left = $other_costs;
+  
+  // SQL สำหรับ INSERT ลง fuel_lots (อัปเดตให้รับ invoice_no และ receive_id เป็น null)
   $insLot = $pdo->prepare("
     INSERT INTO fuel_lots
       (station_id, fuel_id, tank_id, receive_id, supplier_id, lot_code, received_at,
        observed_liters, corrected_liters, unit_cost, tax_per_liter, other_costs,
-       density_kg_per_l, temp_c, notes, created_by)
+       density_kg_per_l, temp_c, notes, created_by, invoice_no)
     VALUES
-      (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   ");
 
   $insMove = $pdo->prepare("
@@ -118,12 +117,12 @@ try {
     // lot_code ต้องยูนิคภายในสถานี
     $lot_code = sprintf('LOT-%s-%02d-%s', date('YmdHis'), $fuel_id, substr(bin2hex(random_bytes(3)),0,6));
 
-    // fuel_lots
+    // fuel_lots (receive_id ถูกตั้งเป็น $receive_id ซึ่งเป็น null)
     $insLot->execute([
       $station_id, $fuel_id, $tank_id, $receive_id, $supplier_id, $lot_code, $received_date,
       $lit, null,                      // observed_liters, corrected_liters(null = เท่ากับ observed ผ่าน generated col.)
       $unit_cost, $tax_per_liter, $part_other,
-      null, null, $notes, $user_id
+      null, null, $notes, $user_id, $invoice_no
     ]);
 
     // fuel_moves (รับเข้า)
@@ -139,7 +138,7 @@ try {
         ->execute([$supplier_id]);
   }
 
-  // 4) (ทางเลือก) เก็บ last_refill ใน fuel_stock แต่ไม่แตะ current_stock
+  // 4) (ทางเลือก) เก็บ last_refill ใน fuel_stock (เหมือนเดิม)
   $pdo->prepare("
     INSERT INTO fuel_stock (fuel_id, station_id, current_stock, capacity, min_threshold, max_threshold, last_refill_date, last_refill_amount)
     VALUES (?, ?, 0, 0, 90, 500, NOW(), ?)
@@ -148,12 +147,15 @@ try {
 
   $pdo->commit();
 
-  header('Location: inventory.php?ok=บันทึกการรับน้ำมันสำเร็จ');
+  header('Location: inventory.php?ok=บันทึกการรับน้ำมันเข้าถังสำเร็จ');
 } catch (Throwable $e) {
   if ($pdo->inTransaction()) $pdo->rollBack();
   error_log('refill.php error: '.$e->getMessage());
-  $msg = 'ไม่สามารถบันทึกการรับได้';
+  
+  $msg = 'ไม่สามารถบันทึกการรับได้: ' . $e->getMessage();
+  // ทำให้ข้อความ error กระชับขึ้นสำหรับผู้ใช้
   if (stripos($e->getMessage(), 'ไม่มีถัง') !== false) $msg = $e->getMessage();
   if (stripos($e->getMessage(), 'ปริมาณที่รับมากกว่า') !== false) $msg = $e->getMessage();
-  header('Location: inventory.php?err=' . $msg);
+  
+  header('Location: inventory.php?err=' . urlencode($msg));
 }
