@@ -49,7 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Validation (เหมือนเดิม)
     $errors = [];
     if ($year < 2020 || $year > 2050) $errors[] = 'ปีไม่ถูกต้อง';
-    if (empty($start_date) || empty($end_date)) $errors[] = 'กรุณาระบุวันที่เริ่มต้นและสิ้นสุด';
+    if (empty($start_date) || empty($end_date)) $errors[] = 'กรุณาระบุวันที่เริ่มต้นและวันที่สิ้นสุด';
     else { 
         $start = strtotime($start_date); $end = strtotime($end_date);
         if ($start === false || $end === false) $errors[] = 'รูปแบบวันที่ไม่ถูกต้อง';
