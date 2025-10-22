@@ -1,5 +1,5 @@
 <?php
-// dividend_payout.php — ประมวลผลการจ่ายปันผล
+// dividend_payout.php — ประมวลผลการจ่ายปันผล (เฉพาะสมาชิก)
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 
@@ -16,7 +16,7 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 // ตรวจสอบสิทธิ์
-if ($_SESSION['role'] !== ['admin', 'manager']) {
+if (!in_array($_SESSION['role'], ['admin', 'manager'])) {
     http_response_code(403);
     echo json_encode([
         'ok' => false,
@@ -67,13 +67,14 @@ if (empty($csrf_token) || $csrf_token !== ($_SESSION['csrf_token'] ?? '')) {
     exit();
 }
 
-// ตรวจสอบ period_code
-$period_code = trim($data['period_code'] ?? '');
-if (empty($period_code)) {
+// รับ year
+$year = (int)($data['year'] ?? 0);
+
+if ($year <= 0) {
     http_response_code(400);
     echo json_encode([
         'ok' => false,
-        'error' => 'กรุณาระบุรหัสงวดปันผล'
+        'error' => 'กรุณาระบุปีที่ต้องการจ่ายปันผล'
     ], JSON_UNESCAPED_UNICODE);
     exit();
 }
@@ -84,17 +85,17 @@ try {
 
     // 1) ดึงข้อมูลงวดปันผล
     $stmt = $pdo->prepare("
-        SELECT id, period_code, `year`, period_name, total_profit, dividend_rate,
+        SELECT id, `year`, period_name, total_profit, dividend_rate,
                total_shares_at_time, total_dividend_amount, status
         FROM dividend_periods
-        WHERE period_code = :code
+        WHERE `year` = :year
         LIMIT 1
     ");
-    $stmt->execute([':code' => $period_code]);
+    $stmt->execute([':year' => $year]);
     $period = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$period) {
-        throw new Exception('ไม่พบงวดปันผลที่ระบุ');
+        throw new Exception('ไม่พบงวดปันผลของปี ' . $year);
     }
 
     // ตรวจสอบสถานะ
@@ -102,203 +103,55 @@ try {
         throw new Exception('งวดนี้จ่ายปันผลแล้ว');
     }
 
-    if ($period['status'] !== 'approved') {
+    if ($period['status'] === 'pending') {
         throw new Exception('งวดนี้ยังไม่ได้รับการอนุมัติ กรุณาอนุมัติก่อนจ่ายปันผล');
     }
 
     $period_id = (int)$period['id'];
-    $dividend_rate = (float)$period['dividend_rate'];
-    $total_profit = (float)$period['total_profit'];
 
-    // คำนวณปันผลต่อหุ้น
-    $total_dividend = $total_profit * ($dividend_rate / 100);
-    $total_shares = (int)$period['total_shares_at_time'];
+    // 2) อัปเดตสถานะรายการจ่ายปันผลเป็น 'paid' (เฉพาะสมาชิก)
+    $update_payments = $pdo->prepare("
+        UPDATE dividend_payments 
+        SET payment_status = 'paid',
+            paid_at = NOW()
+        WHERE period_id = :pid
+          AND member_type = 'member'
+          AND payment_status = 'approved'
+    ");
+    $update_payments->execute([':pid' => $period_id]);
     
-    if ($total_shares <= 0) {
-        throw new Exception('จำนวนหุ้นรวมไม่ถูกต้อง');
+    $affected_rows = $update_payments->rowCount();
+
+    if ($affected_rows === 0) {
+        throw new Exception('ไม่มีรายการสมาชิกที่พร้อมจ่าย (ต้องอนุมัติก่อน)');
     }
 
-    $dividend_per_share = $total_dividend / $total_shares;
-
-    // 2) ตรวจสอบว่ามีการจ่ายแล้วหรือไม่
-    $check_stmt = $pdo->prepare("
-        SELECT COUNT(*) as cnt 
-        FROM dividend_payments 
-        WHERE period_id = :pid AND payment_status = 'paid'
-    ");
-    $check_stmt->execute([':pid' => $period_id]);
-    $already_paid = (int)$check_stmt->fetchColumn();
-
-    if ($already_paid > 0) {
-        throw new Exception('มีการจ่ายปันผลงวดนี้ไปแล้วบางส่วน');
-    }
-
-    // 3) รวบรวมสมาชิกทุกประเภท
-    $all_members = [];
-
-    // 3.1) สมาชิกทั่วไป
-    $member_stmt = $pdo->query("
-        SELECT id, member_code, shares, 'member' AS member_type
-        FROM members
-        WHERE is_active = 1
-    ");
-    foreach ($member_stmt->fetchAll(PDO::FETCH_ASSOC) as $m) {
-        $all_members[] = $m;
-    }
-
-    // 3.2) ผู้บริหาร (ไม่มี manager_code → สร้างจาก id)
-    try {
-        $manager_stmt = $pdo->query("
-            SELECT id,
-                CONCAT('MGR-', LPAD(id, 3, '0')) AS member_code,
-                shares,
-                'manager' AS member_type
-            FROM managers
-        ");
-        foreach ($manager_stmt->fetchAll(PDO::FETCH_ASSOC) as $m) {
-            $all_members[] = $m;
-        }
-    } catch (Throwable $e) {
-        error_log("Manager fetch error: " . $e->getMessage());
-    }
-
-    // 3.3) กรรมการ (มี committee_code)
-    try {
-        $committee_stmt = $pdo->query("
-            SELECT id,
-                committee_code AS member_code,
-                COALESCE(shares, 0) AS shares,
-                'committee' AS member_type
-            FROM committees
-        ");
-        foreach ($committee_stmt->fetchAll(PDO::FETCH_ASSOC) as $m) {
-            $all_members[] = $m;
-        }
-    } catch (Throwable $e) {
-        error_log("Committee fetch error: " . $e->getMessage());
-    }
-
-    if (empty($all_members)) {
-        throw new Exception('ไม่พบผู้ถือหุ้นในระบบ');
-    }
-    // 4) ตรวจสอบว่าตาราง dividend_payments มี member_type หรือไม่
-    $dp_columns = $pdo->query("SHOW COLUMNS FROM dividend_payments")->fetchAll(PDO::FETCH_COLUMN);
-    $has_member_type = in_array('member_type', $dp_columns);
-
-    // 5) สร้าง/อัปเดตรายการจ่ายปันผล
-    $total_paid = 0;
-    $member_count = 0;
-
-    foreach ($all_members as $member) {
-        $member_id = (int)$member['id'];
-        $shares = (int)($member['shares'] ?? 0);
-        $member_type = $member['member_type'] ?? 'member';
-
-        if ($shares <= 0) continue;
-
-        $dividend_amount = $shares * $dividend_per_share;
-        $total_paid += $dividend_amount;
-        $member_count++;
-
-        // ตรวจสอบว่ามีรายการอยู่แล้วหรือไม่
-        if ($has_member_type) {
-            $check = $pdo->prepare("
-                SELECT id FROM dividend_payments 
-                WHERE period_id = :pid AND member_id = :mid AND member_type = :mtype
-            ");
-            $check->execute([':pid' => $period_id, ':mid' => $member_id, ':mtype' => $member_type]);
-        } else {
-            $check = $pdo->prepare("
-                SELECT id FROM dividend_payments 
-                WHERE period_id = :pid AND member_id = :mid
-            ");
-            $check->execute([':pid' => $period_id, ':mid' => $member_id]);
-        }
-        
-        $existing = $check->fetchColumn();
-
-        if ($existing) {
-            // อัปเดตรายการที่มีอยู่
-            if ($has_member_type) {
-                $update = $pdo->prepare("
-                    UPDATE dividend_payments 
-                    SET dividend_amount = :amt,
-                        shares_at_time = :shares,
-                        payment_status = 'paid',
-                        payment_date = NOW(),
-                        updated_at = NOW()
-                    WHERE period_id = :pid AND member_id = :mid AND member_type = :mtype
-                ");
-                $update->execute([
-                    ':amt' => $dividend_amount,
-                    ':shares' => $shares,
-                    ':pid' => $period_id,
-                    ':mid' => $member_id,
-                    ':mtype' => $member_type
-                ]);
-            } else {
-                $update = $pdo->prepare("
-                    UPDATE dividend_payments 
-                    SET dividend_amount = :amt,
-                        shares_at_time = :shares,
-                        payment_status = 'paid',
-                        payment_date = NOW(),
-                        updated_at = NOW()
-                    WHERE period_id = :pid AND member_id = :mid
-                ");
-                $update->execute([
-                    ':amt' => $dividend_amount,
-                    ':shares' => $shares,
-                    ':pid' => $period_id,
-                    ':mid' => $member_id
-                ]);
-            }
-        } else {
-            // สร้างรายการใหม่
-            if ($has_member_type) {
-                $insert = $pdo->prepare("
-                    INSERT INTO dividend_payments 
-                    (period_id, member_id, member_type, dividend_amount, shares_at_time, 
-                     payment_status, payment_date, created_at)
-                    VALUES 
-                    (:pid, :mid, :mtype, :amt, :shares, 'paid', NOW(), NOW())
-                ");
-                $insert->execute([
-                    ':pid' => $period_id,
-                    ':mid' => $member_id,
-                    ':mtype' => $member_type,
-                    ':amt' => $dividend_amount,
-                    ':shares' => $shares
-                ]);
-            } else {
-                $insert = $pdo->prepare("
-                    INSERT INTO dividend_payments 
-                    (period_id, member_id, dividend_amount, shares_at_time, 
-                     payment_status, payment_date, created_at)
-                    VALUES 
-                    (:pid, :mid, :amt, :shares, 'paid', NOW(), NOW())
-                ");
-                $insert->execute([
-                    ':pid' => $period_id,
-                    ':mid' => $member_id,
-                    ':amt' => $dividend_amount,
-                    ':shares' => $shares
-                ]);
-            }
-        }
-    }
-
-    // 6) อัปเดตสถานะงวดปันผล
+    // 3) อัปเดตสถานะงวดปันผล
     $update_period = $pdo->prepare("
         UPDATE dividend_periods 
         SET status = 'paid',
-            payment_date = NOW(),
-            updated_at = NOW()
+            payment_date = NOW()
         WHERE id = :pid
     ");
     $update_period->execute([':pid' => $period_id]);
 
-    // 7) บันทึก log (ถ้ามีตาราง activity_logs)
+    // 4) คำนวณยอดรวมที่จ่าย (เฉพาะสมาชิก)
+    $total_stmt = $pdo->prepare("
+        SELECT 
+            COUNT(*) as member_count,
+            SUM(dividend_amount) as total_paid
+        FROM dividend_payments
+        WHERE period_id = :pid
+          AND member_type = 'member'
+          AND payment_status = 'paid'
+    ");
+    $total_stmt->execute([':pid' => $period_id]);
+    $totals = $total_stmt->fetch(PDO::FETCH_ASSOC);
+
+    $member_count = (int)($totals['member_count'] ?? 0);
+    $total_paid = (float)($totals['total_paid'] ?? 0);
+
+    // 5) บันทึก log
     try {
         $log_check = $pdo->query("SHOW TABLES LIKE 'activity_logs'")->fetch();
         if ($log_check) {
@@ -310,7 +163,7 @@ try {
             ");
             $log_stmt->execute([
                 ':uid' => $_SESSION['user_id'],
-                ':desc' => "จ่ายปันผล {$period_code} (ปี {$period['year']}) จำนวน {$member_count} คน รวม ฿" . number_format($total_paid, 2)
+                ':desc' => "จ่ายปันผลปี {$year} ให้สมาชิก {$member_count} คน รวม ฿" . number_format($total_paid, 2)
             ]);
         }
     } catch (Throwable $e) {
@@ -323,13 +176,11 @@ try {
     // ส่งผลลัพธ์สำเร็จ
     echo json_encode([
         'ok' => true,
-        'message' => "จ่ายปันผลสำเร็จ! จ่ายให้ {$member_count} คน รวม ฿" . number_format($total_paid, 2),
+        'message' => "จ่ายปันผลสำเร็จ! จ่ายให้สมาชิก {$member_count} คน รวม ฿" . number_format($total_paid, 2),
         'data' => [
-            'period_code' => $period_code,
             'year' => $period['year'],
             'member_count' => $member_count,
-            'total_paid' => $total_paid,
-            'dividend_per_share' => $dividend_per_share
+            'total_paid' => $total_paid
         ]
     ], JSON_UNESCAPED_UNICODE);
 
