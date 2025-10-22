@@ -68,9 +68,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // if ($total_profit <= 0) {
-    //     $errors[] = 'กำไรสุทธิต้องมากกว่า 0 บาท';
-    // }
+    if ($total_profit <= 0) {
+        $errors[] = 'กำไรสุทธิต้องมากกว่า 0 บาท';
+    }
 
     if ($dividend_rate <= 0 || $dividend_rate > 100) {
         $errors[] = 'อัตราปันผลต้องอยู่ระหว่าง 0.1-100%';
