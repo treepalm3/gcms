@@ -1,5 +1,5 @@
 <?php
-// dividend.php — จัดการปันผลสหกรณ์ (เฉพาะสมาชิก)
+// dividend.php — จัดการปันผลสหกรณ์
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 
@@ -49,9 +49,10 @@ try {
         ORDER BY `year` DESC, id DESC
     ")->fetchAll(PDO::FETCH_ASSOC);
 
-    // 2) ดึงเฉพาะสมาชิกทั่วไปเท่านั้น (ไม่รวมผู้บริหารและกรรมการ)
+    // 2) รวมสมาชิกทุกประเภท
     $all_members = [];
     
+    // 2.1) สมาชิกทั่วไป
     try {
         $stmt = $pdo->query("
             SELECT 
@@ -63,42 +64,121 @@ try {
             FROM members m
             JOIN users u ON m.user_id = u.id
             WHERE m.is_active = 1
-            ORDER BY m.member_code
         ");
-        
-        $all_members = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
+        $all_members = array_merge($all_members, $stmt->fetchAll(PDO::FETCH_ASSOC));
     } catch (Throwable $e) {
         error_log("Error fetching members: " . $e->getMessage());
-        $error_message = "เกิดข้อผิดพลาดในการดึงข้อมูลสมาชิก";
+    }
+    
+    // 2.2) ผู้บริหาร - DEBUG VERSION WITH OUTPUT
+    $manager_debug = [];
+    try {
+        $manager_debug[] = "🔍 Starting manager query...";
+        
+        // ตรวจสอบว่ามีตาราง managers
+        $table_exists = $pdo->query("SHOW TABLES LIKE 'managers'")->fetch();
+        $manager_debug[] = "Table 'managers' exists: " . ($table_exists ? "✅ YES" : "❌ NO");
+        
+        if (!$table_exists) {
+            throw new Exception("Table 'managers' does not exist");
+        }
+        
+        // ตรวจสอบจำนวน
+        $count = $pdo->query("SELECT COUNT(*) FROM managers")->fetchColumn();
+        $manager_debug[] = "Total rows in managers: {$count}";
+        
+        if ($count == 0) {
+            $manager_debug[] = "⚠️ No managers in database";
+        }
+        
+        // Query ข้อมูล
+        $sql = "
+            SELECT 
+                mg.id AS member_id,
+                CONCAT('MGR-', LPAD(mg.id, 3, '0')) AS member_code,
+                u.full_name,
+                mg.shares,
+                'manager' AS member_type
+            FROM managers mg
+            LEFT JOIN users u ON mg.user_id = u.id
+        ";
+        
+        $manager_debug[] = "Executing query...";
+        $stmt = $pdo->query($sql);
+        
+        $managers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $manager_debug[] = "Query returned: " . count($managers) . " rows";
+        
+        if (!empty($managers)) {
+            $all_members = array_merge($all_members, $managers);
+            $manager_debug[] = "✅ Successfully merged " . count($managers) . " managers";
+            $manager_debug[] = "Manager data: " . json_encode($managers);
+        } else {
+            $manager_debug[] = "⚠️ No managers returned from query";
+        }
+        
+    } catch (PDOException $e) {
+        $manager_debug[] = "❌ PDO Exception: " . $e->getMessage();
+        $manager_debug[] = "Error Code: " . $e->getCode();
+    } catch (Throwable $e) {
+        $manager_debug[] = "❌ Throwable Exception: " . $e->getMessage();
     }
 
-    // สร้าง array สำหรับแสดงผล (เฉพาะสมาชิก)
+    // เก็บไว้แสดงในหน้าเว็บ
+    if (!isset($debug_info)) $debug_info = [];
+    $debug_info['managers'] = $manager_debug;
+    
+    // 2.3) กรรมการ
+    try {
+        $stmt = $pdo->query("
+            SELECT 
+                c.id AS member_id,
+                c.committee_code AS member_code,
+                u.full_name,
+                COALESCE(c.shares, 0) AS shares,
+                'committee' AS member_type
+            FROM committees c
+            JOIN users u ON c.user_id = u.id
+        ");
+        $all_members = array_merge($all_members, $stmt->fetchAll(PDO::FETCH_ASSOC));
+    } catch (Throwable $e) {
+        error_log("Error fetching committees: " . $e->getMessage());
+    }
+    
+    // เรียงตามรหัส
+    usort($all_members, function($a, $b) {
+        return strcmp($a['member_code'] ?? '', $b['member_code'] ?? '');
+    });
+
+    // สร้าง array สำหรับแสดงผล
     $members_dividends = [];
     foreach ($all_members as $row) {
-        $key = 'member_' . $row['member_id'];
+        $key = $row['member_type'] . '_' . $row['member_id'];
         $members_dividends[$key] = [
             'id' => $row['member_id'],
             'code' => $row['member_code'],
             'member_name' => $row['full_name'],
             'shares' => (int)$row['shares'],
-            'type' => 'member',
-            'type_th' => 'สมาชิก',
+            'type' => $row['member_type'],
+            'type_th' => [
+                'member' => 'สมาชิก',
+                'manager' => 'ผู้บริหาร',
+                'committee' => 'กรรมการ'
+            ][$row['member_type']] ?? 'อื่นๆ',
             'payments' => [],
             'total_received' => 0.0
         ];
     }
 
-    // 3) การจ่ายปันผล (เฉพาะสมาชิก)
+    // 3) การจ่ายปันผล
     $payments_stmt = $pdo->query("
-        SELECT dp.member_id, dp.period_id, 
+        SELECT dp.member_id, dp.member_type, dp.period_id, 
                dp.dividend_amount, dp.payment_status
         FROM dividend_payments dp
-        WHERE dp.member_type = 'member'
     ");
 
     foreach ($payments_stmt->fetchAll(PDO::FETCH_ASSOC) as $payment) {
-        $key = 'member_' . $payment['member_id'];
+        $key = $payment['member_type'] . '_' . $payment['member_id'];
         if (!isset($members_dividends[$key])) continue;
 
         $pid = (int)$payment['period_id'];
@@ -166,7 +246,6 @@ try {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
     <link rel="stylesheet" href="../assets/css/admin_dashboard.css" />
-    
     <style>
         .status-paid { 
             background: #d1f4dd; 
@@ -215,6 +294,15 @@ try {
         .member-row:hover {
             background-color: rgba(13, 110, 253, 0.05);
         }
+        .member-type-badge {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 12px;
+        }
+        .type-member { background: #e7f1ff; color: #004085; }
+        .type-manager { background: #fff3cd; color: #664d03; }
+        .type-committee { background: #f8d7da; color: #721c24; }
+        
         .calc-result {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -322,12 +410,13 @@ try {
         <!-- Content -->
         <main class="col-lg-10 p-4">
             <div class="main-header">
-                <h2><i class="fa-solid fa-gift"></i> ปันผล (สมาชิก)</h2>
+                <h2><i class="fa-solid fa-gift"></i> ปันผล</h2>
             </div>
 
             <?php if ($error_message): ?>
                 <div class="alert alert-danger"><?= htmlspecialchars($error_message) ?></div>
             <?php endif; ?>
+            
 
             <!-- Summary Cards -->
             <div class="stats-grid">
@@ -337,7 +426,7 @@ try {
                     <p class="mb-0 text-muted">รวมทุกปีที่จ่ายแล้ว</p>
                 </div>
                 <div class="stat-card">
-                    <h5><i class="bi bi-people-fill"></i> จำนวนสมาชิก</h5>
+                    <h5><i class="bi bi-people-fill"></i> จำนวนผู้ถือหุ้น</h5>
                     <h3 class="text-info"><?= number_format($total_members) ?> คน</h3>
                     <p class="mb-0 text-muted">หุ้นรวม <?= number_format($total_shares) ?> หุ้น</p>
                 </div>
@@ -357,7 +446,7 @@ try {
                 </li>
                 <li class="nav-item">
                     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#members-panel">
-                        <i class="bi bi-people-fill me-2"></i>สมาชิก
+                        <i class="bi bi-people-fill me-2"></i>ผู้ถือหุ้น
                     </button>
                 </li>
                 <li class="nav-item">
@@ -481,7 +570,7 @@ try {
                     </div>
                 </div>
 
-                <!-- สมาชิก -->
+                <!-- ผู้ถือหุ้น -->
                 <div class="tab-pane fade" id="members-panel">
                     <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
                         <div class="d-flex flex-wrap gap-2">
@@ -489,6 +578,12 @@ try {
                                 <span class="input-group-text"><i class="bi bi-search"></i></span>
                                 <input type="search" id="memberSearch" class="form-control" placeholder="ค้นหา...">
                             </div>
+                            <select id="filterType" class="form-select" style="max-width:150px;">
+                                <option value="">ทุกประเภท</option>
+                                <option value="member">สมาชิก</option>
+                                <option value="manager">ผู้บริหาร</option>
+                                <option value="committee">กรรมการ</option>
+                            </select>
                             <input type="number" id="minShares" class="form-control" 
                                    placeholder="หุ้นขั้นต่ำ" min="0" style="max-width:120px;">
                         </div>
@@ -504,6 +599,7 @@ try {
                                     <tr>
                                         <th>รหัส</th>
                                         <th>ชื่อ</th>
+                                        <th class="text-center">ประเภท</th>
                                         <th class="text-center">หุ้น</th>
                                         <?php foreach ($dividend_periods as $period): ?>
                                         <th class="text-end d-none d-lg-table-cell">
@@ -519,338 +615,340 @@ try {
                                     <tr class="member-row"
                                         data-member-key="<?= htmlspecialchars($key) ?>"
                                         data-member-name="<?= htmlspecialchars($member['member_name']) ?>"
+                                        data-member-type="<?= htmlspecialchars($member['type']) ?>"
                                         data-shares="<?= (int)$member['shares'] ?>">
-                                        <td><strong><?= htmlspecialchars($member['code']) ?></strong></td>
-                                        <td><?= htmlspecialchars($member['member_name']) ?></td>
-                                        <td class="text-center">
-                                            <span class="badge bg-primary">
-                                                <?= number_format($member['shares']) ?> หุ้น
-                                            </span>
-                                        </td>
-                                        <?php foreach ($dividend_periods as $period): ?>
-                                        <td class="text-end d-none d-lg-table-cell">
-                                            ฿<?= number_format($member['payments'][$period['id']] ?? 0, 2) ?>
-                                        </td>
-                                        <?php endforeach; ?>
-                                        <td class="text-end">
-                                            <strong class="text-success">
-                                                ฿<?= number_format($member['total_received'], 2) ?>
-                                            </strong>
-                                        </td>
-                                        <td class="text-end">
-                                            <button class="btn btn-sm btn-outline-info" 
-                                                    onclick="viewMemberHistory('<?= htmlspecialchars($key) ?>')">
-                                                <i class="bi bi-clock-history"></i>
-                                            </button>
+<td><strong><?= htmlspecialchars($member['code']) ?></strong></td>
+<td><?= htmlspecialchars($member['member_name']) ?></td>
+<td class="text-center">
+<span class="member-type-badge type-<?= htmlspecialchars($member['type']) ?>">
+<?= htmlspecialchars($member['type_th']) ?>
+</span>
+</td>
+<td class="text-center">
+<span class="badge bg-primary">
+<?= number_format($member['shares']) ?> หุ้น
+</span>
+</td>
+<?php foreach ($dividend_periods as $period): ?>
+<td class="text-end d-none d-lg-table-cell">
+฿<?= number_format($member['payments'][$period['id']] ?? 0, 2) ?>
+</td>
+<?php endforeach; ?>
+<td class="text-end">
+<strong class="text-success">
+฿<?= number_format($member['total_received'], 2) ?>
+</strong>
+</td>
+<td class="text-end">
+<button class="btn btn-sm btn-outline-info" 
+                                                 onclick="viewMemberHistory('<?= htmlspecialchars($key) ?>')">
+<i class="bi bi-clock-history"></i>
+</button>
+</td>
+</tr>
+<?php endforeach; ?>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- คำนวณปันผล -->
+<div class="tab-pane fade" id="calculator-panel">
+                <div class="panel">
+                    <h5 class="mb-4">
+                        <i class="bi bi-calculator me-2"></i>เครื่องคำนวณปันผล
+                    </h5>
+                    
+                    <div class="row g-4">
+                        <!-- Input Section -->
+                        <div class="col-md-5">
+                            <div class="card border-0 shadow-sm">
+                                <div class="card-body">
+                                    <h6 class="card-title mb-3">
+                                        <i class="bi bi-pencil-square me-2"></i>ข้อมูลพื้นฐาน
+                                    </h6>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label">
+                                            <i class="bi bi-currency-dollar me-1"></i>กำไรสุทธิ (บาท)
+                                        </label>
+                                        <input type="number" id="calcProfit" class="form-control calc-input" 
+                                               placeholder="เช่น 1,000,000" step="0.01" oninput="calculateDividend()">
+                                        <small class="text-muted">กำไรสุทธิรวมของปีที่ต้องการคำนวณ</small>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">
+                                            <i class="bi bi-diagram-3 me-1"></i>จำนวนหุ้นรวม
+                                        </label>
+                                        <input type="number" id="calcShares" class="form-control calc-input" 
+                                               value="<?= $total_shares ?>" step="1" oninput="calculateDividend()">
+                                        <small class="text-muted">จำนวนหุ้นทั้งหมดในระบบ</small>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">
+                                            <i class="bi bi-percent me-1"></i>อัตราปันผล (%)
+                                        </label>
+                                        <input type="number" id="calcRate" class="form-control calc-input" 
+                                               placeholder="เช่น 15" step="0.1" min="0" max="100" oninput="calculateDividend()">
+                                        <small class="text-muted">เปอร์เซ็นต์ของกำไรที่จะจ่ายเป็นปันผล</small>
+                                    </div>
+
+                                    <div class="alert alert-info mb-0">
+                                        <small>
+                                            <i class="bi bi-info-circle me-1"></i>
+                                            <strong>หมายเหตุ:</strong> ตามกฎหมายสหกรณ์ ควรสำรองกำไร 10% เป็นทุนสำรอง 
+                                            และ 5% เป็นกองทุนสวัสดิการ
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Result Section -->
+                        <div class="col-md-7">
+                            <div class="calc-result mb-4">
+                                <div class="row text-center">
+                                    <div class="col-md-4 mb-3 mb-md-0">
+                                        <i class="bi bi-cash-stack fs-3 mb-2"></i>
+                                        <div class="small opacity-75">ยอดปันผลรวม</div>
+                                        <h3 class="mb-0" id="totalDividend">฿0.00</h3>
+                                    </div>
+                                    <div class="col-md-4 mb-3 mb-md-0">
+                                        <i class="bi bi-coin fs-3 mb-2"></i>
+                                        <div class="small opacity-75">ปันผลต่อหุ้น</div>
+                                        <h3 class="mb-0" id="dividendPerShare">฿0.00</h3>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <i class="bi bi-pie-chart fs-3 mb-2"></i>
+                                        <div class="small opacity-75">% ของกำไร</div>
+                                        <h3 class="mb-0" id="profitPercentage">0%</h3>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card border-0 shadow-sm">
+                                <div class="card-body">
+                                    <h6 class="card-title mb-3">
+                                        <i class="bi bi-pie-chart-fill me-2"></i>การจัดสรรกำไร
+                                    </h6>
+                                    <div class="row g-3">
+                                        <div class="col-6">
+                                            <div class="p-3 bg-warning bg-opacity-10 rounded">
+                                                <small class="text-muted d-block">ทุนสำรอง (10%)</small>
+                                                <strong id="reserveFund">฿0.00</strong>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="p-3 bg-info bg-opacity-10 rounded">
+                                                <small class="text-muted d-block">กองทุนสวัสดิการ (5%)</small>
+                                                <strong id="welfareFund">฿0.00</strong>
+                                            </div>
+                                        </div>
+                                        <div class="col-12">
+                                            <div class="p-3 bg-success bg-opacity-10 rounded">
+                                                <small class="text-muted d-block">คงเหลือหลังหักทุนสำรอง (85%)</small>
+                                                <strong class="text-success" id="netAvailable">฿0.00</strong>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Preview Table -->
+                    <div class="mt-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="mb-0">
+                                <i class="bi bi-table me-2"></i>การจ่ายตามผู้ถือหุ้น
+                            </h6>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="showAllMembers" onchange="calculateDividend()">
+                                <label class="form-check-label" for="showAllMembers">แสดงทั้งหมด</label>
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>#</th>
+                                        <th>รหัส</th>
+                                        <th>ชื่อ</th>
+                                        <th class="text-center">ประเภท</th>
+                                        <th class="text-center">หุ้น</th>
+                                        <th class="text-end">ปันผลที่จะได้รับ</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dividendPreview">
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted py-4">
+                                            <i class="bi bi-calculator fs-1 d-block mb-2 opacity-25"></i>
+                                            กรอกข้อมูลเพื่อดูตัวอย่างการคำนวณ
                                         </td>
                                     </tr>
-                                    <?php endforeach; ?>
                                 </tbody>
                             </table>
                         </div>
                     </div>
                 </div>
-
-                <!-- คำนวณปันผล -->
-                <div class="tab-pane fade" id="calculator-panel">
-                    <div class="panel">
-                        <h5 class="mb-4">
-                            <i class="bi bi-calculator me-2"></i>เครื่องคำนวณปันผล
-                        </h5>
-                        
-                        <div class="row g-4">
-                            <!-- Input Section -->
-                            <div class="col-md-5">
-                                <div class="card border-0 shadow-sm">
-                                    <div class="card-body">
-                                        <h6 class="card-title mb-3">
-                                            <i class="bi bi-pencil-square me-2"></i>ข้อมูลพื้นฐาน
-                                        </h6>
-                                        
-                                        <div class="mb-3">
-                                        <label class="form-label">
-                                                <i class="bi bi-currency-dollar me-1"></i>กำไรสุทธิ (บาท)
-                                            </label>
-                                            <input type="number" id="calcProfit" class="form-control calc-input" 
-                                                   placeholder="เช่น 1,000,000" step="0.01" oninput="calculateDividend()">
-                                            <small class="text-muted">กำไรสุทธิรวมของปีที่ต้องการคำนวณ</small>
-                                        </div>
-
-                                        <div class="mb-3">
-                                            <label class="form-label">
-                                                <i class="bi bi-diagram-3 me-1"></i>จำนวนหุ้นรวม
-                                            </label>
-                                            <input type="number" id="calcShares" class="form-control calc-input" 
-                                                   value="<?= $total_shares ?>" step="1" oninput="calculateDividend()">
-                                            <small class="text-muted">จำนวนหุ้นทั้งหมดในระบบ</small>
-                                        </div>
-
-                                        <div class="mb-3">
-                                            <label class="form-label">
-                                                <i class="bi bi-percent me-1"></i>อัตราปันผล (%)
-                                            </label>
-                                            <input type="number" id="calcRate" class="form-control calc-input" 
-                                                   placeholder="เช่น 15" step="0.1" min="0" max="100" oninput="calculateDividend()">
-                                            <small class="text-muted">เปอร์เซ็นต์ของกำไรที่จะจ่ายเป็นปันผล</small>
-                                        </div>
-
-                                        <div class="alert alert-info mb-0">
-                                            <small>
-                                                <i class="bi bi-info-circle me-1"></i>
-                                                <strong>หมายเหตุ:</strong> ตามกฎหมายสหกรณ์ ควรสำรองกำไร 10% เป็นทุนสำรอง 
-                                                และ 5% เป็นกองทุนสวัสดิการ
-                                            </small>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Result Section -->
-                            <div class="col-md-7">
-                                <div class="calc-result mb-4">
-                                    <div class="row text-center">
-                                        <div class="col-md-4 mb-3 mb-md-0">
-                                            <i class="bi bi-cash-stack fs-3 mb-2"></i>
-                                            <div class="small opacity-75">ยอดปันผลรวม</div>
-                                            <h3 class="mb-0" id="totalDividend">฿0.00</h3>
-                                        </div>
-                                        <div class="col-md-4 mb-3 mb-md-0">
-                                            <i class="bi bi-coin fs-3 mb-2"></i>
-                                            <div class="small opacity-75">ปันผลต่อหุ้น</div>
-                                            <h3 class="mb-0" id="dividendPerShare">฿0.00</h3>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <i class="bi bi-pie-chart fs-3 mb-2"></i>
-                                            <div class="small opacity-75">% ของกำไร</div>
-                                            <h3 class="mb-0" id="profitPercentage">0%</h3>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="card border-0 shadow-sm">
-                                    <div class="card-body">
-                                        <h6 class="card-title mb-3">
-                                            <i class="bi bi-pie-chart-fill me-2"></i>การจัดสรรกำไร
-                                        </h6>
-                                        <div class="row g-3">
-                                            <div class="col-6">
-                                                <div class="p-3 bg-warning bg-opacity-10 rounded">
-                                                    <small class="text-muted d-block">ทุนสำรอง (10%)</small>
-                                                    <strong id="reserveFund">฿0.00</strong>
-                                                </div>
-                                            </div>
-                                            <div class="col-6">
-                                                <div class="p-3 bg-info bg-opacity-10 rounded">
-                                                    <small class="text-muted d-block">กองทุนสวัสดิการ (5%)</small>
-                                                    <strong id="welfareFund">฿0.00</strong>
-                                                </div>
-                                            </div>
-                                            <div class="col-12">
-                                                <div class="p-3 bg-success bg-opacity-10 rounded">
-                                                    <small class="text-muted d-block">คงเหลือหลังหักทุนสำรอง (85%)</small>
-                                                    <strong class="text-success" id="netAvailable">฿0.00</strong>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Preview Table -->
-                        <div class="mt-4">
-                            <div class="d-flex justify-content-between align-items-center mb-3">
-                                <h6 class="mb-0">
-                                    <i class="bi bi-table me-2"></i>ตัวอย่างการจ่ายตามสมาชิก
-                                </h6>
-                                <div class="form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" id="showAllMembers" onchange="calculateDividend()">
-                                    <label class="form-check-label" for="showAllMembers">แสดงทั้งหมด</label>
-                                </div>
-                            </div>
-                            <div class="table-responsive">
-                                <table class="table table-hover align-middle">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th>#</th>
-                                            <th>รหัส</th>
-                                            <th>ชื่อ</th>
-                                            <th class="text-center">หุ้น</th>
-                                            <th class="text-end">ปันผลที่จะได้รับ</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="dividendPreview">
-                                        <tr>
-                                            <td colspan="5" class="text-center text-muted py-4">
-                                                <i class="bi bi-calculator fs-1 d-block mb-2 opacity-25"></i>
-                                                กรอกข้อมูลเพื่อดูตัวอย่างการคำนวณ
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
-        </main>
-    </div>
+        </div>
+    </main>
 </div>
-
+</div>
 <footer class="footer">
-    © <?= date('Y') ?> <?= htmlspecialchars($site_name) ?> — จัดการปันผล (สมาชิก)
+    © <?= date('Y') ?> <?= htmlspecialchars($site_name) ?> — จัดการปันผล
 </footer>
-
 <!-- Modal: Create Dividend -->
 <div class="modal fade" id="modalCreateDividend" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <form class="modal-content" method="post" action="dividend_create_period.php">
             <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
-            
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title">
-                    <i class="fa-solid fa-plus me-2"></i>สร้างงวดปันผลรายปี
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            
-            <div class="modal-body">
-                <div class="row g-3">
-                    <!-- ปี -->
-                    <div class="col-sm-6">
-                        <label class="form-label">
-                            <i class="bi bi-calendar me-1"></i>ปี <span class="text-danger">*</span>
-                        </label>
-                        <input type="number" name="year" id="dividendYear" class="form-control" 
-                               value="<?= date('Y') ?>" required min="2020" max="2050"
-                               onchange="updateDateRange()">
-                        <small class="text-muted">ปีที่ต้องการสร้างงวดปันผล</small>
-                    </div>
+            <h5 class="modal-title">
+                <i class="fa-solid fa-plus me-2"></i>สร้างงวดปันผลรายปี
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        
+        <div class="modal-body">
+            <div class="row g-3">
+                <!-- ปี -->
+                <div class="col-sm-6">
+                    <label class="form-label">
+                        <i class="bi bi-calendar me-1"></i>ปี <span class="text-danger">*</span>
+                    </label>
+                    <input type="number" name="year" id="dividendYear" class="form-control" 
+                           value="<?= date('Y') ?>" required min="2020" max="2050"
+                           onchange="updateDateRange()">
+                    <small class="text-muted">ปีที่ต้องการสร้างงวดปันผล</small>
+                </div>
 
-                    <!-- ชื่องวด -->
-                    <div class="col-sm-6">
-                        <label class="form-label">
-                            <i class="bi bi-card-text me-1"></i>ชื่องวด
-                        </label>
-                        <input type="text" name="period_name" id="periodName" class="form-control" 
-                               placeholder="เช่น ปันผลประจำปี 2025" 
-                               value="ปันผลประจำปี <?= date('Y') ?>">
-                        <small class="text-muted">เว้นว่างเพื่อให้ระบบสร้างอัตโนมัติ</small>
-                    </div>
+                <!-- ชื่องวด -->
+                <div class="col-sm-6">
+                    <label class="form-label">
+                        <i class="bi bi-card-text me-1"></i>ชื่องวด
+                    </label>
+                    <input type="text" name="period_name" id="periodName" class="form-control" 
+                           placeholder="เช่น ปันผลประจำปี 2025" 
+                           value="ปันผลประจำปี <?= date('Y') ?>">
+                    <small class="text-muted">เว้นว่างเพื่อให้ระบบสร้างอัตโนมัติ</small>
+                </div>
 
-                    <!-- วันที่เริ่มต้น -->
-                    <div class="col-sm-6">
-                        <label class="form-label">
-                            <i class="bi bi-calendar-event me-1"></i>วันที่เริ่มต้น <span class="text-danger">*</span>
-                        </label>
-                        <input type="date" name="start_date" id="startDate" class="form-control" 
-                               value="<?= date('Y') ?>-01-01" required>
-                        <small class="text-muted">เริ่มนับกำไรตั้งแต่วันที่</small>
-                    </div>
+                <!-- วันที่เริ่มต้น -->
+                <div class="col-sm-6">
+                    <label class="form-label">
+                        <i class="bi bi-calendar-event me-1"></i>วันที่เริ่มต้น <span class="text-danger">*</span>
+                    </label>
+                    <input type="date" name="start_date" id="startDate" class="form-control" 
+                           value="<?= date('Y') ?>-01-01" required>
+                    <small class="text-muted">เริ่มนับกำไรตั้งแต่วันที่</small>
+                </div>
 
-                    <!-- วันที่สิ้นสุด -->
-                    <div class="col-sm-6">
-                        <label class="form-label">
-                            <i class="bi bi-calendar-check me-1"></i>วันที่สิ้นสุด <span class="text-danger">*</span>
-                        </label>
-                        <input type="date" name="end_date" id="endDate" class="form-control" 
-                               value="<?= date('Y') ?>-12-31" required>
-                        <small class="text-muted">นับกำไรถึงวันที่</small>
-                    </div>
+                <!-- วันที่สิ้นสุด -->
+                <div class="col-sm-6">
+                    <label class="form-label">
+                        <i class="bi bi-calendar-check me-1"></i>วันที่สิ้นสุด <span class="text-danger">*</span>
+                    </label>
+                    <input type="date" name="end_date" id="endDate" class="form-control" 
+                           value="<?= date('Y') ?>-12-31" required>
+                    <small class="text-muted">นับกำไรถึงวันที่</small>
+                </div>
 
-                    <!-- แสดงช่วงเวลา -->
-                    <div class="col-12">
-                        <div class="alert alert-light border mb-0">
-                            <small class="text-muted">
-                                <i class="bi bi-calendar-range me-1"></i>
-                                <strong>ช่วงเวลา:</strong> 
-                                <span id="dateRangeDisplay">1 ม.ค. <?= date('Y') ?> - 31 ธ.ค. <?= date('Y') ?></span>
-                                (<span id="daysCount">365</span> วัน)
-                            </small>
-                        </div>
-                    </div>
-
-                    <!-- กำไรสุทธิ -->
-                    <div class="col-sm-6">
-                        <label class="form-label">
-                            <i class="bi bi-currency-dollar me-1"></i>กำไรสุทธิ (บาท) <span class="text-danger">*</span>
-                        </label>
-                        <input type="number" name="total_profit" id="modalProfit" class="form-control" 
-                               step="0.01" min="0.01" required placeholder="0.00" 
-                               oninput="updateModalCalc()">
-                        <small class="text-muted">กำไรสุทธิในช่วงเวลาที่เลือก</small>
-                    </div>
-
-                    <!-- อัตราปันผล -->
-                    <div class="col-sm-6">
-                        <label class="form-label">
-                            <i class="bi bi-percent me-1"></i>อัตราปันผล (%) <span class="text-danger">*</span>
-                        </label>
-                        <input type="number" name="dividend_rate" id="modalRate" class="form-control" 
-                               step="0.1" min="0.1" max="100" required placeholder="เช่น 15"
-                               oninput="updateModalCalc()">
-                        <small class="text-muted">% ของกำไรที่จะจ่ายเป็นปันผล</small>
-                    </div>
-
-                    <!-- จำนวนหุ้นรวม -->
-                    <div class="col-sm-6">
-                        <label class="form-label">
-                            <i class="bi bi-diagram-3 me-1"></i>จำนวนหุ้นรวม
-                        </label>
-                        <input type="number" class="form-control bg-light" 
-                               value="<?= $total_shares ?>" readonly>
-                        <small class="text-muted">รวมหุ้นสมาชิกทั้งหมด</small>
-                    </div>
-
-                    <!-- ยอดปันผลรวม -->
-                    <div class="col-sm-6">
-                        <label class="form-label">
-                            <i class="bi bi-cash-stack me-1"></i>ยอดปันผลรวม (บาท)
-                        </label>
-                        <input type="text" id="modalTotal" class="form-control bg-light" 
-                               value="0.00" readonly>
-                        <small class="text-muted">คำนวณอัตโนมัติ</small>
-                    </div>
-
-                    <!-- หมายเหตุ -->
-                    <div class="col-12">
-                        <label class="form-label">
-                            <i class="bi bi-chat-left-text me-1"></i>หมายเหตุ
-                        </label>
-                        <textarea name="notes" class="form-control" rows="3" 
-                                  placeholder="หมายเหตุเพิ่มเติม (ถ้ามี)"></textarea>
+                <!-- แสดงช่วงเวลา -->
+                <div class="col-12">
+                    <div class="alert alert-light border mb-0">
+                        <small class="text-muted">
+                            <i class="bi bi-calendar-range me-1"></i>
+                            <strong>ช่วงเวลา:</strong> 
+                            <span id="dateRangeDisplay">1 ม.ค. <?= date('Y') ?> - 31 ธ.ค. <?= date('Y') ?></span>
+                            (<span id="daysCount">365</span> วัน)
+                        </small>
                     </div>
                 </div>
 
-                <!-- Alert Info -->
-                <div class="alert alert-info mt-3 mb-0">
-                    <div class="d-flex">
-                        <i class="bi bi-info-circle fs-5 me-2"></i>
-                        <div>
-                            <strong>หมายเหตุ:</strong>
-                            <ul class="mb-0 mt-2">
-                                <li>แต่ละปีสามารถมีได้เพียง 1 งวดปันผล</li>
-                                <li>หลังสร้างงวด สถานะจะเป็น <span class="badge bg-warning">รออนุมัติ</span></li>
-                                <li>ระบบจะสร้างรายการจ่ายให้สมาชิกทุกคนอัตโนมัติ</li>
-                                <li>ปันผล<strong>เฉพาะสมาชิกเท่านั้น</strong> (ไม่รวมผู้บริหารและกรรมการ)</li>
-                            </ul>
-                        </div>
+                <!-- กำไรสุทธิ -->
+                <div class="col-sm-6">
+                    <label class="form-label">
+                        <i class="bi bi-currency-dollar me-1"></i>กำไรสุทธิ (บาท) <span class="text-danger">*</span>
+                    </label>
+                    <input type="number" name="total_profit" id="modalProfit" class="form-control" 
+                           step="0.01" min="0.01" required placeholder="0.00" 
+                           oninput="updateModalCalc()">
+                    <small class="text-muted">กำไรสุทธิในช่วงเวลาที่เลือก</small>
+                </div>
+
+                <!-- อัตราปันผล -->
+                <div class="col-sm-6">
+                    <label class="form-label">
+                        <i class="bi bi-percent me-1"></i>อัตราปันผล (%) <span class="text-danger">*</span>
+                    </label>
+                    <input type="number" name="dividend_rate" id="modalRate" class="form-control" 
+                           step="0.1" min="0.1" max="100" required placeholder="เช่น 15"
+                           oninput="updateModalCalc()">
+                    <small class="text-muted">% ของกำไรที่จะจ่ายเป็นปันผล</small>
+                </div>
+
+                <!-- จำนวนหุ้นรวม -->
+                <div class="col-sm-6">
+                    <label class="form-label">
+                        <i class="bi bi-diagram-3 me-1"></i>จำนวนหุ้นรวม
+                    </label>
+                    <input type="number" class="form-control bg-light" 
+                           value="<?= $total_shares ?>" readonly>
+                    <small class="text-muted">รวมทุกประเภทในระบบ</small>
+                </div>
+
+                <!-- ยอดปันผลรวม -->
+                <div class="col-sm-6">
+                    <label class="form-label">
+                        <i class="bi bi-cash-stack me-1"></i>ยอดปันผลรวม (บาท)
+                    </label>
+                    <input type="text" id="modalTotal" class="form-control bg-light" 
+                           value="0.00" readonly>
+                    <small class="text-muted">คำนวณอัตโนมัติ</small>
+                </div>
+
+                <!-- หมายเหตุ -->
+                <div class="col-12">
+                    <label class="form-label">
+                        <i class="bi bi-chat-left-text me-1"></i>หมายเหตุ
+                    </label>
+                    <textarea name="notes" class="form-control" rows="3" 
+                              placeholder="หมายเหตุเพิ่มเติม (ถ้ามี)"></textarea>
+                </div>
+            </div>
+
+            <!-- Alert Info -->
+            <div class="alert alert-info mt-3 mb-0">
+                <div class="d-flex">
+                    <i class="bi bi-info-circle fs-5 me-2"></i>
+                    <div>
+                        <strong>หมายเหตุ:</strong>
+                        <ul class="mb-0 mt-2">
+                            <li>แต่ละปีสามารถมีได้เพียง 1 งวดปันผล</li>
+                            <li>หลังสร้างงวด สถานะจะเป็น <span class="badge bg-warning">รออนุมัติ</span></li>
+                            <li>ระบบจะสร้างรายการจ่ายให้ผู้ถือหุ้นทุกคนอัตโนมัติ</li>
+                            <li>ช่วงวันที่จะบันทึกไว้เพื่ออ้างอิง</li>
+                        </ul>
                     </div>
                 </div>
             </div>
-            
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="bi bi-x-circle me-1"></i>ยกเลิก
-                </button>
-                <button type="submit" class="btn btn-primary">
-                    <i class="bi bi-save2 me-1"></i>สร้างงวดปันผล
-                </button>
-            </div>
-        </form>
-    </div>
+        </div>
+        
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                <i class="bi bi-x-circle me-1"></i>ยกเลิก
+            </button>
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-save2 me-1"></i>สร้างงวดปันผล
+            </button>
+        </div>
+    </form>
 </div>
-
+</div>
 <!-- Modal: Member History -->
 <div class="modal fade" id="modalMemberHistory" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -866,8 +964,11 @@ try {
                     <div class="col-sm-4">
                         <strong>รหัส:</strong> <span id="historyMemberId">-</span>
                     </div>
-                    <div class="col-sm-8">
+                    <div class="col-sm-4">
                         <strong>ชื่อ:</strong> <span id="historyMemberName">-</span>
+                    </div>
+                    <div class="col-sm-4">
+                        <strong>ประเภท:</strong> <span id="historyMemberType">-</span>
                     </div>
                 </div>
                 <div class="history-summary"></div>
@@ -896,7 +997,6 @@ try {
         </div>
     </div>
 </div>
-
 <!-- Toast -->
 <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1080">
     <div id="liveToast" class="toast border-0" role="status">
@@ -906,9 +1006,7 @@ try {
         </div>
     </div>
 </div>
-
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-
 <script>
 'use strict';
 
@@ -941,6 +1039,7 @@ if (errMsg) {
 
 // ========== FILTER MEMBERS ==========
 const memberSearch = $('#memberSearch');
+const filterType = $('#filterType');
 const minShares = $('#minShares');
 
 function normalize(s) { 
@@ -949,20 +1048,24 @@ function normalize(s) {
 
 function applyMemberFilter() {
     const keyword = normalize(memberSearch?.value || '');
+    const type = filterType?.value || '';
     const minS = parseInt(minShares?.value || '0', 10);
 
     $$('#membersTable tbody tr').forEach(tr => {
         const searchText = normalize(`${tr.dataset.memberName} ${tr.dataset.memberKey}`);
+        const memberType = tr.dataset.memberType;
         const shares = parseInt(tr.dataset.shares || '0', 10);
         
         const matchKeyword = !keyword || searchText.includes(keyword);
+        const matchType = !type || memberType === type;
         const matchShares = isNaN(minS) || shares >= minS;
         
-        tr.style.display = (matchKeyword && matchShares) ? '' : 'none';
+        tr.style.display = (matchKeyword && matchType && matchShares) ? '' : 'none';
     });
 }
 
 memberSearch?.addEventListener('input', applyMemberFilter);
+filterType?.addEventListener('change', applyMemberFilter);
 minShares?.addEventListener('input', applyMemberFilter);
 
 // ========== CALCULATOR ==========
@@ -1001,7 +1104,7 @@ function updateDividendPreview(dividendPerShare) {
     if (dividendPerShare <= 0) {
         preview.innerHTML = `
             <tr>
-                <td colspan="5" class="text-center text-muted py-4">
+                <td colspan="6" class="text-center text-muted py-4">
                     <i class="bi bi-calculator fs-1 d-block mb-2 opacity-25"></i>
                     กรอกข้อมูลเพื่อดูตัวอย่างการคำนวณ
                 </td>
@@ -1022,6 +1125,11 @@ function updateDividendPreview(dividendPerShare) {
                 <td><strong>${member.code}</strong></td>
                 <td>${member.member_name}</td>
                 <td class="text-center">
+                    <span class="member-type-badge type-${member.type}">
+                        ${member.type_th}
+                    </span>
+                </td>
+                <td class="text-center">
                     <span class="badge bg-primary">${member.shares.toLocaleString('th-TH')} หุ้น</span>
                 </td>
                 <td class="text-end">
@@ -1034,7 +1142,7 @@ function updateDividendPreview(dividendPerShare) {
     if (!showAll && membersData.length > 10) {
         html += `
             <tr class="table-light">
-                <td colspan="5" class="text-center text-muted small">
+                <td colspan="6" class="text-center text-muted small">
                     <i class="bi bi-three-dots me-1"></i>
                     และอีก ${membersData.length - 10} คน (เปิดสวิตช์ "แสดงทั้งหมด" เพื่อดูเพิ่ม)
                 </td>
@@ -1083,16 +1191,14 @@ function calculateDateRange() {
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
     
     // แสดงผล
-    const thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 
-                        'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-    
+    const thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.','ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
     const startStr = `${startDate.getDate()} ${thaiMonths[startDate.getMonth()]} ${startDate.getFullYear()}`;
     const endStr = `${endDate.getDate()} ${thaiMonths[endDate.getMonth()]} ${endDate.getFullYear()}`;
-    
+
     display.textContent = `${startStr} - ${endStr}`;
     daysCount.textContent = diffDays.toLocaleString('th-TH');
-    
-    // Validation
+
+    // Validation: วันที่สิ้นสุดต้องมากกว่าวันที่เริ่มต้น
     if (endDate < startDate) {
         endInput.setCustomValidity('วันที่สิ้นสุดต้องมากกว่าวันที่เริ่มต้น');
         display.textContent = 'ช่วงวันที่ไม่ถูกต้อง';
@@ -1102,13 +1208,11 @@ function calculateDateRange() {
         display.classList.remove('text-danger');
     }
 }
-
 // ========== MODAL CALCULATOR ==========
-function updateModalCalc() {
+    function updateModalCalc() {
     const profit = parseFloat($('#modalProfit')?.value || '0');
     const rate = parseFloat($('#modalRate')?.value || '0');
     const totalDividend = profit * (rate / 100);
-    
     const modalTotal = $('#modalTotal');
     if (modalTotal) {
         modalTotal.value = '฿' + totalDividend.toLocaleString('th-TH', {
@@ -1117,39 +1221,39 @@ function updateModalCalc() {
         });
     }
 }
-
 // ========== MEMBER HISTORY ==========
 async function viewMemberHistory(memberKey) {
-    const [memberType, memberId] = memberKey.split('_');
-    
-    if (!memberId || !memberType) {
-        toast('ข้อมูลสมาชิกไม่ถูกต้อง', false);
-        return;
-    }
-
-    const member = membersData.find(m => `${m.type}_${m.id}` === memberKey);
-    if (!member) {
-        toast('ไม่พบข้อมูลสมาชิก', false);
-        return;
-    }
-
-    $('#historyMemberId').textContent = member.code;
-    $('#historyMemberName').textContent = member.member_name;
-    
-    const historyTable = $('#memberHistoryTable');
-    historyTable.innerHTML = '<tr><td colspan="5" class="text-center"><span class="spinner-border spinner-border-sm me-2"></span>กำลังโหลด...</td></tr>';
-    
-    new bootstrap.Modal('#modalMemberHistory').show();
-
-    try {
-        const response = await fetch(
-            `dividend_member_history.php?member_id=${memberId}&member_type=${memberType}`
-        );
-        
-        if (!response.ok) {
-            throw new Error('ไม่สามารถดึงข้อมูลได้');
+const [memberType, memberId] = memberKey.split('_');
+if (!memberId || !memberType) {
+    toast('ข้อมูลสมาชิกไม่ถูกต้อง', false);
+    return;
 }
-const data = await response.json();
+
+const member = membersData.find(m => `${m.type}_${m.id}` === memberKey);
+if (!member) {
+    toast('ไม่พบข้อมูลสมาชิก', false);
+    return;
+}
+
+$('#historyMemberId').textContent = member.code;
+$('#historyMemberName').textContent = member.member_name;
+$('#historyMemberType').textContent = member.type_th;
+
+const historyTable = $('#memberHistoryTable');
+historyTable.innerHTML = '<tr><td colspan="5" class="text-center"><span class="spinner-border spinner-border-sm me-2"></span>กำลังโหลด...</td></tr>';
+
+new bootstrap.Modal('#modalMemberHistory').show();
+
+try {
+    const response = await fetch(
+        `dividend_member_history.php?member_id=${memberId}&member_type=${memberType}`
+    );
+    
+    if (!response.ok) {
+        throw new Error('ไม่สามารถดึงข้อมูลได้');
+    }
+    
+    const data = await response.json();
 
     if (data.ok && data.history.length > 0) {
         // แสดงสรุป
@@ -1233,14 +1337,15 @@ const data = await response.json();
         </tr>
     `;
 }
+
 }
 // ========== DIVIDEND ACTIONS ==========
 function viewDividendDetails(year) {
-    window.location.href = `dividend_detail.php?year=${year}`;  // ← ใช้ backtick
+    window.location.href = `dividend_detail.php?year=${year}`;
 }
 
 async function processPayout(year, csrfToken) {
-    if (!confirm(`ยืนยันการจ่ายปันผลปี ${year}?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`)) {  // ← ใช้ backtick
+    if (!confirm(`ยืนยันการจ่ายปันผลปี ${year}?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`)) {
         return;
     }
 
@@ -1270,15 +1375,15 @@ async function processPayout(year, csrfToken) {
 }
 // ========== EXPORT ==========
 function exportMembers() {
-const headers = ['รหัส', 'ชื่อ', 'หุ้น', 'รวมรับปันผล'];
-const rows = [headers];
-$$('#membersTable tbody tr').forEach(tr => {
+const headers = ['รหัส', 'ชื่อ', 'ประเภท', 'หุ้น', 'รวมรับปันผล'];
+const rows = [headers];$$('#membersTable tbody tr').forEach(tr => {
     if (tr.style.display === 'none') return;
     const cells = tr.querySelectorAll('td');
-    if (cells.length >= 4) {
+    if (cells.length >= 5) {
         rows.push([
             cells[0].textContent.trim(),
             cells[1].textContent.trim(),
+            cells[2].textContent.trim(),
             tr.dataset.shares,
             cells[cells.length - 2].textContent.replace(/[฿,]/g, '').trim()
         ]);
