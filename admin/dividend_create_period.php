@@ -1,5 +1,5 @@
 <?php
-// dividend_create_period.php — สร้างงวดปันผลใหม่
+// dividend_create_period.php — สร้างงวดปันผลใหม่ (เฉพาะสมาชิก)
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 
@@ -9,7 +9,7 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
-// ตรวจสอบสิทธิ์ (เฉพาะ admin)
+// ตรวจสอบสิทธิ์ (เฉพาะ admin และ manager)
 if (!in_array($_SESSION['role'], ['admin', 'manager'])) {
     header('Location: dividend.php?err=คุณไม่มีสิทธิ์สร้างงวดปันผล');
     exit();
@@ -68,10 +68,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // if ($total_profit <= 0) {
-    //     $errors[] = 'กำไรสุทธิต้องมากกว่า 0 บาท';
-    // }
-
     if ($dividend_rate <= 0 || $dividend_rate > 100) {
         $errors[] = 'อัตราปันผลต้องอยู่ระหว่าง 0.1-100%';
     }
@@ -81,6 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header("Location: dividend.php?err=" . urlencode($error_message));
         exit();
     }
+
     try {
         // เริ่ม Transaction
         $pdo->beginTransaction();
@@ -95,34 +92,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             throw new Exception("มีงวดปันผลของปี {$year} อยู่ในระบบแล้ว (แต่ละปีสามารถมีได้เพียง 1 งวด)");
         }
 
-        // 2) นับจำนวนหุ้นรวมทั้งหมด
+        // 2) นับจำนวนหุ้นรวมทั้งหมด (เฉพาะสมาชิก)
         $total_shares = 0;
 
-        // 2.1) สมาชิก
         $member_shares_stmt = $pdo->query("
             SELECT COALESCE(SUM(shares), 0) FROM members WHERE is_active = 1
         ");
-        $total_shares += (int)$member_shares_stmt->fetchColumn();
-
-        // 2.2) ผู้บริหาร
-        try {
-            $manager_shares_stmt = $pdo->query("
-                SELECT COALESCE(SUM(shares), 0) FROM managers
-            ");
-            $total_shares += (int)$manager_shares_stmt->fetchColumn();
-        } catch (Throwable $e) {
-            error_log("Manager shares error: " . $e->getMessage());
-        }
-
-        // 2.3) กรรมการ
-        try {
-            $committee_shares_stmt = $pdo->query("
-                SELECT COALESCE(SUM(shares), 0) FROM committees
-            ");
-            $total_shares += (int)$committee_shares_stmt->fetchColumn();
-        } catch (Throwable $e) {
-            error_log("Committee shares error: " . $e->getMessage());
-        }
+        $total_shares = (int)$member_shares_stmt->fetchColumn();
 
         if ($total_shares <= 0) {
             throw new Exception('ไม่พบหุ้นในระบบ กรุณาเพิ่มสมาชิกที่มีหุ้นก่อนสร้างงวดปันผล');
@@ -134,34 +110,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // 4) สร้างงวดปันผล
         $insert_period_stmt = $pdo->prepare("
-        INSERT INTO dividend_periods 
-        (year, start_date, end_date, period_name, total_profit, dividend_rate, 
-        total_shares_at_time, total_dividend_amount, dividend_per_share, 
-        status, created_at, approved_by)
-        VALUES 
-        (:year, :start_date, :end_date, :name, :profit, :rate, 
-        :shares, :total_dividend, :per_share, 
-        'pending', NOW(), NULL)
+            INSERT INTO dividend_periods 
+            (year, start_date, end_date, period_name, total_profit, dividend_rate, 
+             total_shares_at_time, total_dividend_amount, dividend_per_share, 
+             status, created_at, approved_by)
+            VALUES 
+            (:year, :start_date, :end_date, :name, :profit, :rate, 
+             :shares, :total_dividend, :per_share, 
+             'pending', NOW(), NULL)
         ");
 
         $insert_period_stmt->execute([
-        ':year' => $year,
-        ':start_date' => $start_date,
-        ':end_date' => $end_date,
-        ':name' => $period_name ?: "ปันผลประจำปี {$year}",
-        ':profit' => $total_profit,
-        ':rate' => $dividend_rate,
-        ':shares' => $total_shares,
-        ':total_dividend' => $total_dividend_amount,
-        ':per_share' => $dividend_per_share
+            ':year' => $year,
+            ':start_date' => $start_date,
+            ':end_date' => $end_date,
+            ':name' => $period_name ?: "ปันผลประจำปี {$year}",
+            ':profit' => $total_profit,
+            ':rate' => $dividend_rate,
+            ':shares' => $total_shares,
+            ':total_dividend' => $total_dividend_amount,
+            ':per_share' => $dividend_per_share
         ]);
 
         $period_id = $pdo->lastInsertId();
 
-        // 5) สร้างรายการจ่ายปันผลสำหรับทุกคน
+        // 5) สร้างรายการจ่ายปันผลสำหรับสมาชิกเท่านั้น
         $member_count = 0;
 
-        // 5.1) สมาชิกทั่วไป
         $members_stmt = $pdo->query("
             SELECT id, shares FROM members WHERE is_active = 1 AND shares > 0
         ");
@@ -187,68 +162,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $member_count++;
         }
 
-        // 5.2) ผู้บริหาร
-        try {
-            $managers_stmt = $pdo->query("
-                SELECT id, shares FROM managers WHERE shares > 0
-            ");
-
-            foreach ($managers_stmt->fetchAll(PDO::FETCH_ASSOC) as $manager) {
-                $dividend_amount = $manager['shares'] * $dividend_per_share;
-                
-                $insert_payment_stmt = $pdo->prepare("
-                    INSERT INTO dividend_payments 
-                    (period_id, member_id, member_type, shares_at_time, 
-                     dividend_amount, payment_status)
-                    VALUES 
-                    (:period_id, :member_id, 'manager', :shares, :amount, 'pending')
-                ");
-
-                $insert_payment_stmt->execute([
-                    ':period_id' => $period_id,
-                    ':member_id' => $manager['id'],
-                    ':shares' => $manager['shares'],
-                    ':amount' => $dividend_amount
-                ]);
-
-                $member_count++;
-            }
-        } catch (Throwable $e) {
-            error_log("Manager dividend payment error: " . $e->getMessage());
-        }
-
-        // 5.3) กรรมการ
-        try {
-            $committees_stmt = $pdo->query("
-                SELECT id, COALESCE(shares, 0) AS shares 
-                FROM committees 
-                WHERE COALESCE(shares, 0) > 0
-            ");
-
-            foreach ($committees_stmt->fetchAll(PDO::FETCH_ASSOC) as $committee) {
-                $dividend_amount = $committee['shares'] * $dividend_per_share;
-                
-                $insert_payment_stmt = $pdo->prepare("
-                    INSERT INTO dividend_payments 
-                    (period_id, member_id, member_type, shares_at_time, 
-                     dividend_amount, payment_status)
-                    VALUES 
-                    (:period_id, :member_id, 'committee', :shares, :amount, 'pending')
-                ");
-
-                $insert_payment_stmt->execute([
-                    ':period_id' => $period_id,
-                    ':member_id' => $committee['id'],
-                    ':shares' => $committee['shares'],
-                    ':amount' => $dividend_amount
-                ]);
-
-                $member_count++;
-            }
-        } catch (Throwable $e) {
-            error_log("Committee dividend payment error: " . $e->getMessage());
-        }
-
         // 6) บันทึก Log (ถ้ามีตาราง)
         try {
             $log_check = $pdo->query("SHOW TABLES LIKE 'activity_logs'")->fetch();
@@ -261,7 +174,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ");
                 $log_stmt->execute([
                     ':uid' => $_SESSION['user_id'],
-                    ':desc' => "สร้างงวดปันผลปี {$year} สำหรับ {$member_count} คน ยอดรวม ฿" . number_format($total_dividend_amount, 2)
+                    ':desc' => "สร้างงวดปันผลปี {$year} สำหรับสมาชิก {$member_count} คน ยอดรวม ฿" . number_format($total_dividend_amount, 2)
                 ]);
             }
         } catch (Throwable $e) {
@@ -272,7 +185,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->commit();
 
         // Redirect พร้อมข้อความสำเร็จ
-        $success_message = "✅ สร้างงวดปันผลปี {$year} สำเร็จ! จำนวน {$member_count} คน | ยอดรวม ฿" . number_format($total_dividend_amount, 2);
+        $success_message = "✅ สร้างงวดปันผลปี {$year} สำเร็จ! จำนวนสมาชิก {$member_count} คน | ยอดรวม ฿" . number_format($total_dividend_amount, 2);
         header("Location: dividend.php?ok=" . urlencode($success_message));
         exit();
 
