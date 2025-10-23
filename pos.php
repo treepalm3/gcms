@@ -776,10 +776,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                 <div class="text-center mt-4 d-grid gap-2">
                     <button type="button" class="btn btn-primary btn-lg" id="nextToStep4" disabled>
                         ถัดไป <i class="bi bi-arrow-right ms-2"></i>
-                    </button>
-                    <button type="button" class="btn btn-outline-secondary" onclick="goToStep(2)">
-                        <i class="bi bi-arrow-left me-2"></i> ย้อนกลับ
-                    </button>
+                        <button type="button" class="btn btn-outline-secondary" id="backToStep2Btn">
+                          <i class="bi bi-arrow-left me-2"></i> ย้อนกลับ
+                        </button>
                 </div>
             </div>
           </div>
@@ -917,7 +916,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-(function(){ // <-- วงเล็บเปิดที่ถูกต้อง
+(function(){ 
 
 // ===== State =====
 let currentStep = 1;
@@ -977,8 +976,6 @@ function handleFuelSelect(e) {
   
   document.getElementById('nextToStep2').disabled = false;
   updateStepIndicator(1, 'completed');
-  
-  // (UX) ลบ Auto-Next ออก
 }
 
 // ===== Step 2: Select Sale Type =====
@@ -995,8 +992,6 @@ function handleSaleTypeSelect(e) {
   
   currentInput = '0';
   updateDisplay();
-  
-  // (UX) ลบ Auto-Next ออก
 }
 
 // ===== Step 3: Enter Amount =====
@@ -1006,8 +1001,6 @@ function handleQuickAmount(e) {
 
   currentInput = amount;
   updateDisplay();
-  
-  // (UX) ลบ Auto-Next ออก
 }
 
 function handleQuickLiter(e) {
@@ -1021,10 +1014,7 @@ function handleQuickLiter(e) {
 
   currentInput = liters;
   updateDisplay();
-  
-  // (UX) ลบ Auto-Next ออก
 }
-
 
 function handleNumpad(e) {
   const btn = e.currentTarget;
@@ -1164,16 +1154,13 @@ function updateFinalSummary() {
 function goToStep(step) {
     currentStep = step;
     
-    // ซ่อนทุกๆ ขั้นตอน
     document.getElementById('step1-panel').style.display = 'none';
     document.getElementById('step2-panel').style.display = 'none';
     document.getElementById('step3-panel').style.display = 'none';
     document.getElementById('step4-panel').style.display = 'none';
     
-    // แสดงขั้นตอนที่เลือก
     document.getElementById(`step${currentStep}-panel`).style.display = 'block';
     
-    // อัปเดตตัวบ่งชี้ขั้นตอน (ขั้นตอนที่เสร็จแล้วจะมีคลาส 'completed', ขั้นตอนที่กำลังทำอยู่จะมีคลาส 'active')
     for (let i = 1; i <= 4; i++) {
         const indicator = document.getElementById(`step${i}-indicator`);
         indicator.classList.remove('active', 'completed');
@@ -1184,16 +1171,12 @@ function goToStep(step) {
         }
     }
     
-    // การตรวจสอบปุ่ม
     if (step === 1) {
-        // ตรวจสอบว่าเลือกน้ำมันไว้หรือยัง
         document.getElementById('nextToStep2').disabled = !selectedFuel;
     } else if (step === 2) {
-        // แสดงข้อมูลน้ำมันที่เลือก
         document.getElementById('selectedFuelInfo').innerHTML = `
           <strong>เลือกแล้ว:</strong> ${selectedFuelName} (${currentPrice.toFixed(2)} ฿/ลิตร)
         `;
-        // ตรวจสอบว่าเลือกประเภทการขายหรือยัง
         document.getElementById('nextToStep3').disabled = !saleType;
     } else if (step === 3) {
         const label = saleType === 'liters' ? ' (ลิตร)' : ' (บาท)';
@@ -1203,12 +1186,11 @@ function goToStep(step) {
         document.getElementById('quickAmountPanel').style.display = isAmountMode ? 'block' : 'none';
         document.getElementById('quickLiterPanel').style.display = isAmountMode ? 'none' : 'block';
         
-        updateDisplay(); // อัปเดตการแสดงผลและการคำนวณ
+        updateDisplay();
     } else if (step === 4) {
         updateFinalSummary();
     }
 
-    // เลื่อนหน้าจอขึ้นไปที่ด้านบน
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -1226,7 +1208,6 @@ function updateStepIndicator(step, status) {
 }
 
 function resetAll() {
-  // (UX) ไม่ต้อง confirm
   currentStep = 1;
   selectedFuel = null;
   saleType = '';
@@ -1345,27 +1326,27 @@ function printReceipt() {
   }
 }
 
+// ✅ Expose functions เป็น global เพื่อให้ onclick ใช้ได้
+window.goToStep = goToStep;
+window.resetAll = resetAll;
+window.printReceipt = printReceipt;
+
 // ===== Init =====
-// เปิด modal อัตโนมัติเมื่อบันทึกสำเร็จ
 <?php if ($sale_success && $sale_data_json): ?>
   const saleDataForReceipt = <?= $sale_data_json; ?>;
   const receiptModalEl = document.getElementById('receiptModal');
   if (receiptModalEl) {
     const receiptModal = new bootstrap.Modal(receiptModalEl);
-    
     receiptModal.show(); 
-    
-    // เมื่อ Modal ถูกปิด (ไม่ว่าจะกดปุ่มไหน) ให้รีเซ็ตฟอร์ม
     receiptModalEl.addEventListener('hidden.bs.modal', event => {
         resetAll();
     });
   }
 <?php endif; ?>
 
-// เริ่มต้นที่ Step 1
 goToStep(1);
 
-})(); // <--- นี่คือบรรทัดปิด
+})(); 
 </script>
 </body>
 </html>
