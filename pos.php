@@ -776,7 +776,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                 <div class="text-center mt-4 d-grid gap-2">
                     <button type="button" class="btn btn-primary btn-lg" id="nextToStep4" disabled>
                         ถัดไป <i class="bi bi-arrow-right ms-2"></i>
-                        <button type="button" class="btn btn-outline-secondary" id="backToStep2Btn">
+                        <button type="button" class="btn btn-outline-secondary" onclick="goToStep(2)">
                           <i class="bi bi-arrow-left me-2"></i> ย้อนกลับ
                         </button>
                 </div>
