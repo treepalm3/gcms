@@ -13,44 +13,11 @@ $dbFile = __DIR__ . '/../config/db.php';
 if (!file_exists($dbFile)) { $dbFile = __DIR__ . '/config/db.php'; }
 require_once $dbFile; // ต้องกำหนดตัวแปร $pdo (PDO)
 
-// ===== ตรวจสอบพนักงาน =====
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['emp_code'])) {
-    // มาจากหน้า employee_login.php
-    $emp_code = trim($_POST['emp_code']);
-    try {
-        $stmt_emp = $pdo->prepare("
-            SELECT u.id, u.full_name 
-            FROM users u
-            JOIN employees e ON u.id = e.user_id
-            WHERE e.emp_code = :emp_code AND u.role = 'employee' AND u.is_active = 1
-            LIMIT 1
-        ");
-        $stmt_emp->execute([':emp_code' => $emp_code]);
-        $employee_data = $stmt_emp->fetch(PDO::FETCH_ASSOC);
-
-        if ($employee_data) {
-            $_SESSION['pos_user_id'] = (int)$employee_data['id'];
-            $_SESSION['pos_user_name'] = $employee_data['full_name'];
-            $_SESSION['pos_emp_code'] = $emp_code;
-        } else {
-            header('Location: employee_login.php?err=ไม่พบรหัสพนักงานหรือไม่มีสิทธิ์');
-            exit();
-        }
-    } catch (Throwable $e) {
-        error_log("POS Employee lookup failed: " . $e->getMessage());
-        header('Location: employee_login.php?err=เกิดข้อผิดพลาดในการตรวจสอบพนักงาน');
-        exit();
-    }
-}
-
-// ตรวจสอบ session ของ POS, ถ้าไม่มีให้ไปหน้า login
-if (!isset($_SESSION['pos_user_id'])) {
-    header('Location: employee_login.php');
-    exit();
-}
-
-$current_user_id = (int)$_SESSION['pos_user_id'];
-$current_name    = $_SESSION['pos_user_name'] ?? 'พนักงาน';
+// ===== กำหนดพนักงานขาย (ไม่ต้องล็อกอิน) =====
+// คุณสามารถเปลี่ยน ID และชื่อนี้ได้ตามต้องการ
+// ID 3 คือ "พนักงานขายหน้าร้าน" (สมมติ)
+$current_user_id = 3; 
+$current_name    = 'พนักงานขาย';
 $current_role_th = 'พนักงาน';
 $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 
@@ -420,7 +387,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
           <div class="nav-name"><?= htmlspecialchars($current_name) ?></div>
           <div class="nav-sub"><?= htmlspecialchars($current_role_th) ?></div>
         </div>
-        <a href="employee_login.php" class="avatar-circle text-decoration-none" title="เปลี่ยนพนักงาน"><?= htmlspecialchars($avatar_text) ?></a>
+        <div class="avatar-circle text-decoration-none" title="พนักงาน: <?= htmlspecialchars($current_name) ?>"><?= htmlspecialchars($avatar_text) ?></div>
       </div>
     </div>
   </nav>
