@@ -444,6 +444,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
 
             <div class="col-lg-5">
               <div class="pos-panel sticky-top" style="top: 20px;">
+              <h5 class="mb-3"><i class="bi bi-gear-fill me-2"></i>2. ระบุราคาและลิตร</h5>
                 <div class="d-flex justify-content-center mb-3">
                   <div class="btn-group" role="group">
                     <input type="radio" class="btn-check" name="sale_type" id="byAmount" value="amount" checked>
