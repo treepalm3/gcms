@@ -627,7 +627,7 @@ try {
   if ($yearly_net_profit > 0) {
     $reserve_fund = $yearly_net_profit * 0.10;
     $welfare_fund = $yearly_net_profit * 0.05;
-    $yearly_available_for_dividend = $yearly_net_profit * 0.85;
+    $yearly_available_for_dividend = $yearly_net_profit * 0.10; // <-- แก้ไขเป็น 10%
   } else {
     $reserve_fund = 0;
     $welfare_fund = 0;
@@ -901,13 +901,12 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
             </div>
           </div>
           <div class="col-md-4">
-            <div class="bg-success bg-opacity-10 rounded p-3 border border-success">
-              <div class="text-success small mb-1 fw-semibold">
-                <i class="bi bi-gift me-1"></i>วงเงินปันผลได้ (85%)
-              </div>
-              <h4 class="mb-0 text-success">฿<?= nf($yearly_available_for_dividend) ?></h4>
-            </div>
-          </div>
+            <div class="bg-success bg-opacity-10 rounded p-3 border border-success">
+              <div class="text-success small mb-1 fw-semibold">
+                <i class="bi bi-gift me-1"></i>วงเงินปันผลได้ (10%)               </div>
+              <h4 class="mb-0 text-success">฿<?= nf($yearly_available_for_dividend) ?></h4>
+            </div>
+          </div>
         </div>
 
         <?php if ($total_shares > 0 && $yearly_available_for_dividend > 0): ?>
