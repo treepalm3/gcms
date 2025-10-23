@@ -708,8 +708,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
           </div>
 
           <div class="text-center mt-4">
-            <button type="button" class="btn btn-outline-secondary me-2" onclick="goToStep(1)">
-              <i class="bi bi-arrow-left me-2"></i> ย้อนกลับ
+            <button type="button" class="btn btn-outline-secondary" id="backToStep2Btn">
+                <i class="bi bi-arrow-left me-2"></i> ย้อนกลับ
             </button>
             <button type="button" class="btn btn-primary btn-lg" id="nextToStep3" disabled>
               ถัดไป <i class="bi bi-arrow-right ms-2"></i>
@@ -840,9 +840,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                     <i class="bi bi-check-circle-fill me-2"></i>
                     ยืนยันและบันทึกการขาย
                   </button>
-                  <button type="button" class="btn btn-outline-secondary" onclick="goToStep(3)">
-                    <i class="bi bi-arrow-left me-2"></i> ย้อนกลับ
-                  </button>
+                    <button type="button" class="btn btn-outline-secondary" id="backToStep2Btn">
+                      <i class="bi bi-arrow-left me-2"></i> ย้อนกลับ
+                    </button>
                   <button type="button" class="btn btn-outline-danger" onclick="resetAll()">
                     <i class="bi bi-x-circle me-2"></i> ยกเลิกทั้งหมด
                   </button>
