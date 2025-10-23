@@ -1,5 +1,5 @@
 <?php
-// posts.php — ระบบ POS ปั๊มน้ำมัน (UX/UI ปรับปรุงใหม่)
+// pos.php — ระบบ POS ปั๊มน้ำมัน (UX/UI ปรับปรุงใหม่)
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 
