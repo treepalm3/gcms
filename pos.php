@@ -7,8 +7,6 @@ if (session_status() === PHP_SESSION_NONE) {
 date_default_timezone_set('Asia/Bangkok');
 
 // ===== 1. รับรหัสพนักงานจาก URL =====
-// นี่คือส่วนสำคัญ: หน้านี้ต้องถูกเรียกโดยมี ?emp_code=... ต่อท้าย
-// เช่น: /employee/sell.php?emp_code=E-001
 $emp_code = $_GET['emp_code'] ?? null;
 
 if (empty($emp_code)) {
@@ -19,7 +17,7 @@ if (empty($emp_code)) {
         <div class="alert alert-danger m-4">
             <strong>ข้อผิดพลาด:</strong> ไม่พบรหัสพนักงาน (emp_code) ใน URL
             <p>กรุณาเข้าผ่านหน้าป้อนรหัสพนักงาน หรือติดต่อผู้ดูแล</p>
-            <p>ตัวอย่าง URL ที่ถูกต้อง: <code>/employee/sell.php?emp_code=E-001</code></p>
+            <p>ตัวอย่าง URL ที่ถูกต้อง: <code>pos.php?emp_code=E-001</code></p>
         </div>
     ');
 }
@@ -94,17 +92,19 @@ function has_column(PDO $pdo, string $table, string $column): bool {
 /* ================== ค่าพื้นฐาน ================== */
 $site_name = 'สหกรณ์ปั๊มน้ำบ้านภูเขาทอง'; // Default
 try {
-    // ลองดึงจาก settings.comment ของ site_name (id=2)
-    $st_name = $pdo->query("SELECT comment FROM settings WHERE setting_name='site_name' LIMIT 1");
-    $sn = $st_name ? $st_name->fetchColumn() : false;
-    if ($sn) {
-        $site_name = $sn;
+    // 1. ลองดึงจาก app_settings (json) ก่อน
+    $st_app = $pdo->query("SELECT json_value FROM app_settings WHERE `key`='system_settings' LIMIT 1");
+    if ($r_app = $st_app->fetch(PDO::FETCH_ASSOC)) {
+        $sys = json_decode($r_app['json_value'], true) ?: [];
+        if (!empty($sys['site_name'])) {
+            $site_name = $sys['site_name'];
+        }
     } else {
-        // ถ้าไม่เจอ ลองดึงจาก app_settings
-        $st_app = $pdo->query("SELECT json_value FROM app_settings WHERE `key`='system_settings' LIMIT 1");
-        if ($r_app = $st_app->fetch(PDO::FETCH_ASSOC)) {
-            $sys = json_decode($r_app['json_value'], true) ?: [];
-            if (!empty($sys['site_name'])) $site_name = $sys['site_name'];
+        // 2. ถ้าไม่เจอ ให้ลองดึงจาก settings.comment (แบบเดิม)
+        $st_name = $pdo->query("SELECT comment FROM settings WHERE setting_name='site_name' LIMIT 1");
+        $sn = $st_name ? $st_name->fetchColumn() : false;
+        if (!empty($sn)) {
+            $site_name = $sn;
         }
     }
 } catch (Throwable $e) { /* ใช้ Default */ }
@@ -301,7 +301,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                         }
                     }
                     if ($liters_to_allocate > 1e-6) {
-                        throw new RuntimeException("COGS Error: สต็อกใน Lot ไม่พอสำหรับ Tank ID {$tank_id} (ขาดไป {$liters_to_allocate} ลิตร)");
+                        // ไม่ Throw error แต่ Log ไว้
+                        error_log("COGS Warning: สต็อกใน Lot ไม่พอสำหรับ Tank ID {$tank_id} (ขาดไป {$liters_to_allocate} ลิตร) แต่ยังคงการขายไว้");
+                        // throw new RuntimeException("COGS Error: สต็อกใน Lot ไม่พอสำหรับ Tank ID {$tank_id} (ขาดไป {$liters_to_allocate} ลิตร)");
                     }
                 }
                 if (has_column($pdo, 'fuel_stock', 'fuel_id')) {
@@ -362,9 +364,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
         --primary-light: #e7f1ff;
         --success: #198754;
         --danger: #dc3545;
+        --warning: #ffc107;
         --dark: #212529;
         --surface: #ffffff;
         --border: #dee2e6;
+        --shadow-sm: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
         --shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1);
         --radius: 0.75rem; /* 12px */
     }
@@ -372,9 +376,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
         font-family: 'Prompt', sans-serif;
         background-color: #f4f7f6; /* สีพื้นหลังอ่อนๆ */
     }
-    .main-content {
+    /* ใช้ .container แทน .main-content เพื่อให้ Bootstrap จัดการความกว้าง */
+    .container {
         max-width: 1200px;
-        margin: 0 auto;
     }
     .avatar-circle {
         width: 40px; height: 40px; border-radius: 50%;
@@ -387,10 +391,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     .nav-sub { font-size: 0.8rem; opacity: 0.8; }
     
     .fuel-selector{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem}
-    .fuel-card{border:3px solid var(--border);border-radius:var(--radius);padding:1rem;cursor:pointer;transition:.2s;text-align:center; box-shadow: 0 4px 10px rgba(0,0,0,.03);}
-    .fuel-card:hover{border-color:var(--primary);transform:translateY(-3px); box-shadow: 0 8px 15px rgba(0,0,0,.07);}
-    .fuel-card.selected{border-color:var(--primary);background-color:var(--primary-light);box-shadow:0 4px 15px rgba(13, 110, 253, 0.25)}
-    .fuel-icon{width:50px;height:50px;border-radius:50%;margin:0 auto .5rem;display:flex;align-items:center;justify-content:center;font-size:1.5rem;color:#fff}
+    .fuel-card{
+        border:3px solid var(--border);
+        border-radius:var(--radius);
+        padding: 1rem;
+        cursor:pointer;
+        transition: all .2s ease-in-out;
+        text-align:center; 
+        box-shadow: var(--shadow-sm);
+        background-color: var(--surface);
+    }
+    .fuel-card:hover{
+        border-color: var(--primary);
+        transform: translateY(-3px); 
+        box-shadow: 0 8px 15px rgba(0,0,0,.07);
+    }
+    .fuel-card.selected{
+        border-color:var(--primary);
+        background-color:var(--primary-light);
+        box-shadow:0 4px 15px rgba(13, 110, 253, 0.25);
+        transform: translateY(-3px);
+    }
+    .fuel-icon{
+        width:50px; height:50px; border-radius:50%;
+        margin:0 auto .5rem;
+        display:flex; align-items:center; justify-content:center;
+        font-size:1.5rem; color:#fff;
+    }
     
     .pos-panel{
         background:var(--surface);
@@ -404,20 +431,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
             backdrop-filter: blur(10px);
         }
     }
-    .amount-display{background:var(--dark);color:#20e8a0;font-family:"Courier New",monospace;border-radius:var(--radius);padding:1rem;text-align:right;font-size:2.25rem;font-weight:700;margin-bottom:1rem;min-height:70px}
+    .amount-display{
+        background:var(--dark);
+        color:#20e8a0;
+        font-family:"Courier New",monospace;
+        border-radius:var(--radius);
+        padding: 1rem 1.5rem;
+        text-align:right;
+        font-size: 2.5rem; /* ใหญ่ขึ้น */
+        font-weight:700;
+        margin-bottom:1rem;
+        min-height:78px; /* ปรับความสูง */
+    }
     .numpad-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem}
-    .numpad-btn{aspect-ratio:1.2/1;border:1px solid var(--border);background:var(--surface);border-radius:var(--radius);font-size:1.5rem;font-weight:600;cursor:pointer;transition:.15s}
-    .numpad-btn:hover{background:var(--primary);color:#fff}
+    .numpad-btn{
+        aspect-ratio: 1.3 / 1; /* ปรับให้สูงขึ้นเล็กน้อย */
+        border:1px solid var(--border);
+        background:var(--surface);
+        border-radius:var(--radius);
+        font-size: 1.75rem; /* ใหญ่ขึ้น */
+        font-weight:600;
+        color: #495057;
+        cursor:pointer;
+        transition: all .15s ease;
+    }
+    .numpad-btn:hover{background: #f1f1f1;}
+    .numpad-btn:active{transform: scale(0.95); background: #e0e0e0;}
+    .numpad-btn[data-action="backspace"] { font-size: 1.5rem; color: var(--danger); }
+    
     .receipt{font-family:'Courier New',monospace}
     
     /* --- CSS ใหม่สำหรับ UX Steps --- */
     .step-indicator {
       position: relative;
-      padding: 0.5rem 1rem; /* ลด padding */
+      padding: 0.5rem 0.25rem;
       transition: all 0.3s;
     }
     .step-number {
-      width: 40px; /* ลดขนาด */
+      width: 40px;
       height: 40px;
       border-radius: 50%;
       background: #e9ecef; /* สีเทาเริ่มต้น */
@@ -426,7 +477,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       align-items: center;
       justify-content: center;
       font-weight: 700;
-      font-size: 1.25rem; /* ลดขนาดฟอนต์ */
+      font-size: 1.25rem;
       margin: 0 auto 0.5rem;
       transition: all 0.3s;
       border: 3px solid #e9ecef;
@@ -451,17 +502,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       font-weight: 700;
     }
     .step-indicator.completed .step-label {
-      color: #198754;
+      color: var(--success);
     }
 
     .sale-type-card {
       border: 3px solid #e9ecef;
       border-radius: 12px;
-      padding: 1.5rem; /* ลด padding */
+      padding: 1.5rem;
       text-align: center;
       cursor: pointer;
       transition: all 0.3s;
       height: 100%;
+      background: var(--surface);
+      box-shadow: var(--shadow-sm);
     }
     .sale-type-card:hover {
       border-color: var(--primary);
@@ -475,20 +528,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     }
     .sale-type-card i {
       color: var(--primary);
-      font-size: 2.5rem; /* ลดขนาดไอคอน */
+      font-size: 2.5rem;
     }
     .sale-type-card h5 {
         font-size: 1.1rem;
+        font-weight: 600;
     }
     .sale-type-card p {
         font-size: 0.9rem;
     }
 
     #previewCalc {
-      min-height: 100px;
-      font-size: 0.95rem;
+      min-height: 120px; /* เพิ่มความสูง */
+      font-size: 1rem; /* เพิ่มขนาดฟอนต์ */
       background-color: #f8f9fa;
       border: 1px solid #dee2e6;
+    }
+    #previewCalc .text-muted {
+        font-size: 1rem;
     }
 
     #finalSummary {
@@ -500,16 +557,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     }
     #finalSummary .row { margin-bottom: 0.5rem; }
     #finalSummary hr { border-color: rgba(0,0,0,0.1); margin: 0.75rem 0; }
-    #finalSummary h4 { color: var(--primary); }
+    #finalSummary h4 { color: var(--primary); font-weight: 700; }
     /* --- สิ้นสุด CSS ใหม่ --- */
 
-    @media print{body *{visibility:hidden}.receipt-print-area,.receipt-print-area *{visibility:visible}.receipt-print-area{position:absolute;left:0;top:0;width:100%}}
+    .footer {
+        padding: 1.5rem 0;
+        text-align: center;
+        color: #6c757d;
+        font-size: 0.9rem;
+        border-top: 1px solid var(--border);
+        margin-top: 2rem;
+    }
+
+    @media print{
+        body { background: #fff; }
+        .navbar, .footer, .main-content form, .alert, .card.mb-4 { display: none; }
+        body *{visibility:hidden}
+        .receipt-print-area,.receipt-print-area *{visibility:visible}
+        .receipt-print-area{position:absolute;left:0;top:0;width:100%}
+    }
   </style>
 </head>
 
 <body>
   <nav class="navbar navbar-dark bg-primary shadow-sm">
-    <div class="container-fluid main-content">
+    <div class="container main-content">
       <div class="d-flex align-items-center gap-2">
         <a class="navbar-brand" href="sell.php?emp_code=<?= htmlspecialchars($emp_code) ?>">
             <i class="bi bi-fuel-pump-fill"></i>
@@ -528,7 +600,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     </div>
   </nav>
 
-  <main class="container-fluid mt-4 main-content">
+  <main class="container mt-4 main-content">
         
       <?php if ($sale_success && $sale_data): ?>
         <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -600,7 +672,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
               <div class="fuel-icon" style="background-color: <?= htmlspecialchars($fuel['color']) ?>">
                 <i class="bi bi-droplet-fill"></i>
               </div>
-              <h6><?= htmlspecialchars($fuel['name']) ?></h6>
+              <h6 class="mt-2"><?= htmlspecialchars($fuel['name']) ?></h6>
               <div class="text-muted"><?= number_format($fuel['price'], 2) ?> ฿/ลิตร</div>
             </div>
             <?php endforeach; ?>
@@ -763,7 +835,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       </form>
     </main>
   
-
   <?php if ($sale_success && $sale_data_json): ?>
   <div class="modal fade" id="receiptModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
@@ -798,7 +869,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
             <hr class="my-1 border-dark border-dashed">
             <div class="d-flex justify-content-between"><span>ยอดรวม:</span><span><?= number_format($sale_data['total_amount'], 2) ?> บาท</span></div>
             <?php if ($sale_data['discount_amount'] > 0): ?>
-              <div class="d-flex justify-content-between"><span>ส่วนลด (<?= $sale_data['discount_percent'] ?>%):</span><span>-<?= number_format($sale_data['discount_amount'], 2) ?></span></div>
+              <div class="d-flex justify-content-between text-danger"><span>ส่วนลด (<?= $sale_data['discount_percent'] ?>%):</span><span>-<?= number_format($sale_data['discount_amount'], 2) ?></span></div>
             <?php endif; ?>
             <hr class="my-1 border-dark border-dashed">
             <div class="d-flex justify-content-between fw-bold fs-5"><span>ยอดสุทธิ:</span><span><?= number_format($sale_data['net_amount'], 2) ?> บาท</span></div>
@@ -821,10 +892,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
   </div>
   <?php endif; ?>
 
-  <footer class="footer mt-4">© <?= date('Y') ?> <?= htmlspecialchars($site_name) ?></footer>
+  <footer class="footer mt-4 text-center text-muted">© <?= date('Y') ?> <?= htmlspecialchars($site_name) ?></footer>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script>
+(function(){ // <--- นี่คือบรรทัดที่หายไป
+
 // ===== State =====
 let currentStep = 1;
 let selectedFuel = null;
@@ -1093,7 +1166,7 @@ function updateStepIndicator(step, status) {
 }
 
 function resetAll() {
-  // ไม่ต้อง confirm
+  // (UX) ไม่ต้อง confirm
   currentStep = 1;
   selectedFuel = null;
   saleType = '';
@@ -1139,7 +1212,7 @@ async function findMember(phone, house) {
   alertDiv.className = 'alert alert-secondary py-2 px-3';
 
   try {
-    // ** ตรวจสอบว่า API endpoint ถูกต้องหรือไม่ **
+    // ** ตรวจสอบว่า API endpoint ถูกต้องหรือไม่ (สมมติว่าอยู่ที่ /api/search_member.php) **
     const res = await fetch(`/api/search_member.php?phone=${encodeURIComponent(phone)}&house=${encodeURIComponent(house)}`);
     const member = await res.json();
 
@@ -1223,8 +1296,8 @@ function printReceipt() {
     const receiptModal = new bootstrap.Modal(receiptModalEl);
     receiptModal.show();
     
-    // รีเซ็ตฟอร์มหลังจากแสดง Modal (ถ้าต้องการ)
-    // resetAll(); 
+    // รีเซ็ตฟอร์มหลังจากแสดง Modal
+    resetAll(); 
   }
 <?php endif; ?>
 
@@ -1232,6 +1305,6 @@ function printReceipt() {
 goToStep(1);
 
 })();
-  </script>
+</script>
 </body>
 </html>
