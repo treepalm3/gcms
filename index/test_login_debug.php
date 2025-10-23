@@ -9,7 +9,7 @@ echo "<hr>";
 // Test 1: เชื่อมต่อฐานข้อมูล
 echo "<h2>📡 Test 1: Database Connection</h2>";
 try {
-    require_once __DIR__ . '../../config/db.php';
+    require_once __DIR__ . '/../config/db.php';
     echo "✅ เชื่อมต่อฐานข้อมูลสำเร็จ<br>";
     echo "📊 Database Info: " . $pdo->getAttribute(PDO::ATTR_SERVER_INFO) . "<br><br>";
 } catch (Exception $e) {

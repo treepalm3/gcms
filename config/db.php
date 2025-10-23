@@ -1,5 +1,5 @@
 <?php
-$DB_HOST = getenv('DB_HOST') ?: 'mysql';
+$DB_HOST = getenv('DB_HOST') ?: 'localhost';
 $DB_PORT = getenv('DB_PORT') ?: '3306';
 $DB_NAME = getenv('DB_NAME') ?: 'cooperative';
 $DB_USER = getenv('DB_USER') ?: 'coop';
