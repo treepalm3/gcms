@@ -250,7 +250,7 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
         <a href="member.php"><i class="bi bi-people-fill"></i> สมาชิก</a>
         <a href="profile.php" class="active"><i class="fa-solid fa-user-gear"></i> โปรไฟล์</a>
       </nav>
-      <a class="logout mt-auto" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
+      <a class="logout mt-auto" href="../index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
     </div>
   </div>
 
@@ -267,7 +267,7 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
           <a href="member.php"><i class="bi bi-people-fill"></i> สมาชิก</a>
           <a href="profile.php" class="active"><i class="fa-solid fa-user-gear"></i> โปรไฟล์</a>
         </nav>
-        <a class="logout" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
+        <a class="logout" href="../index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
       </div>
 
       <main class="col-md-9 col-lg-10 p-4 fade-in">
