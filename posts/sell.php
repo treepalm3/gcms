@@ -4,6 +4,20 @@
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 
+// ===== บังคับล็อกอิน =====
+$current_user_id = (int)($_SESSION['user_id'] ?? 0);
+$current_name    = $_SESSION['full_name'] ?? 'พนักงาน';
+$current_role    = $_SESSION['role'] ?? 'employee';
+if ($current_user_id === 0 || $current_role !== 'employee') {
+  header('Location: /index/login.php?err=คุณไม่มีสิทธิ์เข้าถึงหน้านี้');
+  exit();
+}
+
+// ===== CSRF =====
+if (empty($_SESSION['csrf_token'])) {
+  $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
 // ===== การเชื่อมต่อฐานข้อมูล =====
 $dbFile = __DIR__ . '/../config/db.php';
 if (!file_exists($dbFile)) { $dbFile = __DIR__ . '/config/db.php'; }
