@@ -303,7 +303,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                     if ($liters_to_allocate > 1e-6) {
                         // ไม่ Throw error แต่ Log ไว้
                         error_log("COGS Warning: สต็อกใน Lot ไม่พอสำหรับ Tank ID {$tank_id} (ขาดไป {$liters_to_allocate} ลิตร) แต่ยังคงการขายไว้");
-                        // throw new RuntimeException("COGS Error: สต็อกใน Lot ไม่พอสำหรับ Tank ID {$tank_id} (ขาดไป {$liters_to_allocate} ลิตร)");
                     }
                 }
                 if (has_column($pdo, 'fuel_stock', 'fuel_id')) {
@@ -374,11 +373,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     }
     body {
         font-family: 'Prompt', sans-serif;
-        background-color: #f4f7f6; /* สีพื้นหลังอ่อนๆ */
+        background-color: #f4f7f6;
     }
-    /* ใช้ .container แทน .main-content เพื่อให้ Bootstrap จัดการความกว้าง */
-    .container {
+    .main-content {
         max-width: 1200px;
+        margin: 0 auto;
     }
     .avatar-circle {
         width: 40px; height: 40px; border-radius: 50%;
@@ -425,7 +424,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
         border-radius:var(--radius);
         box-shadow:var(--shadow);
         padding:1.5rem;
-        /* ใช้ backdrop-filter ถ้าเบราว์เซอร์รองรับ */
         @supports (backdrop-filter: blur(10px)) {
             background: rgba(255, 255, 255, 0.85);
             backdrop-filter: blur(10px);
@@ -438,18 +436,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
         border-radius:var(--radius);
         padding: 1rem 1.5rem;
         text-align:right;
-        font-size: 2.5rem; /* ใหญ่ขึ้น */
+        font-size: 2.5rem;
         font-weight:700;
         margin-bottom:1rem;
-        min-height:78px; /* ปรับความสูง */
+        min-height:78px;
     }
     .numpad-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem}
     .numpad-btn{
-        aspect-ratio: 1.3 / 1; /* ปรับให้สูงขึ้นเล็กน้อย */
+        aspect-ratio: 1.3 / 1;
         border:1px solid var(--border);
         background:var(--surface);
         border-radius:var(--radius);
-        font-size: 1.75rem; /* ใหญ่ขึ้น */
+        font-size: 1.75rem;
         font-weight:600;
         color: #495057;
         cursor:pointer;
@@ -461,7 +459,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     
     .receipt{font-family:'Courier New',monospace}
     
-    /* --- CSS ใหม่สำหรับ UX Steps --- */
+    /* --- CSS สำหรับ UX Steps --- */
     .step-indicator {
       position: relative;
       padding: 0.5rem 0.25rem;
@@ -471,7 +469,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       width: 40px;
       height: 40px;
       border-radius: 50%;
-      background: #e9ecef; /* สีเทาเริ่มต้น */
+      background: #e9ecef;
       color: #6c757d;
       display: flex;
       align-items: center;
@@ -539,8 +537,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     }
 
     #previewCalc {
-      min-height: 120px; /* เพิ่มความสูง */
-      font-size: 1rem; /* เพิ่มขนาดฟอนต์ */
+      min-height: 120px;
+      font-size: 1rem;
       background-color: #f8f9fa;
       border: 1px solid #dee2e6;
     }
@@ -558,6 +556,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     #finalSummary .row { margin-bottom: 0.5rem; }
     #finalSummary hr { border-color: rgba(0,0,0,0.1); margin: 0.75rem 0; }
     #finalSummary h4 { color: var(--primary); font-weight: 700; }
+    
+    /* --- CSS ใหม่: ปุ่ม Quick Amount --- */
+    .quick-amount-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.75rem;
+    }
+    .quick-btn {
+        border: 1px solid var(--border);
+        background: var(--surface);
+        border-radius: var(--radius);
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--primary);
+        cursor: pointer;
+        transition: all .15s ease;
+        padding: 0.75rem 0.5rem;
+    }
+    .quick-btn:hover {
+        background: var(--primary-light);
+        border-color: var(--primary);
+    }
+    .quick-btn:active {
+        transform: scale(0.95);
+        background: var(--primary);
+        color: #fff;
+    }
     /* --- สิ้นสุด CSS ใหม่ --- */
 
     .footer {
@@ -583,7 +608,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
   <nav class="navbar navbar-dark bg-primary shadow-sm">
     <div class="container main-content">
       <div class="d-flex align-items-center gap-2">
-        <a class="navbar-brand" href="sell.php?emp_code=<?= htmlspecialchars($emp_code) ?>">
+        <a class="navbar-brand" href="pos.php?emp_code=<?= htmlspecialchars($emp_code) ?>">
             <i class="bi bi-fuel-pump-fill"></i>
             <?= htmlspecialchars($site_name) ?>
         </a>
@@ -651,12 +676,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       </div>
 
       <form id="posForm" method="POST" autocomplete="off" novalidate 
-            action="sell.php?emp_code=<?= htmlspecialchars($emp_code) ?>"> <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+            action="pos.php?emp_code=<?= htmlspecialchars($emp_code) ?>"> <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
         <input type="hidden" name="action" value="process_sale">
         <input type="hidden" name="fuel_type" id="selectedFuel" required>
         <input type="hidden" name="quantity" id="quantityInput" value="0" required>
         <input type="hidden" name="sale_type" id="saleTypeInput" value="">
-        <input type="hidden" name="discount" id="discountInput" value="0"> <div id="step1-panel" class="pos-panel">
+        <input type="hidden" name="discount" id="discountInput" value="0"> 
+
+        <div id="step1-panel" class="pos-panel">
           <h5 class="mb-3">
             <i class="bi bi-fuel-pump-fill me-2"></i>
             ขั้นตอนที่ 1: เลือกชนิดน้ำมัน
@@ -727,6 +754,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
           <div class="row g-4">
             <div class="col-md-7">
                 <div id="amountDisplay" class="amount-display">0</div>
+                
+                <h6 class="text-muted small mb-2" id="quickAmountLabel">หรือเลือกยอดที่เติมบ่อย (บาท)</h6>
+                <div class="quick-amount-grid mb-3" id="quickAmountGrid">
+                    <button type="button" class="quick-btn" data-amount="20">20</button>
+                    <button type="button" class="quick-btn" data-amount="40">40</button>
+                    <button type="button" class="quick-btn" data-amount="50">50</button>
+                    <button type="button" class="quick-btn" data-amount="100">100</button>
+                    <button type="button" class="quick-btn" data-amount="500">500</button>
+                    <button type="button" class="quick-btn" data-amount="1000">1000</button>
+                </div>
                 <div class="numpad-grid">
                   <button type="button" class="numpad-btn" data-num="7">7</button>
                   <button type="button" class="numpad-btn" data-num="8">8</button>
@@ -896,7 +933,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-(function(){ // <--- นี่คือบรรทัดที่หายไป
+(function(){ // <-- วงเล็บเปิดที่ถูกต้อง
 
 // ===== State =====
 let currentStep = 1;
@@ -910,6 +947,7 @@ let currentInput = '0';
 const fuelCards = document.querySelectorAll('.fuel-card');
 const saleTypeCards = document.querySelectorAll('.sale-type-card');
 const numpadBtns = document.querySelectorAll('.numpad-btn');
+const quickAmountBtns = document.querySelectorAll('.quick-btn'); // *** เพิ่ม DOM ปุ่มลัด ***
 const display = document.getElementById('amountDisplay');
 const quantityInput = document.getElementById('quantityInput');
 const selectedFuelInp = document.getElementById('selectedFuel');
@@ -926,6 +964,7 @@ const finalSummaryDiv = document.getElementById('finalSummary');
 fuelCards.forEach(card => card.addEventListener('click', handleFuelSelect));
 saleTypeCards.forEach(card => card.addEventListener('click', handleSaleTypeSelect));
 numpadBtns.forEach(btn => btn.addEventListener('click', handleNumpad));
+quickAmountBtns.forEach(btn => btn.addEventListener('click', handleQuickAmount)); // *** เพิ่ม Listener ปุ่มลัด ***
 discountInput?.addEventListener('input', updateFinalSummary);
 customerPhoneInput.addEventListener('input', handleMemberSearch);
 householdNoInput.addEventListener('input', handleMemberSearch);
@@ -954,7 +993,7 @@ function handleFuelSelect(e) {
   updateStepIndicator(1, 'completed');
   
   // (UX) เมื่อเลือกน้ำมัน ให้ไปขั้นตอนถัดไปอัตโนมัติ
-  setTimeout(() => goToStep(2), 100); // หน่วงเล็กน้อยให้เห็นว่าเลือกแล้ว
+  setTimeout(() => goToStep(2), 100); 
 }
 
 // ===== Step 2: Select Sale Type =====
@@ -974,10 +1013,26 @@ function handleSaleTypeSelect(e) {
   updateDisplay();
   
   // (UX) เมื่อเลือกประเภท ให้ไปขั้นตอนถัดไปอัตโนมัติ
-  setTimeout(() => goToStep(3), 100); // หน่วงเล็กน้อยให้เห็นว่าเลือกแล้ว
+  setTimeout(() => goToStep(3), 100); 
 }
 
 // ===== Step 3: Enter Amount =====
+
+// *** ฟังก์ชันใหม่: สำหรับปุ่มลัด (20, 50, 100) ***
+function handleQuickAmount(e) {
+  const amount = e.currentTarget.dataset.amount;
+  if (!amount || saleType !== 'amount') return; // ต้องอยู่ในโหมด "บาท" เท่านั้น
+
+  // 1. ตั้งค่าตัวเลข
+  currentInput = amount;
+  
+  // 2. อัปเดต UI (Display, Preview, Step Indicator)
+  updateDisplay();
+  
+  // 3. (UX) เมื่อคลิกปุ่มสำเร็จ ให้ข้ามไปขั้นตอนที่ 4 เลย
+  setTimeout(() => goToStep(4), 100);
+}
+
 function handleNumpad(e) {
   const btn = e.currentTarget;
   const num = btn.dataset.num;
@@ -985,9 +1040,8 @@ function handleNumpad(e) {
 
   if (num !== undefined) {
     if (currentInput === '0') currentInput = '';
-    // ตรวจสอบทศนิยม 2 ตำแหน่ง
     if (currentInput.includes('.') && currentInput.split('.')[1].length >= 2) {
-       return; // ไม่ให้พิมพ์เพิ่ม
+       return; 
     }
     if (currentInput.length < 9) {
        currentInput += num;
@@ -1008,12 +1062,12 @@ function updateDisplay() {
   updatePreview();
   
   const qty = parseFloat(currentInput);
-  document.getElementById('nextToStep4').disabled = !(qty > 0.01); // ต้องมากกว่า 0
+  document.getElementById('nextToStep4').disabled = !(qty > 0.01); 
   
   if (qty > 0.01) {
     updateStepIndicator(3, 'completed');
   } else {
-    updateStepIndicator(3, 'active'); // กลับเป็น active ถ้าค่าเป็น 0
+    updateStepIndicator(3, 'active'); 
   }
 }
 
@@ -1072,7 +1126,7 @@ function updateFinalSummary() {
 
   const discAmount = total * (disc / 100);
   const net = total - discAmount;
-  const points = Math.floor(net / 20); // 1 แต้ม / 20 บาท
+  const points = Math.floor(net / 20);
 
   const html = `
     <div class="row mb-2">
@@ -1115,16 +1169,13 @@ function updateFinalSummary() {
 function goToStep(step) {
   currentStep = step;
   
-  // ซ่อนทุก Panel
   document.getElementById('step1-panel').style.display = 'none';
   document.getElementById('step2-panel').style.display = 'none';
   document.getElementById('step3-panel').style.display = 'none';
   document.getElementById('step4-panel').style.display = 'none';
   
-  // แสดง Panel ปัจจุบัน
   document.getElementById(`step${currentStep}-panel`).style.display = 'block';
   
-  // อัปเดตตัวบ่งชี้ขั้นตอน
   for (let i = 1; i <= 4; i++) {
     const indicator = document.getElementById(`step${i}-indicator`);
     indicator.classList.remove('active', 'completed');
@@ -1135,7 +1186,6 @@ function goToStep(step) {
     }
   }
   
-  // อัปเดตเนื้อหาตามขั้นตอน
   if (step === 2) {
     document.getElementById('selectedFuelInfo').innerHTML = `
       <strong>เลือกแล้ว:</strong> ${selectedFuelName} (${currentPrice.toFixed(2)} ฿/ลิตร)
@@ -1143,18 +1193,23 @@ function goToStep(step) {
   } else if (step === 3) {
     const label = saleType === 'liters' ? ' (ลิตร)' : ' (บาท)';
     document.getElementById('saleTypeLabel').textContent = label;
-    updateDisplay(); // อัปเดต display และ preview
+    
+    // *** NEW: ซ่อน/แสดงปุ่มลัดตามประเภท ***
+    const showQuick = (saleType === 'amount');
+    document.getElementById('quickAmountGrid').style.display = showQuick ? 'grid' : 'none';
+    document.getElementById('quickAmountLabel').style.display = showQuick ? 'block' : 'none';
+    
+    updateDisplay(); 
   } else if (step === 4) {
     updateFinalSummary();
   }
   
-  // เลื่อนไปบนสุด
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function updateStepIndicator(step, status) {
   const indicator = document.getElementById(`step${step}-indicator`);
-  indicator.classList.remove('active'); // ลบ active ออกก่อน
+  indicator.classList.remove('active'); 
   
   if (status === 'completed') {
     indicator.classList.add('completed');
@@ -1166,7 +1221,6 @@ function updateStepIndicator(step, status) {
 }
 
 function resetAll() {
-  // (UX) ไม่ต้อง confirm
   currentStep = 1;
   selectedFuel = null;
   saleType = '';
@@ -1212,17 +1266,15 @@ async function findMember(phone, house) {
   alertDiv.className = 'alert alert-secondary py-2 px-3';
 
   try {
-    // ** ตรวจสอบว่า API endpoint ถูกต้องหรือไม่ (สมมติว่าอยู่ที่ /api/search_member.php) **
     const res = await fetch(`/api/search_member.php?phone=${encodeURIComponent(phone)}&house=${encodeURIComponent(house)}`);
     const member = await res.json();
 
     if (member && !member.error) {
       alertDiv.className = 'alert alert-info py-2 px-3';
       memberNameSpan.innerHTML = `<i class="bi bi-person-check-fill me-2"></i>สมาชิก: ${member.full_name}`;
-      // อัปเดตทั้งสองช่องให้ตรงกัน
       customerPhoneInput.value = member.phone || '';
       householdNoInput.value = member.house_number || '';
-      updateFinalSummary(); // อัปเดตสรุปยอดเผื่อมีแต้ม
+      updateFinalSummary();
     } else {
       alertDiv.className = 'alert alert-warning py-2 px-3';
       memberNameSpan.innerHTML = '<i class="bi bi-person-exclamation me-2"></i>ไม่พบสมาชิก';
