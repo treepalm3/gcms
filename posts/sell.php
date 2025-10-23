@@ -437,8 +437,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                   </div>
                   <?php endforeach; ?>
                 </div>
+               
+                
+              </div>
+            </div>
+
+            <div class="col-lg-5">
+              <div class="pos-panel sticky-top" style="top: 20px;">
+                <div class="d-flex justify-content-center mb-3">
+                  <div class="btn-group" role="group">
+                    <input type="radio" class="btn-check" name="sale_type" id="byAmount" value="amount" checked>
+                    <label class="btn btn-outline-primary" for="byAmount">ขายตามจำนวนเงิน (บาท)</label>
+                    <input type="radio" class="btn-check" name="sale_type" id="byLiters" value="liters">
+                    <label class="btn btn-outline-primary" for="byLiters">ขายตามปริมาณ (ลิตร)</label>
+                  </div>
+                </div>
+
+                <div id="amountDisplay" class="amount-display">0</div>
+
+                <div class="numpad-grid">
+                  <button type="button" class="numpad-btn" data-num="7">7</button>
+                  <button type="button" class="numpad-btn" data-num="8">8</button>
+                  <button type="button" class="numpad-btn" data-num="9">9</button>
+                  <button type="button" class="numpad-btn" data-num="4">4</button>
+                  <button type="button" class="numpad-btn" data-num="5">5</button>
+                  <button type="button" class="numpad-btn" data-num="6">6</button>
+                  <button type="button" class="numpad-btn" data-num="1">1</button>
+                  <button type="button" class="numpad-btn" data-num="2">2</button>
+                  <button type="button" class="numpad-btn" data-num="3">3</button>
+                  <button type="button" class="numpad-btn" data-action="decimal">.</button>
+                  <button type="button" class="numpad-btn" data-num="0">0</button>
+                  <button type="button" class="numpad-btn" data-action="backspace"><i class="bi bi-backspace-fill"></i></button>
+                </div>
+                <button type="button" class="btn btn-danger w-100 mt-3" data-action="clear">ล้างค่า (C)</button>
                 <hr>
-                <h5 class="mb-3"><i class="bi bi-gear-fill me-2"></i>2. ระบุข้อมูลการขาย</h5>
+
+                <div id="summaryPanel" class="mb-3">
+                  <p class="text-center text-muted">กรุณาเลือกชนิดน้ำมันและใส่จำนวน</p>
+                </div>
+
+                <hr>
+                <h5 class="mb-3"><i class="bi bi-gear-fill me-2"></i>3. ระบุข้อมูลการขาย</h5>
                 <div class="row g-3">
                   <div class="col-md-6">
                     <label class="form-label">วิธีการชำระเงิน</label>
@@ -477,42 +516,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                     </div>
                   </div>
 
-                </div>
-              </div>
-            </div>
-
-            <div class="col-lg-5">
-              <div class="pos-panel sticky-top" style="top: 20px;">
-                <div class="d-flex justify-content-center mb-3">
-                  <div class="btn-group" role="group">
-                    <input type="radio" class="btn-check" name="sale_type" id="byAmount" value="amount" checked>
-                    <label class="btn btn-outline-primary" for="byAmount">ขายตามจำนวนเงิน (บาท)</label>
-                    <input type="radio" class="btn-check" name="sale_type" id="byLiters" value="liters">
-                    <label class="btn btn-outline-primary" for="byLiters">ขายตามปริมาณ (ลิตร)</label>
-                  </div>
-                </div>
-
-                <div id="amountDisplay" class="amount-display">0</div>
-
-                <div class="numpad-grid">
-                  <button type="button" class="numpad-btn" data-num="7">7</button>
-                  <button type="button" class="numpad-btn" data-num="8">8</button>
-                  <button type="button" class="numpad-btn" data-num="9">9</button>
-                  <button type="button" class="numpad-btn" data-num="4">4</button>
-                  <button type="button" class="numpad-btn" data-num="5">5</button>
-                  <button type="button" class="numpad-btn" data-num="6">6</button>
-                  <button type="button" class="numpad-btn" data-num="1">1</button>
-                  <button type="button" class="numpad-btn" data-num="2">2</button>
-                  <button type="button" class="numpad-btn" data-num="3">3</button>
-                  <button type="button" class="numpad-btn" data-action="decimal">.</button>
-                  <button type="button" class="numpad-btn" data-num="0">0</button>
-                  <button type="button" class="numpad-btn" data-action="backspace"><i class="bi bi-backspace-fill"></i></button>
-                </div>
-                <button type="button" class="btn btn-danger w-100 mt-3" data-action="clear">ล้างค่า (C)</button>
-                <hr>
-
-                <div id="summaryPanel" class="mb-3">
-                  <p class="text-center text-muted">กรุณาเลือกชนิดน้ำมันและใส่จำนวน</p>
                 </div>
 
                 <div class="d-grid gap-2">
