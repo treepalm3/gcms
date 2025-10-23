@@ -682,573 +682,123 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
   </div>
 
   <form id="posForm" method="POST" autocomplete="off" novalidate>
-    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
-    <input type="hidden" name="action" value="process_sale">
-    <input type="hidden" name="fuel_type" id="selectedFuel" required>
-    <input type="hidden" name="quantity" id="quantityInput" value="0" required>
+  <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+  <input type="hidden" name="action" value="process_sale">
+  <input type="hidden" name="fuel_type" id="selectedFuel" required>
+  <input type="hidden" name="quantity" id="quantityInput" value="0" required>
 
-    <div class="row g-4">
-      <!-- Step 1: เลือกน้ำมัน -->
-      <div class="col-12" id="step1-panel">
-        <div class="pos-panel">
-          <h5 class="mb-3">
-            <i class="bi bi-fuel-pump-fill me-2"></i>
-            ขั้นตอนที่ 1: เลือกชนิดน้ำมัน
-          </h5>
-          <div class="fuel-selector">
-            <?php foreach ($fuel_types as $key => $fuel): ?>
-            <div class="fuel-card" data-fuel="<?= htmlspecialchars($key) ?>" 
-                 data-price="<?= htmlspecialchars($fuel['price']) ?>"
-                 data-name="<?= htmlspecialchars($fuel['name']) ?>">
-              <div class="fuel-icon" style="background-color: <?= htmlspecialchars($fuel['color']) ?>">
-                <i class="bi bi-droplet-fill"></i>
-              </div>
-              <h6><?= htmlspecialchars($fuel['name']) ?></h6>
-              <div class="text-muted"><?= number_format($fuel['price'], 2) ?> ฿/ลิตร</div>
-            </div>
-            <?php endforeach; ?>
+  <div class="row g-4">
+    <div class="col-lg-7">
+      <div class="pos-panel">
+        <h5 class="mb-3"><i class="bi bi-fuel-pump-fill me-2"></i>1. เลือกชนิดน้ำมัน</h5>
+        <div class="fuel-selector mb-4">
+          <?php foreach ($fuel_types as $key => $fuel): ?>
+          <div class="fuel-card" data-fuel="<?= htmlspecialchars($key) ?>" data-price="<?= htmlspecialchars($fuel['price']) ?>">
+            <div class="fuel-icon" style="background-color: <?= htmlspecialchars($fuel['color']) ?>"><i class="bi bi-droplet-fill"></i></div>
+            <h6><?= htmlspecialchars($fuel['name']) ?></h6>
+            <div class="text-muted"><?= number_format($fuel['price'], 2) ?> ฿/ลิตร</div>
           </div>
-          <div class="text-center mt-4">
-            <button type="button" class="btn btn-primary btn-lg" id="nextToStep2" disabled>
-              ถัดไป <i class="bi bi-arrow-right ms-2"></i>
-            </button>
+          <?php endforeach; ?>
+        </div>
+
+        <!-- เลือกประเภทการเติม -->
+        <h5 class="mb-3"><i class="bi bi-gear-fill me-2"></i>2. เลือกประเภทการเติม</h5>
+        <div class="btn-group" role="group" aria-label="Sale Type">
+          <input type="radio" class="btn-check" name="sale_type" id="byAmount" value="amount" checked>
+          <label class="btn btn-outline-primary" for="byAmount">ขายตามจำนวนเงิน (บาท)</label>
+          <input type="radio" class="btn-check" name="sale_type" id="byLiters" value="liters">
+          <label class="btn btn-outline-primary" for="byLiters">ขายตามปริมาณ (ลิตร)</label>
+        </div>
+
+        <div id="amountDisplay" class="amount-display">0</div>
+
+        <h5 class="mb-3">3. กรองตามจำนวนหรือราคา</h5>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">จำนวนที่ต้องการ</label>
+            <input type="number" class="form-control" name="quantity" id="quantity" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">ส่วนลด (%)</label>
+            <input type="number" class="form-control" name="discount" id="discountInput" value="0" min="0" max="100" step="0.1">
           </div>
         </div>
-      </div>
 
-      <!-- Step 2: เลือกประเภท -->
-      <div class="col-12" id="step2-panel" style="display:none;">
-        <div class="pos-panel">
-          <h5 class="mb-3">
-            <i class="bi bi-gear-fill me-2"></i>
-            ขั้นตอนที่ 2: เลือกประเภทการขาย
-          </h5>
-          <div id="selectedFuelInfo" class="alert alert-info mb-4"></div>
-          
-          <div class="row g-3">
-            <div class="col-md-6">
-              <div class="sale-type-card" data-type="amount">
-                <i class="bi bi-cash-stack display-4 mb-3"></i>
-                <h5>ขายตามจำนวนเงิน</h5>
-                <p class="text-muted">กรอกจำนวนเงิน (บาท)</p>
-              </div>
+        <!-- Member Info Display Area -->
+        <div class="col-12">
+          <div id="memberInfo" class="mt-2" style="display: none;">
+            <div class="alert alert-info py-2 px-3 d-flex align-items-center">
+              <i class="bi bi-person-check-fill me-2"></i><span id="memberName"></span>
             </div>
-            <div class="col-md-6">
-              <div class="sale-type-card" data-type="liters">
-                <i class="bi bi-droplet display-4 mb-3"></i>
-                <h5>ขายตามปริมาณ</h5>
-                <p class="text-muted">กรอกปริมาณ (ลิตร)</p>
-              </div>
-            </div>
-          </div>
-
-          <input type="hidden" name="sale_type" id="saleTypeInput" value="">
-
-          <div class="text-center mt-4">
-            <button type="button" class="btn btn-outline-secondary me-2" onclick="goToStep(1)">
-              <i class="bi bi-arrow-left me-2"></i> ย้อนกลับ
-            </button>
-            <button type="button" class="btn btn-primary btn-lg" id="nextToStep3" disabled>
-              ถัดไป <i class="bi bi-arrow-right ms-2"></i>
-            </button>
           </div>
         </div>
+
       </div>
+    </div>
 
-      <!-- Step 3: กรอกจำนวน -->
-      <div class="col-12" id="step3-panel" style="display:none;">
-        <div class="pos-panel">
-          <h5 class="mb-3">
-            <i class="bi bi-calculator-fill me-2"></i>
-            ขั้นตอนที่ 3: กรอกจำนวน<span id="saleTypeLabel"></span>
-          </h5>
-
-          <div id="amountDisplay" class="amount-display">0</div>
-
-          <div class="numpad-grid">
-            <button type="button" class="numpad-btn" data-num="7">7</button>
-            <button type="button" class="numpad-btn" data-num="8">8</button>
-            <button type="button" class="numpad-btn" data-num="9">9</button>
-            <button type="button" class="numpad-btn" data-num="4">4</button>
-            <button type="button" class="numpad-btn" data-num="5">5</button>
-            <button type="button" class="numpad-btn" data-num="6">6</button>
-            <button type="button" class="numpad-btn" data-num="1">1</button>
-            <button type="button" class="numpad-btn" data-num="2">2</button>
-            <button type="button" class="numpad-btn" data-num="3">3</button>
-            <button type="button" class="numpad-btn" data-action="decimal">.</button>
-            <button type="button" class="numpad-btn" data-num="0">0</button>
-            <button type="button" class="numpad-btn" data-action="backspace">
-              <i class="bi bi-backspace-fill"></i>
-            </button>
+    <div class="col-lg-5">
+      <div class="pos-panel sticky-top" style="top: 20px;">
+        <div class="d-flex justify-content-center mb-3">
+          <div class="btn-group" role="group">
+            <input type="radio" class="btn-check" name="sale_type" id="byAmount" value="amount" checked>
+            <label class="btn btn-outline-primary" for="byAmount">ขายตามจำนวนเงิน (บาท)</label>
+            <input type="radio" class="btn-check" name="sale_type" id="byLiters" value="liters">
+            <label class="btn btn-outline-primary" for="byLiters">ขายตามปริมาณ (ลิตร)</label>
           </div>
-          <button type="button" class="btn btn-danger w-100 mt-3" data-action="clear">
-            ล้างค่า (C)
+        </div>
+
+        <div id="amountDisplay" class="amount-display">0</div>
+
+        <div class="numpad-grid">
+          <button type="button" class="numpad-btn" data-num="7">7</button>
+          <button type="button" class="numpad-btn" data-num="8">8</button>
+          <button type="button" class="numpad-btn" data-num="9">9</button>
+          <button type="button" class="numpad-btn" data-num="4">4</button>
+          <button type="button" class="numpad-btn" data-num="5">5</button>
+          <button type="button" class="numpad-btn" data-num="6">6</button>
+          <button type="button" class="numpad-btn" data-num="1">1</button>
+          <button type="button" class="numpad-btn" data-num="2">2</button>
+          <button type="button" class="numpad-btn" data-num="3">3</button>
+          <button type="button" class="numpad-btn" data-action="decimal">.</button>
+          <button type="button" class="numpad-btn" data-num="0">0</button>
+          <button type="button" class="numpad-btn" data-action="backspace"><i class="bi bi-backspace-fill"></i></button>
+        </div>
+        <button type="button" class="btn btn-danger w-100 mt-3" data-action="clear">ล้างค่า (C)</button>
+        <hr>
+
+        <div id="summaryPanel" class="mb-3">
+          <p class="text-center text-muted">กรุณาเลือกชนิดน้ำมันและใส่จำนวน</p>
+        </div>
+
+        <div class="d-grid gap-2">
+          <button type="submit" class="btn btn-primary btn-lg" id="submitBtn" disabled>
+            <i class="bi bi-check-circle-fill me-2"></i>บันทึกการขาย
           </button>
-
-          <div id="previewCalc" class="mt-4 p-3 bg-light rounded"></div>
-
-          <div class="text-center mt-4">
-            <button type="button" class="btn btn-outline-secondary me-2" onclick="goToStep(2)">
-              <i class="bi bi-arrow-left me-2"></i> ย้อนกลับ
-            </button>
-            <button type="button" class="btn btn-primary btn-lg" id="nextToStep4" disabled>
-              ถัดไป <i class="bi bi-arrow-right ms-2"></i>
-            </button>
-          </div>
         </div>
-      </div>
 
-      <!-- Step 4: ข้อมูลและบันทึก -->
-      <div class="col-12" id="step4-panel" style="display:none;">
-        <div class="row g-4">
-          <div class="col-lg-6">
-            <div class="pos-panel">
-              <h5 class="mb-3">
-                <i class="bi bi-card-checklist me-2"></i>
-                ขั้นตอนที่ 4: ระบุข้อมูลการขาย
-              </h5>
-
-              <div class="row g-3">
-                <div class="col-12">
-                  <label class="form-label">วิธีการชำระเงิน <span class="text-danger">*</span></label>
-                  <select class="form-select form-select-lg" name="payment_method" required>
-                    <option value="cash">💵 เงินสด</option>
-                    <option value="qr">📱 QR Code</option>
-                    <option value="transfer">🏦 โอนเงิน</option>
-                    <option value="card">💳 บัตรเครดิต</option>
-                  </select>
-                </div>
-
-                <div class="col-md-6">
-                  <label class="form-label">เบอร์โทร (สะสมแต้ม)</label>
-                  <input type="tel" class="form-control" name="customer_phone" 
-                         placeholder="08xxxxxxxx" pattern="[0-9\s\-]{8,20}">
-                </div>
-
-                <div class="col-md-6">
-                  <label class="form-label">บ้านเลขที่</label>
-                  <input type="text" class="form-control" name="household_no" 
-                         placeholder="เช่น 123/4">
-                </div>
-
-                <div class="col-12">
-                  <label class="form-label">ส่วนลด (%)</label>
-                  <input type="number" class="form-control" name="discount" 
-                         id="discountInput" value="0" min="0" max="100" step="0.1">
-                </div>
-
-                <div class="col-12" id="memberInfo" style="display: none;">
-                  <div class="alert alert-info py-2 px-3">
-                    <i class="bi bi-person-check-fill me-2"></i>
-                    <span id="memberName"></span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="col-lg-6">
-            <div class="pos-panel">
-              <h5 class="mb-3">
-                <i class="bi bi-receipt me-2"></i>
-                สรุปรายการขาย
-              </h5>
-              <div id="finalSummary"></div>
-
-              <div class="d-grid gap-2 mt-4">
-                <button type="submit" class="btn btn-success btn-lg" id="submitBtn">
-                  <i class="bi bi-check-circle-fill me-2"></i>
-                  บันทึกการขาย
-                </button>
-                <button type="button" class="btn btn-outline-secondary" onclick="goToStep(3)">
-                  <i class="bi bi-arrow-left me-2"></i> ย้อนกลับ
-                </button>
-                <button type="button" class="btn btn-outline-danger" onclick="resetAll()">
-                  <i class="bi bi-x-circle me-2"></i> ยกเลิกทั้งหมด
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </form>
-</main>
-    </div>
-  </div>
-
-  <?php if ($sale_success && $sale_data): ?>
-  <div class="modal fade" id="receiptModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">ใบเสร็จรับเงิน</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <?php
-        $pay_th = [
-          'cash'     => 'เงินสด',
-          'qr'       => 'QR Code',
-          'transfer' => 'โอนเงิน',
-          'card'     => 'บัตรเครดิต',
-        ];
-        ?>
-        <div class="modal-body">
-          <div id="receiptContent" class="receipt receipt-print-area">
-            <div class="text-center border-bottom border-dark border-dashed pb-2 mb-2">
-              <h5><?= htmlspecialchars($site_name) ?></h5>
-              <p class="mb-0">ใบเสร็จรับเงิน</p>
-              <p class="mb-0">เลขที่: <?= htmlspecialchars($sale_data['receipt_no']) ?></p>
-              <p class="mb-0">วันที่: <?= date('d/m/Y H:i', strtotime($sale_data['datetime'])) ?></p>
-            </div>
-
-            <?php if (!empty($sale_data['customer_phone'])): ?>
-              <div class="d-flex justify-content-between"><span>เบอร์โทร:</span><span><?= htmlspecialchars($sale_data['customer_phone']) ?></span></div>
-            <?php endif; ?>
-            <?php if (!empty($sale_data['household_no'])): ?>
-              <div class="d-flex justify-content-between"><span>บ้านเลขที่:</span><span><?= htmlspecialchars($sale_data['household_no']) ?></span></div>
-            <?php endif; ?>
-
-            <div class="d-flex justify-content-between"><span>รายการ:</span><span><?= htmlspecialchars($sale_data['fuel_name']) ?></span></div>
-            <div class="d-flex justify-content-between"><span>ราคา/ลิตร:</span><span><?= number_format($sale_data['price_per_liter'], 2) ?></span></div>
-            <div class="d-flex justify-content-between"><span>ปริมาณ:</span><span><?= number_format($sale_data['liters'], 3) ?> ลิตร</span></div>
-            <hr class="my-1 border-dark border-dashed">
-            <div class="d-flex justify-content-between"><span>ยอดรวม:</span><span><?= number_format($sale_data['total_amount'], 2) ?> บาท</span></div>
-            <?php if ($sale_data['discount_amount'] > 0): ?>
-              <div class="d-flex justify-content-between"><span>ส่วนลด (<?= $sale_data['discount_percent'] ?>%):</span><span>-<?= number_format($sale_data['discount_amount'], 2) ?></span></div>
-            <?php endif; ?>
-            <hr class="my-1 border-dark border-dashed">
-            <div class="d-flex justify-content-between fw-bold fs-5"><span>ยอดสุทธิ:</span><span><?= number_format($sale_data['net_amount'], 2) ?> บาท</span></div>
-            <hr class="my-1 border-dark border-dashed">
-
-            <?php if (!empty($sale_data['points_earned'])): ?>
-              <div class="d-flex justify-content-between"><span>แต้มที่ได้รับ:</span><span><?= number_format($sale_data['points_earned']) ?> แต้ม</span></div>
-              <hr class="my-1 border-dark border-dashed">
-            <?php endif; ?>
-            <div class="d-flex justify-content-between"><span>ชำระโดย:</span><span><?= htmlspecialchars($pay_th[$sale_data['payment_method']] ?? $sale_data['payment_method']) ?></span></div>
-            <div class="d-flex justify-content-between"><span>พนักงาน:</span><span><?= htmlspecialchars($sale_data['employee_name']) ?></span></div>
-            <p class="text-center mt-3">** ขอบคุณที่ใช้บริการ **</p>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ปิด</button>
-          <button type="button" class="btn btn-primary" onclick="printReceipt()"><i class="bi bi-printer"></i> พิมพ์</button>
-        </div>
       </div>
     </div>
   </div>
-  <?php endif; ?>
+</form>
 
-  <footer class="footer">© <?= date('Y') ?> <?= htmlspecialchars($site_name) ?></footer>
+<script>
+  // JavaScript สำหรับการจัดการข้อมูลที่กรอก
+  document.querySelectorAll('.fuel-card').forEach(card => card.addEventListener('click', function() {
+    const selectedFuel = card.dataset.fuel;
+    document.getElementById('selectedFuel').value = selectedFuel;
+    updateSummary();
+  }));
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-  <script>
-// ===== State =====
-let currentStep = 1;
-let selectedFuel = null;
-let selectedFuelName = '';
-let currentPrice = 0;
-let saleType = '';
-let currentInput = '0';
+  function updateSummary() {
+    const fuelPrice = parseFloat(document.querySelector(`.fuel-card[data-fuel="${document.getElementById('selectedFuel').value}"]`).dataset.price);
+    const quantity = parseFloat(document.getElementById('quantity').value);
+    const totalAmount = fuelPrice * quantity;
 
-// ===== DOM =====
-const fuelCards = document.querySelectorAll('.fuel-card');
-const saleTypeCards = document.querySelectorAll('.sale-type-card');
-const numpadBtns = document.querySelectorAll('.numpad-btn');
-const display = document.getElementById('amountDisplay');
-const quantityInput = document.getElementById('quantityInput');
-const selectedFuelInp = document.getElementById('selectedFuel');
-const saleTypeInput = document.getElementById('saleTypeInput');
-const discountInput = document.getElementById('discountInput');
-const customerPhoneInput = document.querySelector('input[name="customer_phone"]');
-const householdNoInput = document.querySelector('input[name="household_no"]');
-const memberInfoDiv = document.getElementById('memberInfo');
-const memberNameSpan = document.getElementById('memberName');
-
-// ===== Event Listeners =====
-fuelCards.forEach(card => card.addEventListener('click', handleFuelSelect));
-saleTypeCards.forEach(card => card.addEventListener('click', handleSaleTypeSelect));
-numpadBtns.forEach(btn => btn.addEventListener('click', handleNumpad));
-discountInput.addEventListener('input', updateFinalSummary);
-customerPhoneInput.addEventListener('input', handleMemberSearch);
-householdNoInput.addEventListener('input', handleMemberSearch);
-
-document.getElementById('nextToStep2').addEventListener('click', () => goToStep(2));
-document.getElementById('nextToStep3').addEventListener('click', () => goToStep(3));
-document.getElementById('nextToStep4').addEventListener('click', () => goToStep(4));
-
-document.querySelector('[data-action="clear"]').addEventListener('click', function() {
-  currentInput = '0';
-  updateDisplay();
-});
-
-// ===== Step 1: Select Fuel =====
-function handleFuelSelect(e) {
-  fuelCards.forEach(c => c.classList.remove('selected'));
-  const card = e.currentTarget;
-  card.classList.add('selected');
-  
-  selectedFuel = card.dataset.fuel;
-  selectedFuelName = card.dataset.name;
-  currentPrice = parseFloat(card.dataset.price);
-  selectedFuelInp.value = selectedFuel;
-  
-  document.getElementById('nextToStep2').disabled = false;
-  updateStepIndicator(1, 'completed');
-}
-
-// ===== Step 2: Select Sale Type =====
-function handleSaleTypeSelect(e) {
-  saleTypeCards.forEach(c => c.classList.remove('selected'));
-  const card = e.currentTarget;
-  card.classList.add('selected');
-  
-  saleType = card.dataset.type;
-  saleTypeInput.value = saleType;
-  
-  document.getElementById('nextToStep3').disabled = false;
-  updateStepIndicator(2, 'completed');
-}
-
-// ===== Step 3: Enter Amount =====
-function handleNumpad(e) {
-  const btn = e.currentTarget;
-  const num = btn.dataset.num;
-  const action = btn.dataset.action;
-
-  if (num !== undefined) {
-    if (currentInput === '0') currentInput = '';
-    if (currentInput.length < 9) currentInput += num;
-  } else if (action === 'decimal') {
-    if (!currentInput.includes('.')) currentInput += '.';
-  } else if (action === 'backspace') {
-    currentInput = currentInput.slice(0, -1);
-    if (currentInput === '') currentInput = '0';
-  }
-  
-  updateDisplay();
-}
-
-function updateDisplay() {
-  display.textContent = currentInput;
-  quantityInput.value = currentInput;
-  updatePreview();
-  
-  const qty = parseFloat(currentInput);
-  document.getElementById('nextToStep4').disabled = !(qty > 0);
-  
-  if (qty > 0) {
-    updateStepIndicator(3, 'completed');
-  }
-}
-
-function updatePreview() {
-  const qty = parseFloat(currentInput) || 0;
-  if (qty === 0) {
-    document.getElementById('previewCalc').innerHTML = '<p class="text-muted text-center">กรุณากรอกจำนวน</p>';
-    return;
+    document.getElementById('amountDisplay').textContent = totalAmount.toFixed(2);
   }
 
-  let liters, amount;
-  if (saleType === 'liters') {
-    liters = qty;
-    amount = liters * currentPrice;
-  } else {
-    amount = qty;
-    liters = amount / currentPrice;
-  }
-
-  const html = `
-    <div class="d-flex justify-content-between mb-2">
-      <strong>น้ำมัน:</strong>
-      <span>${selectedFuelName}</span>
-    </div>
-    <div class="d-flex justify-content-between mb-2">
-      <strong>ราคา/ลิตร:</strong>
-      <span>${currentPrice.toFixed(2)} ฿</span>
-    </div>
-    <hr>
-    <div class="d-flex justify-content-between mb-2">
-      <strong>ปริมาณ:</strong>
-      <span class="text-primary">${liters.toFixed(3)} ลิตร</span>
-    </div>
-    <div class="d-flex justify-content-between">
-      <strong>ยอดรวม:</strong>
-      <span class="text-success fw-bold">${amount.toFixed(2)} บาท</span>
-    </div>
-  `;
-  
-  document.getElementById('previewCalc').innerHTML = html;
-}
-
-// ===== Step 4: Final Summary =====
-function updateFinalSummary() {
-  const qty = parseFloat(currentInput) || 0;
-  const disc = parseFloat(discountInput.value) || 0;
-
-  let liters, total;
-  if (saleType === 'liters') {
-    liters = qty;
-    total = liters * currentPrice;
-  } else {
-    total = qty;
-    liters = total / currentPrice;
-  }
-
-  const discAmount = total * (disc / 100);
-  const net = total - discAmount;
-  const points = Math.floor(net / 20);
-
-  const html = `
-    <div class="row mb-2">
-      <div class="col-6">น้ำมัน:</div>
-      <div class="col-6 text-end"><strong>${selectedFuelName}</strong></div>
-    </div>
-    <div class="row mb-2">
-      <div class="col-6">ราคา/ลิตร:</div>
-      <div class="col-6 text-end">${currentPrice.toFixed(2)} ฿</div>
-    </div>
-    <hr>
-    <div class="row mb-2">
-      <div class="col-6">ปริมาณ:</div>
-      <div class="col-6 text-end">${liters.toFixed(3)} ลิตร</div>
-    </div>
-    <div class="row mb-2">
-      <div class="col-6">ยอดรวม:</div>
-      <div class="col-6 text-end">${total.toFixed(2)} ฿</div>
-    </div>
-    ${disc > 0 ? `
-    <div class="row mb-2 text-warning">
-      <div class="col-6">ส่วนลด (${disc}%):</div>
-      <div class="col-6 text-end">-${discAmount.toFixed(2)} ฿</div>
-    </div>` : ''}
-    <hr>
-    <div class="row mb-3">
-      <div class="col-6"><h4 class="mb-0">ยอดสุทธิ:</h4></div>
-      <div class="col-6 text-end"><h4 class="mb-0">${net.toFixed(2)} ฿</h4></div>
-    </div>
-    ${points > 0 ? `
-    <div class="text-center">
-      <span class="badge bg-warning text-dark">🎁 รับแต้ม ${points} แต้ม</span>
-    </div>` : ''}
-  `;
-
-  document.getElementById('finalSummary').innerHTML = html;
-}
-
-// ===== Navigation =====
-function goToStep(step) {
-  currentStep = step;
-  
-  // Hide all panels
-  for (let i = 1; i <= 4; i++) {
-    document.getElementById(`step${i}-panel`).style.display = 'none';
-  }
-  
-  // Show current panel
-  document.getElementById(`step${currentStep}-panel`).style.display = 'block';
-  
-  // Update indicators
-  for (let i = 1; i <= 4; i++) {
-    const indicator = document.getElementById(`step${i}-indicator`);
-    indicator.classList.remove('active');
-    if (i < currentStep) {
-      indicator.classList.add('completed');
-    } else if (i === currentStep) {
-      indicator.classList.add('active');
-    } else {
-      indicator.classList.remove('completed');
-    }
-  }
-  
-  // Update content based on step
-  if (step === 2) {
-    document.getElementById('selectedFuelInfo').innerHTML = `
-      <strong>เลือกแล้ว:</strong> ${selectedFuelName} (${currentPrice.toFixed(2)} ฿/ลิตร)
-    `;
-  } else if (step === 3) {
-    const label = saleType === 'liters' ? ' (ลิตร)' : ' (บาท)';
-    document.getElementById('saleTypeLabel').textContent = label;
-    updatePreview();
-  } else if (step === 4) {
-    updateFinalSummary();
-  }
-  
-  // Scroll to top
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-function updateStepIndicator(step, status) {
-  const indicator = document.getElementById(`step${step}-indicator`);
-  if (status === 'completed') {
-    indicator.classList.add('completed');
-  }
-}
-
-function resetAll() {
-  if (!confirm('ยกเลิกและเริ่มใหม่?')) return;
-  
-  currentStep = 1;
-  selectedFuel = null;
-  saleType = '';
-  currentInput = '0';
-  
-  fuelCards.forEach(c => c.classList.remove('selected'));
-  saleTypeCards.forEach(c => c.classList.remove('selected'));
-  
-  document.getElementById('nextToStep2').disabled = true;
-  document.getElementById('nextToStep3').disabled = true;
-  document.getElementById('nextToStep4').disabled = true;
-  
-  goToStep(1);
-}
-
-// ===== Member Search =====
-let searchTimeout;
-function handleMemberSearch(e) {
-  clearTimeout(searchTimeout);
-  const term = e.target.value.trim();
-
-  if (!term || term.length < 3) {
-    memberInfoDiv.style.display = 'none';
-    return;
-  }
-
-  searchTimeout = setTimeout(() => findMember(term), 500);
-}
-
-async function findMember(term) {
-  memberInfoDiv.style.display = 'block';
-  memberNameSpan.innerHTML = 'กำลังค้นหา...';
-
-  try {
-    const res = await fetch(`/api/search_member.php?term=${encodeURIComponent(term)}`);
-    const member = await res.json();
-
-    if (member && !member.error) {
-      memberNameSpan.textContent = `สมาชิก: ${member.full_name}`;
-      customerPhoneInput.value = member.phone || '';
-      householdNoInput.value = member.house_number || '';
-      updateFinalSummary();
-    } else {
-      memberNameSpan.textContent = 'ไม่พบสมาชิก';
-    }
-  } catch (error) {
-    memberNameSpan.textContent = 'การเชื่อมต่อล้มเหลว';
-  }
-}
-
-// ===== Print Receipt =====
-function printReceipt() {
-  // ใช้โค้ดเดิม
-}
-
-// ===== Init =====
-<?php if ($sale_success && $sale_data_json): ?>
-  const saleDataForReceipt = <?= $sale_data_json; ?>;
-  const receiptModal = new bootstrap.Modal(document.getElementById('receiptModal'));
-  receiptModal.show();
-<?php endif; ?>
+  document.getElementById('quantity').addEventListener('input', updateSummary);
+  document.getElementById('discountInput').addEventListener('input', updateSummary);
 </script>
 </body>
 </html>
