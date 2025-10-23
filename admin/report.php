@@ -80,6 +80,8 @@ function first_col(PDO $pdo, string $table, array $cands): ?string {
   return null;
 }
 
+function nf($n, $d=2){ return number_format((float)$n, $d, '.', ','); }
+
 // --- Case/Null safe helpers ---
 function row_get(array $row, array $keys) {
   foreach ($keys as $k) if (array_key_exists($k, $row)) return $row[$k];
@@ -391,6 +393,137 @@ $dist_sql = "
 ";
 $fuel_sales_distribution = $pdo->query($dist_sql)->fetchAll(PDO::FETCH_ASSOC);
 
+/* ===== ยอดขายและกำไรรายปี (สำหรับปันผล) ===== */
+$has_gpv = table_exists($pdo,'v_sales_gross_profit');
+$ft_has_station = table_exists($pdo,'financial_transactions') && column_exists($pdo,'financial_transactions','station_id');
+$has_sales_station= column_exists($pdo,'sales','station_id');
+$has_ft = table_exists($pdo,'financial_transactions');
+
+$current_year = date('Y');
+$yearly_sales = 0.0;
+$yearly_cogs = 0.0;
+$yearly_gross_profit = 0.0;
+$yearly_other_income = 0.0; // <-- เพิ่มตัวแปร "รายได้อื่น"
+$yearly_expenses = 0.0;
+$yearly_net_profit = 0.0;
+$yearly_available_for_dividend = 0.0;
+$sql_yearly_sales = ''; // for debug
+$sql_yearly_cogs = ''; // for debug
+$sql_yearly_exp = ''; // for debug
+
+try {
+  $year_start = $current_year . '-01-01';
+  $year_end = $current_year . '-12-31';
+  
+  // เตรียมพารามิเตอร์สำหรับ query
+  $params_ys = [':start' => $year_start, ':end' => $year_end];
+  if ($has_sales_station || $ft_has_station) { // <-- เพิ่มเงื่อนไขเผื่อใช้ sid
+      $params_ys[':sid'] = $station_id;
+  }
+
+  // 1️⃣ ยอดขายรวม (จากตาราง sales)
+  $sql_yearly_sales = "
+    SELECT COALESCE(SUM(total_amount), 0) AS total
+    FROM sales
+    WHERE ".($has_sales_station ? "station_id = :sid AND " : "")."
+          DATE(sale_date) BETWEEN :start AND :end
+  ";
+  $stmt_ys = $pdo->prepare($sql_yearly_sales);
+  $stmt_ys->execute($params_ys);
+  $yearly_sales = (float)$stmt_ys->fetchColumn();
+
+  // 2️⃣ ต้นทุนขาย (COGS) (จากตาราง sales)
+  if ($has_gpv) {
+    $sql_yearly_cogs = "
+      SELECT COALESCE(SUM(v.cogs), 0) AS total
+      FROM v_sales_gross_profit v
+      JOIN sales s ON s.id = v.sale_id
+      WHERE ".($has_sales_station ? "s.station_id = :sid AND " : "")."
+            DATE(s.sale_date) BETWEEN :start AND :end
+    ";
+    $stmt_yc = $pdo->prepare($sql_yearly_cogs);
+    $stmt_yc->execute($params_ys);
+    $yearly_cogs = (float)$stmt_yc->fetchColumn();
+  } else {
+    $yearly_cogs = $yearly_sales * 0.85; // ประมาณการ (ถ้าไม่มี View)
+  }
+  
+  $yearly_gross_profit = $yearly_sales - $yearly_cogs; // กำไรขั้นต้น (จากการขายน้ำมัน)
+
+  // 3️⃣ ดึง "รายได้อื่น" และ "ค่าใช้จ่ายดำเนินงาน" จาก financial_transactions
+  if ($has_ft) {
+    // แก้ไข query ให้ดึงทั้ง income และ expense
+    $sql_ft = "
+      SELECT 
+            COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) AS other_income,
+            COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) AS other_expense
+      FROM financial_transactions
+      WHERE ".($ft_has_station ? "station_id = :sid AND " : "")."
+            DATE(transaction_date) BETWEEN :start AND :end
+    ";
+    $stmt_ft = $pdo->prepare($sql_ft);
+    $stmt_ft->execute($params_ys); // ใช้พารามิเตอร์เดียวกับ $params_ys
+    $ft_results = $stmt_ft->fetch(PDO::FETCH_ASSOC);
+
+    if ($ft_results) {
+        $yearly_other_income = (float)$ft_results['other_income'];
+        $yearly_expenses = (float)$ft_results['other_expense'];
+    }
+  } else {
+    $yearly_other_income = 0.0;
+    $yearly_expenses = 0.0;
+  }
+
+  // 4️⃣ กำไรสุทธิ (คำนวณใหม่)
+  // กำไรสุทธิ = (กำไรขั้นต้นจากน้ำมัน) + (รายได้อื่น) - (ค่าใช้จ่ายดำเนินงาน)
+  $yearly_net_profit = $yearly_gross_profit + $yearly_other_income - $yearly_expenses;
+  
+  // 5️⃣ วงเงินปันผล (ตามกฎหมายสหกรณ์)
+  if ($yearly_net_profit > 0) {
+    $reserve_fund = $yearly_net_profit * 0.10;
+    $welfare_fund = $yearly_net_profit * 0.05;
+    $yearly_available_for_dividend = $yearly_net_profit * 0.85;
+  } else {
+    $reserve_fund = 0;
+    $welfare_fund = 0;
+    $yearly_available_for_dividend = 0;
+  }
+  
+} catch (Throwable $e) {
+  error_log("Yearly calculation error: " . $e->getMessage());
+  $yearly_sales = $yearly_cogs = $yearly_gross_profit = 0;
+  $yearly_other_income = $yearly_expenses = $yearly_net_profit = $yearly_available_for_dividend = 0;
+}
+
+// 6️⃣ คำนวณปันผลต่อหุ้น
+$total_shares = 0;
+$dividend_per_share = 0;
+try {
+  // *** แก้ไข: นับหุ้นจากทุกตารางที่มีหุ้น ***
+    $total_shares = 0;
+    // 6.1) สมาชิก
+    $member_shares_stmt = $pdo->query("SELECT COALESCE(SUM(shares), 0) FROM members WHERE is_active = 1");
+    $total_shares += (int)$member_shares_stmt->fetchColumn();
+
+    // 6.2) ผู้บริหาร
+    try {
+        $manager_shares_stmt = $pdo->query("SELECT COALESCE(SUM(shares), 0) FROM managers");
+        $total_shares += (int)$manager_shares_stmt->fetchColumn();
+    } catch (Throwable $e) { error_log("Manager shares error: " . $e->getMessage()); }
+
+    // 6.3) กรรมการ
+    try {
+        $committee_shares_stmt = $pdo->query("SELECT COALESCE(SUM(shares), 0) FROM committees");
+        $total_shares += (int)$committee_shares_stmt->fetchColumn();
+    } catch (Throwable $e) { error_log("Committee shares error: " . $e->getMessage()); }
+  
+  if ($total_shares > 0 && $yearly_available_for_dividend > 0) {
+    $dividend_per_share = $yearly_available_for_dividend / $total_shares;
+  }
+} catch (Throwable $e) {
+  error_log("Shares calculation error: " . $e->getMessage());
+}
+
 } catch (Throwable $e) {
   $error_message = "เกิดข้อผิดพลาดในการดึงข้อมูลรายงาน: " . $e->getMessage();
   // fallback ให้หน้าแสดงผลได้
@@ -625,6 +758,11 @@ $delta_pct = ($prev_month_profit > 0) ? (($current_month_profit - $prev_month_pr
             <i class="bi bi-calculator me-2"></i>การเงิน
           </button>
         </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="dividend-tab" data-bs-toggle="tab" data-bs-target="#dividend-panel" type="button" role="tab">
+            <i class="bi bi-gift me-2"></i>ปันผล
+          </button>
+        </li>
       </ul>
 
       <!-- Tab Content -->
@@ -823,6 +961,101 @@ $delta_pct = ($prev_month_profit > 0) ? (($current_month_profit - $prev_month_pr
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dividend Panel -->
+        <div class="tab-pane fade" id="dividend-panel" role="tabpanel">
+          <div class="alert alert-info mt-4" role="alert">
+            <div class="d-flex align-items-center mb-3">
+              <i class="bi bi-calendar-check fs-4 me-3"></i>
+              <div>
+                <h5 class="mb-0">สรุปผลประกอบการปี <?= $current_year ?> (สำหรับพิจารณาปันผล)</h5>
+                <small class="text-muted">ข้อมูล 1 มกราคม - 31 ธันวาคม <?= $current_year ?></small>
+              </div>
+            </div>
+            
+            <div class="row g-3">
+              <div class="col-md-3">
+                <div class="bg-white rounded p-3">
+                  <div class="text-muted small">ยอดขายรวม</div>
+                  <h4 class="mb-0 text-primary">฿<?= nf($yearly_sales) ?></h4>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="bg-white rounded p-3">
+                  <div class="text-muted small">กำไรขั้นต้น (ขาย - COGS)</div>
+                  <h4 class="mb-0 text-success">฿<?= nf($yearly_gross_profit) ?></h4>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="bg-white rounded p-3">
+                  <div class="text-muted small">ค่าใช้จ่ายดำเนินงาน</div>
+                  <h4 class="mb-0 text-danger">฿<?= nf($yearly_expenses) ?></h4>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="bg-white rounded p-3">
+                  <div class="text-muted small">กำไรสุทธิ</div>
+                  <h4 class="mb-0 <?= $yearly_net_profit >= 0 ? 'text-success' : 'text-danger' ?>">
+                    ฿<?= nf($yearly_net_profit) ?>
+                  </h4>
+                </div>
+              </div>
+            </div>
+
+            <hr class="my-3">
+
+            <div class="row g-3">
+              <div class="col-md-4">
+                <div class="bg-light rounded p-3">
+                  <div class="text-muted small mb-1">
+                    <i class="bi bi-piggy-bank me-1"></i>ทุนสำรอง (10%)
+                  </div>
+                  <h5 class="mb-0">฿<?= nf($yearly_net_profit * 0.10) ?></h5>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="bg-light rounded p-3">
+                  <div class="text-muted small mb-1">
+                    <i class="bi bi-heart me-1"></i>กองทุนสวัสดิการ (5%)
+                  </div>
+                  <h5 class="mb-0">฿<?= nf($yearly_net_profit * 0.05) ?></h5>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="bg-success bg-opacity-10 rounded p-3 border border-success">
+                  <div class="text-success small mb-1 fw-semibold">
+                    <i class="bi bi-gift me-1"></i>วงเงินปันผลได้ (85%)
+                  </div>
+                  <h4 class="mb-0 text-success">฿<?= nf($yearly_available_for_dividend) ?></h4>
+                </div>
+              </div>
+            </div>
+
+            <?php if ($total_shares > 0 && $yearly_available_for_dividend > 0): ?>
+            <div class="mt-3 p-3 bg-white rounded border border-primary">
+              <div class="row align-items-center">
+                <div class="col-md-6">
+                  <div class="text-muted small">จำนวนหุ้นทั้งหมด</div>
+                  <h5 class="mb-0"><?= number_format($total_shares) ?> หุ้น</h5>
+                </div>
+                <div class="col-md-6">
+                  <div class="text-primary small fw-semibold">ปันผลต่อหุ้น (โดยประมาณ)</div>
+                  <h4 class="mb-0 text-primary">฿<?= nf($dividend_per_share, 2) ?> / หุ้น</h4>
+                </div>
+              </div>
+            </div>
+            <?php endif; ?>
+
+            <div class="mt-3 d-flex gap-2">
+              <a href="dividend.php" class="btn btn-primary">
+                <i class="bi bi-gift me-2"></i>ไปหน้าจัดการปันผล
+              </a>
+              <button class="btn btn-outline-secondary" onclick="window.print()">
+                <i class="bi bi-printer me-2"></i>พิมพ์รายงาน
+              </button>
             </div>
           </div>
         </div>

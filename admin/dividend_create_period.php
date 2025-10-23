@@ -68,9 +68,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // if ($total_profit <= 0) {
-    //     $errors[] = 'กำไรสุทธิต้องมากกว่า 0 บาท';
-    // }
+    if ($total_profit <= 0) {
+        $errors[] = 'กำไรสุทธิต้องมากกว่า 0 บาท';
+    }
 
     if ($dividend_rate <= 0 || $dividend_rate > 100) {
         $errors[] = 'อัตราปันผลต้องอยู่ระหว่าง 0.1-100%';
@@ -107,11 +107,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // 2.2) ผู้บริหาร
         try {
             $manager_shares_stmt = $pdo->query("
-                SELECT COALESCE(SUM(shares), 0) FROM managers
+                SELECT COALESCE(SUM(COALESCE(shares, 0)), 0) 
+                FROM managers 
+                WHERE COALESCE(shares, 0) > 0
             ");
-            $total_shares += (int)$manager_shares_stmt->fetchColumn();
+            $manager_shares = (int)$manager_shares_stmt->fetchColumn();
+            $total_shares += $manager_shares;
+            $shares_breakdown['manager'] = $manager_shares;
+            
+            error_log("Manager shares found: {$manager_shares}");
         } catch (Throwable $e) {
             error_log("Manager shares error: " . $e->getMessage());
+            $shares_breakdown['manager'] = 0;
         }
 
         // 2.3) กรรมการ
@@ -188,34 +195,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // 5.2) ผู้บริหาร
-        try {
-            $managers_stmt = $pdo->query("
-                SELECT id, shares FROM managers WHERE shares > 0
-            ");
+try {
+    $managers_stmt = $pdo->query("
+        SELECT id, COALESCE(shares, 0) AS shares 
+        FROM managers 
+        WHERE COALESCE(shares, 0) > 0
+    ");
 
-            foreach ($managers_stmt->fetchAll(PDO::FETCH_ASSOC) as $manager) {
-                $dividend_amount = $manager['shares'] * $dividend_per_share;
-                
-                $insert_payment_stmt = $pdo->prepare("
-                    INSERT INTO dividend_payments 
-                    (period_id, member_id, member_type, shares_at_time, 
-                     dividend_amount, payment_status)
-                    VALUES 
-                    (:period_id, :member_id, 'manager', :shares, :amount, 'pending')
-                ");
+    $managers_count = 0;
+    $managers_data = $managers_stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    error_log("Found " . count($managers_data) . " managers with shares > 0");
 
-                $insert_payment_stmt->execute([
-                    ':period_id' => $period_id,
-                    ':member_id' => $manager['id'],
-                    ':shares' => $manager['shares'],
-                    ':amount' => $dividend_amount
-                ]);
+    foreach ($managers_data as $manager) {
+        $shares = (int)$manager['shares'];
+        $dividend_amount = $shares * $dividend_per_share;
+        
+        error_log("Creating dividend payment for manager id={$manager['id']}, shares={$shares}, amount={$dividend_amount}");
+        
+        $insert_payment_stmt = $pdo->prepare("
+            INSERT INTO dividend_payments 
+            (period_id, member_id, member_type, shares_at_time, 
+             dividend_amount, payment_status)
+            VALUES 
+            (:period_id, :member_id, 'manager', :shares, :amount, 'pending')
+        ");
 
-                $member_count++;
-            }
-        } catch (Throwable $e) {
-            error_log("Manager dividend payment error: " . $e->getMessage());
-        }
+        $insert_payment_stmt->execute([
+            ':period_id' => $period_id,
+            ':member_id' => $manager['id'],
+            ':shares' => $shares,
+            ':amount' => $dividend_amount
+        ]);
+
+        $managers_count++;
+        $member_count++;
+    }
+    
+    $payment_breakdown['manager'] = $managers_count;
+    error_log("Created {$managers_count} manager dividend payments");
+    
+} catch (Throwable $e) {
+    error_log("Manager dividend payment error: " . $e->getMessage());
+    error_log("Manager error stack trace: " . $e->getTraceAsString());
+    $payment_breakdown['manager'] = 0;
+}
 
         // 5.3) กรรมการ
         try {
