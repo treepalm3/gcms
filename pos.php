@@ -840,7 +840,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                     <i class="bi bi-check-circle-fill me-2"></i>
                     ยืนยันและบันทึกการขาย
                   </button>
-                    <button type="button" class="btn btn-outline-secondary" id="backToStep4Btn">
+                  <button type="button" class="btn btn-outline-secondary" id="backToStep4Btn">
                         <i class="bi bi-arrow-left me-2"></i> ย้อนกลับ
                     </button>
                   <button type="button" class="btn btn-outline-danger" onclick="resetAll()">
