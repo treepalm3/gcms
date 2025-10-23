@@ -73,7 +73,6 @@ function get_setting(PDO $pdo, string $name, $default = null) {
     $stmt = $pdo->prepare("SELECT setting_value FROM settings WHERE setting_name = :n LIMIT 1");
     $stmt->execute([':n' => $name]);
     $v = $stmt->fetchColumn();
-    // คืนค่าเป็น string หรือ default
     return $v !== false ? (string)$v : $default;
   } catch (Throwable $e) { return $default; }
 }
@@ -301,7 +300,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                         }
                     }
                     if ($liters_to_allocate > 1e-6) {
-                        // ไม่ Throw error แต่ Log ไว้
                         error_log("COGS Warning: สต็อกใน Lot ไม่พอสำหรับ Tank ID {$tank_id} (ขาดไป {$liters_to_allocate} ลิตร) แต่ยังคงการขายไว้");
                     }
                 }
@@ -373,7 +371,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     }
     body {
         font-family: 'Prompt', sans-serif;
-        background-color: #f4f7f6;
+        background-color: #f4f7f6; /* สีพื้นหลังอ่อนๆ */
     }
     .main-content {
         max-width: 1200px;
@@ -436,18 +434,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
         border-radius:var(--radius);
         padding: 1rem 1.5rem;
         text-align:right;
-        font-size: 2.5rem;
+        font-size: 2.5rem; /* ใหญ่ขึ้น */
         font-weight:700;
         margin-bottom:1rem;
-        min-height:78px;
+        min-height:78px; /* ปรับความสูง */
     }
     .numpad-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem}
     .numpad-btn{
-        aspect-ratio: 1.3 / 1;
+        aspect-ratio: 1.3 / 1; /* ปรับให้สูงขึ้นเล็กน้อย */
         border:1px solid var(--border);
         background:var(--surface);
         border-radius:var(--radius);
-        font-size: 1.75rem;
+        font-size: 1.75rem; /* ใหญ่ขึ้น */
         font-weight:600;
         color: #495057;
         cursor:pointer;
@@ -459,7 +457,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     
     .receipt{font-family:'Courier New',monospace}
     
-    /* --- CSS สำหรับ UX Steps --- */
+    /* --- CSS ใหม่สำหรับ UX Steps --- */
     .step-indicator {
       position: relative;
       padding: 0.5rem 0.25rem;
@@ -469,7 +467,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       width: 40px;
       height: 40px;
       border-radius: 50%;
-      background: #e9ecef;
+      background: #e9ecef; /* สีเทาเริ่มต้น */
       color: #6c757d;
       display: flex;
       align-items: center;
@@ -582,6 +580,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
         transform: scale(0.95);
         background: var(--primary);
         color: #fff;
+    }
+    .quick-btn.btn-full-tank:disabled {
+        background: #e9ecef;
+        color: #adb5bd;
+        border-color: #dee2e6;
+        cursor: not-allowed;
     }
     /* --- สิ้นสุด CSS ใหม่ --- */
 
@@ -755,14 +759,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
             <div class="col-md-7">
                 <div id="amountDisplay" class="amount-display">0</div>
                 
-                <h6 class="text-muted small mb-2" id="quickAmountLabel">หรือเลือกยอดที่เติมบ่อย (บาท)</h6>
-                <div class="quick-amount-grid mb-3" id="quickAmountGrid">
-                    <button type="button" class="quick-btn" data-amount="20">20</button>
-                    <button type="button" class="quick-btn" data-amount="40">40</button>
-                    <button type="button" class="quick-btn" data-amount="50">50</button>
-                    <button type="button" class="quick-btn" data-amount="100">100</button>
-                    <button type="button" class="quick-btn" data-amount="500">500</button>
-                    <button type="button" class="quick-btn" data-amount="1000">1000</button>
+                <div id="quickAmountPanel">
+                    <h6 class="text-muted small mb-2" id="quickAmountLabel">หรือเลือกยอดที่เติมบ่อย (บาท)</h6>
+                    <div class="quick-amount-grid mb-3">
+                        <button type="button" class="quick-btn" data-amount="20">20</button>
+                        <button type="button" class="quick-btn" data-amount="40">40</button>
+                        <button type="button" class="quick-btn" data-amount="50">50</button>
+                        <button type="button" class="quick-btn" data-amount="100">100</button>
+                        <button type="button" class="quick-btn" data-amount="500">500</button>
+                        <button type="button" class="quick-btn" data-amount="1000">1000</button>
+                    </div>
+                </div>
+                
+                <div id="quickLiterPanel" style="display: none;">
+                    <h6 class="text-muted small mb-2">หรือเลือกปริมาณ (ลิตร)</h6>
+                    <div class="quick-amount-grid mb-3">
+                        <button type="button" class="quick-btn" data-liter="10">10 ลิตร</button>
+                        <button type="button" class="quick-btn" data-liter="20">20 ลิตร</button>
+                        <button type="button" class="quick-btn" data-liter="30">30 ลิตร</button>
+                        <button type="button" class="quick-btn btn-full-tank" data-liter="full" disabled>
+                            <i class="bi bi-fuel-pump"></i> เต็มถัง
+                        </button>
+                    </div>
                 </div>
                 <div class="numpad-grid">
                   <button type="button" class="numpad-btn" data-num="7">7</button>
@@ -947,7 +965,8 @@ let currentInput = '0';
 const fuelCards = document.querySelectorAll('.fuel-card');
 const saleTypeCards = document.querySelectorAll('.sale-type-card');
 const numpadBtns = document.querySelectorAll('.numpad-btn');
-const quickAmountBtns = document.querySelectorAll('.quick-btn'); // *** เพิ่ม DOM ปุ่มลัด ***
+const quickAmountBtns = document.querySelectorAll('#quickAmountPanel .quick-btn'); // *** ปุ่มลัด (บาท) ***
+const quickLiterBtns = document.querySelectorAll('#quickLiterPanel .quick-btn');   // *** ปุ่มลัด (ลิตร) ***
 const display = document.getElementById('amountDisplay');
 const quantityInput = document.getElementById('quantityInput');
 const selectedFuelInp = document.getElementById('selectedFuel');
@@ -964,7 +983,8 @@ const finalSummaryDiv = document.getElementById('finalSummary');
 fuelCards.forEach(card => card.addEventListener('click', handleFuelSelect));
 saleTypeCards.forEach(card => card.addEventListener('click', handleSaleTypeSelect));
 numpadBtns.forEach(btn => btn.addEventListener('click', handleNumpad));
-quickAmountBtns.forEach(btn => btn.addEventListener('click', handleQuickAmount)); // *** เพิ่ม Listener ปุ่มลัด ***
+quickAmountBtns.forEach(btn => btn.addEventListener('click', handleQuickAmount)); // *** เพิ่ม Listener ***
+quickLiterBtns.forEach(btn => btn.addEventListener('click', handleQuickLiter));   // *** เพิ่ม Listener ***
 discountInput?.addEventListener('input', updateFinalSummary);
 customerPhoneInput.addEventListener('input', handleMemberSearch);
 householdNoInput.addEventListener('input', handleMemberSearch);
@@ -1018,20 +1038,35 @@ function handleSaleTypeSelect(e) {
 
 // ===== Step 3: Enter Amount =====
 
-// *** ฟังก์ชันใหม่: สำหรับปุ่มลัด (20, 50, 100) ***
+// *** ฟังก์ชันใหม่: สำหรับปุ่มลัด (20, 50, 100 บาท) ***
 function handleQuickAmount(e) {
   const amount = e.currentTarget.dataset.amount;
-  if (!amount || saleType !== 'amount') return; // ต้องอยู่ในโหมด "บาท" เท่านั้น
+  if (!amount || saleType !== 'amount') return; 
 
-  // 1. ตั้งค่าตัวเลข
   currentInput = amount;
-  
-  // 2. อัปเดต UI (Display, Preview, Step Indicator)
   updateDisplay();
   
-  // 3. (UX) เมื่อคลิกปุ่มสำเร็จ ให้ข้ามไปขั้นตอนที่ 4 เลย
+  // (UX) ข้ามไปขั้นตอนที่ 4 เลย
   setTimeout(() => goToStep(4), 100);
 }
+
+// *** ฟังก์ชันใหม่: สำหรับปุ่มลัด (10 ลิตร, 20 ลิตร) ***
+function handleQuickLiter(e) {
+  const liters = e.currentTarget.dataset.liter;
+  if (!liters || saleType !== 'liters') return; 
+
+  if (liters === 'full') {
+    alert('ฟังก์ชันเต็มถังยังไม่พร้อมใช้งาน');
+    return;
+  }
+
+  currentInput = liters;
+  updateDisplay();
+  
+  // (UX) ข้ามไปขั้นตอนที่ 4 เลย
+  setTimeout(() => goToStep(4), 100);
+}
+
 
 function handleNumpad(e) {
   const btn = e.currentTarget;
@@ -1040,8 +1075,9 @@ function handleNumpad(e) {
 
   if (num !== undefined) {
     if (currentInput === '0') currentInput = '';
+    // ตรวจสอบทศนิยม 2 ตำแหน่ง
     if (currentInput.includes('.') && currentInput.split('.')[1].length >= 2) {
-       return; 
+       return; // ไม่ให้พิมพ์เพิ่ม
     }
     if (currentInput.length < 9) {
        currentInput += num;
@@ -1126,7 +1162,7 @@ function updateFinalSummary() {
 
   const discAmount = total * (disc / 100);
   const net = total - discAmount;
-  const points = Math.floor(net / 20);
+  const points = Math.floor(net / 20); 
 
   const html = `
     <div class="row mb-2">
@@ -1194,10 +1230,10 @@ function goToStep(step) {
     const label = saleType === 'liters' ? ' (ลิตร)' : ' (บาท)';
     document.getElementById('saleTypeLabel').textContent = label;
     
-    // *** NEW: ซ่อน/แสดงปุ่มลัดตามประเภท ***
-    const showQuick = (saleType === 'amount');
-    document.getElementById('quickAmountGrid').style.display = showQuick ? 'grid' : 'none';
-    document.getElementById('quickAmountLabel').style.display = showQuick ? 'block' : 'none';
+    // *** แก้ไข: ซ่อน/แสดงปุ่มลัดตามประเภท ***
+    const isAmountMode = (saleType === 'amount');
+    document.getElementById('quickAmountPanel').style.display = isAmountMode ? 'block' : 'none';
+    document.getElementById('quickLiterPanel').style.display = isAmountMode ? 'none' : 'block';
     
     updateDisplay(); 
   } else if (step === 4) {
@@ -1356,7 +1392,7 @@ function printReceipt() {
 // เริ่มต้นที่ Step 1
 goToStep(1);
 
-})();
+})(); // <--- นี่คือบรรทัดปิด
 </script>
 </body>
 </html>
