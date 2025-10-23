@@ -112,19 +112,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // 2.2) ผู้บริหาร
         try {
             $manager_shares_stmt = $pdo->query("
-                SELECT COALESCE(SUM(shares), 0) FROM managers WHERE shares > 0
+                SELECT COALESCE(SUM(COALESCE(shares, 0)), 0) 
+                FROM managers 
+                WHERE COALESCE(shares, 0) > 0
             ");
             $manager_shares = (int)$manager_shares_stmt->fetchColumn();
             $total_shares += $manager_shares;
             $shares_breakdown['manager'] = $manager_shares;
             
-            // Log เพื่อ Debug
             error_log("Manager shares found: {$manager_shares}");
         } catch (Throwable $e) {
             error_log("Manager shares error: " . $e->getMessage());
             $shares_breakdown['manager'] = 0;
         }
-
         // 2.3) กรรมการ
         try {
             $committee_shares_stmt = $pdo->query("
@@ -220,7 +220,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // 5.2) ผู้บริหาร
         try {
             $managers_stmt = $pdo->query("
-                SELECT id, shares FROM managers WHERE shares > 0
+                SELECT id, COALESCE(shares, 0) AS shares 
+                FROM managers 
+                WHERE COALESCE(shares, 0) > 0
             ");
 
             $managers_count = 0;
@@ -229,14 +231,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             error_log("Found " . count($managers_data) . " managers with shares > 0");
 
             foreach ($managers_data as $manager) {
-                $dividend_amount = $manager['shares'] * $dividend_per_share;
+                $shares = (int)$manager['shares'];
+                $dividend_amount = $shares * $dividend_per_share;
                 
-                error_log("Creating dividend payment for manager id={$manager['id']}, shares={$manager['shares']}, amount={$dividend_amount}");
+                error_log("Creating dividend payment for manager id={$manager['id']}, shares={$shares}, amount={$dividend_amount}");
                 
                 $insert_payment_stmt = $pdo->prepare("
                     INSERT INTO dividend_payments 
                     (period_id, member_id, member_type, shares_at_time, 
-                     dividend_amount, payment_status)
+                    dividend_amount, payment_status)
                     VALUES 
                     (:period_id, :member_id, 'manager', :shares, :amount, 'pending')
                 ");
@@ -244,7 +247,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $insert_payment_stmt->execute([
                     ':period_id' => $period_id,
                     ':member_id' => $manager['id'],
-                    ':shares' => $manager['shares'],
+                    ':shares' => $shares,
                     ':amount' => $dividend_amount
                 ]);
 
@@ -259,45 +262,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             error_log("Manager dividend payment error: " . $e->getMessage());
             error_log("Manager error stack trace: " . $e->getTraceAsString());
             $payment_breakdown['manager'] = 0;
-        }
-
-        // 5.3) กรรมการ
-        try {
-            $committees_stmt = $pdo->query("
-                SELECT id, COALESCE(shares, 0) AS shares 
-                FROM committees 
-                WHERE COALESCE(shares, 0) > 0
-            ");
-
-            $committees_count = 0;
-            foreach ($committees_stmt->fetchAll(PDO::FETCH_ASSOC) as $committee) {
-                $dividend_amount = $committee['shares'] * $dividend_per_share;
-                
-                $insert_payment_stmt = $pdo->prepare("
-                    INSERT INTO dividend_payments 
-                    (period_id, member_id, member_type, shares_at_time, 
-                     dividend_amount, payment_status)
-                    VALUES 
-                    (:period_id, :member_id, 'committee', :shares, :amount, 'pending')
-                ");
-
-                $insert_payment_stmt->execute([
-                    ':period_id' => $period_id,
-                    ':member_id' => $committee['id'],
-                    ':shares' => $committee['shares'],
-                    ':amount' => $dividend_amount
-                ]);
-
-                $committees_count++;
-                $member_count++;
-            }
-            
-            $payment_breakdown['committee'] = $committees_count;
-            error_log("Created {$committees_count} committee dividend payments");
-            
-        } catch (Throwable $e) {
-            error_log("Committee dividend payment error: " . $e->getMessage());
-            $payment_breakdown['committee'] = 0;
         }
 
         // ตรวจสอบว่าสร้างรายการจ่ายได้หรือไม่
