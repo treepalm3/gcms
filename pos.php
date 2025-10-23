@@ -73,6 +73,7 @@ function get_setting(PDO $pdo, string $name, $default = null) {
     $stmt = $pdo->prepare("SELECT setting_value FROM settings WHERE setting_name = :n LIMIT 1");
     $stmt->execute([':n' => $name]);
     $v = $stmt->fetchColumn();
+    // คืนค่าเป็น string หรือ default
     return $v !== false ? (string)$v : $default;
   } catch (Throwable $e) { return $default; }
 }
@@ -124,12 +125,16 @@ $fuel_colors_by_name = [
 ];
 
 try {
+  // ***** START: แก้ไข Query *****
   $stmt_fuel = $pdo->prepare("
       SELECT fuel_id, fuel_name, price
       FROM fuel_prices
       WHERE station_id = :sid
+      AND fuel_name != 'แก๊สโซฮอล์ 91' -- <-- 1. ลบ 91 ออก
       ORDER BY COALESCE(display_order, 99) ASC, fuel_id ASC
     ");
+  // ***** END: แก้ไข Query *****
+    
     $stmt_fuel->execute([':sid' => $station_id]);
   
   while ($row = $stmt_fuel->fetch(PDO::FETCH_ASSOC)) {
@@ -157,74 +162,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     $sale_error = 'Session ไม่ถูกต้อง กรุณารีเฟรชหน้าจอแล้วลองใหม่';
   } else {
     
-    // ===== รับค่า =====
+    // ... (โค้ด PHP ส่วนประมวลผลฟอร์มขายทั้งหมด ... เหมือนเดิม) ...
+    // (รับค่า, ตรวจสอบ, คำนวณ, บันทึกลง DB)
+    
     $fuel_id        = (string)($_POST['fuel_type'] ?? '');
-    $sale_type      = $_POST['sale_type'] ?? 'amount'; // amount|liters
+    $sale_type      = $_POST['sale_type'] ?? 'amount';
     $quantity       = filter_var($_POST['quantity'] ?? 0, FILTER_VALIDATE_FLOAT);
     $payment_method = $_POST['payment_method'] ?? 'cash';
     $customer_phone = preg_replace('/\D+/', '', (string)($_POST['customer_phone'] ?? ''));
     $household_no   = trim((string)($_POST['household_no'] ?? ''));
     $discount       = (float)($_POST['discount'] ?? 0);
     $discount       = max(0.0, min(100.0, $discount));
-
     $allowed_payments  = ['cash', 'qr', 'transfer', 'card'];
     $allowed_sale_type = ['liters','amount'];
 
-    // ===== ตรวจสอบ =====
     if (!array_key_exists($fuel_id, $fuel_types)) {
       $sale_error = 'กรุณาเลือกชนิดน้ำมันให้ถูกต้อง';
-    } elseif ($quantity === false || $quantity <= 0.01) { // ป้องกันยอด 0
+    } elseif ($quantity === false || $quantity <= 0.01) {
       $sale_error = 'กรุณาใส่จำนวนเงินหรือปริมาณลิตรให้ถูกต้อง (มากกว่า 0)';
     } elseif (!in_array($payment_method, $allowed_payments, true)) {
       $sale_error = 'วิธีการชำระเงินไม่ถูกต้อง';
     } elseif (!in_array($sale_type, $allowed_sale_type, true)) {
       $sale_error = 'ประเภทการขายไม่ถูกต้อง';
     } else {
-      
-      // ===== คำนวณ =====
       $fuel_price = (float)$fuel_types[$fuel_id]['price'];
       $fuel_name  = $fuel_types[$fuel_id]['name'];
-
       if ($sale_type === 'liters') {
-        $liters_raw   = (float)$quantity;
-        $liters_disp  = round($liters_raw, 3);
-        $liters_db    = round($liters_raw, 2);
-        $total_amount = round($liters_db * $fuel_price, 2);
+        $liters_raw   = (float)$quantity; $liters_disp  = round($liters_raw, 3);
+        $liters_db    = round($liters_raw, 2); $total_amount = round($liters_db * $fuel_price, 2);
       } else {
         $total_amount = round((float)$quantity, 2);
         $liters_calc  = ($fuel_price > 0 ? $total_amount / $fuel_price : 0.0);
-        $liters_disp  = round($liters_calc, 3);
-        $liters_db    = round($liters_calc, 2);
+        $liters_disp  = round($liters_calc, 3); $liters_db    = round($liters_calc, 2);
       }
-      
       $discount_amount = round($total_amount * ($discount/100.0), 2);
       $net_amount      = round($total_amount - $discount_amount, 2);
-
-      $POINT_RATE     = 20; // 1 แต้ม ต่อ 20 บาท
+      $POINT_RATE     = 20;
       $has_loyalty_id = (bool)($customer_phone || $household_no);
       $points_earned  = $has_loyalty_id ? (int)floor($net_amount / $POINT_RATE) : 0;
       $now = date('Y-m-d H:i:s');
-
-      // ===== เตรียมข้อมูลใบเสร็จสำหรับแสดงผล =====
       $sale_data = [
-        'site_name'        => $site_name, 'receipt_no' => '', 'datetime' => $now,
-        'fuel_type'        => $fuel_id, 'fuel_name' => $fuel_name, 'price_per_liter'  => $fuel_price,
-        'liters'           => $liters_disp, 'total_amount' => $total_amount, 'discount_percent' => $discount,
-        'discount_amount'  => $discount_amount, 'net_amount' => $net_amount, 'payment_method' => $payment_method,
-        'customer_phone'   => $customer_phone, 'household_no' => $household_no, 'points_earned' => $points_earned,
-        'employee_id'      => $current_user_id, 'employee_name'    => $current_name
+        'site_name' => $site_name, 'receipt_no' => '', 'datetime' => $now,
+        'fuel_type' => $fuel_id, 'fuel_name' => $fuel_name, 'price_per_liter'  => $fuel_price,
+        'liters' => $liters_disp, 'total_amount' => $total_amount, 'discount_percent' => $discount,
+        'discount_amount' => $discount_amount, 'net_amount' => $net_amount, 'payment_method' => $payment_method,
+        'customer_phone' => $customer_phone, 'household_no' => $household_no, 'points_earned' => $points_earned,
+        'employee_id' => $current_user_id, 'employee_name'    => $current_name
       ];
-
-      // ====== บันทึกลงฐานข้อมูล ======
       try {
         $pdo->beginTransaction();
-
         $col_phone   = has_column($pdo, 'sales', 'customer_phone');
         $col_house   = has_column($pdo, 'sales', 'household_no');
         $col_discpct = has_column($pdo, 'sales', 'discount_pct');
         $col_discamt = has_column($pdo, 'sales', 'discount_amount');
         $col_emp_id  = has_column($pdo, 'sales', 'employee_user_id');
-
         $tries = 0; $sale_id = null;
         do {
           $receipt_no = 'R'.date('Ymd').'-'.strtoupper(bin2hex(random_bytes(3)));
@@ -240,68 +231,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
           if ($col_discpct) { $cols[] = 'discount_pct';    $params[':discount_pct']    = $discount; }
           if ($col_discamt) { $cols[] = 'discount_amount'; $params[':discount_amount'] = $discount_amount; }
           if ($col_emp_id)  { $cols[] = 'employee_user_id'; $params[':employee_user_id'] = $current_user_id; }
-
-
           $placeholders = implode(',', array_keys($params));
           $sql = "INSERT INTO sales (".implode(',', $cols).") VALUES ($placeholders)";
-          
           try {
-            $stmtSale = $pdo->prepare($sql);
-            $stmtSale->execute($params);
-            $sale_id = (int)$pdo->lastInsertId();
-            $sale_data['receipt_no'] = $receipt_no;
+            $stmtSale = $pdo->prepare($sql); $stmtSale->execute($params);
+            $sale_id = (int)$pdo->lastInsertId(); $sale_data['receipt_no'] = $receipt_no;
             break;
-          } catch (PDOException $ex) {
-            if ($ex->getCode() === '23000' && ++$tries <= 5) continue;
-            throw $ex;
-          }
+          } catch (PDOException $ex) { if ($ex->getCode() === '23000' && ++$tries <= 5) continue; throw $ex; }
         } while ($tries <= 5);
         if (!$sale_id) { throw new RuntimeException('ไม่สามารถสร้างเลขที่ใบเสร็จได้'); }
-
         $tank_id = null;
         try {
           $findTank = $pdo->prepare("SELECT id FROM fuel_tanks WHERE station_id = :sid AND fuel_id = :fid AND is_active = 1 AND current_volume_l >= :liters ORDER BY current_volume_l DESC LIMIT 1");
           $findTank->execute([':sid'=>$station_id, ':fid'=>(int)$fuel_id, ':liters' => $liters_db]);
           $tank_id = $findTank->fetchColumn() ?: null;
         } catch (Throwable $e) { $tank_id = null; }
-
         $stmtItem = $pdo->prepare("INSERT INTO sales_items (sale_id, fuel_id, tank_id, fuel_type, liters, price_per_liter) VALUES (:sale_id, :fuel_id, :tank_id, :fuel_type, :liters, :price_per_liter)");
         $stmtItem->execute([':sale_id' => $sale_id, ':fuel_id' => (int)$fuel_id, ':tank_id' => $tank_id, ':fuel_type' => $fuel_name, ':liters' => $liters_db, ':price_per_liter' => round($fuel_price, 2)]);
-
         try {
           if ($tank_id) {
-            $sel = $pdo->prepare("SELECT id FROM fuel_tanks WHERE id = :tid FOR UPDATE");
-            $sel->execute([':tid' => (int)$tank_id]);
+            $sel = $pdo->prepare("SELECT id FROM fuel_tanks WHERE id = :tid FOR UPDATE"); $sel->execute([':tid' => (int)$tank_id]);
             if ($sel->fetch()) {
               $lit2 = $liters_db;
               $stmtUpd = $pdo->prepare("UPDATE fuel_tanks SET current_volume_l = current_volume_l - ? WHERE id = ? AND current_volume_l >= ?");
               $stmtUpd->execute([$lit2, $tank_id, $lit2]);
-              
               if ($stmtUpd->rowCount() > 0) {
                 $stmtMove = $pdo->prepare("INSERT INTO fuel_moves (occurred_at, type, tank_id, liters, unit_price, ref_doc, ref_note, user_id, sale_id) VALUES (NOW(), 'sale_out', :tank_id, :liters, :unit_price, :ref_doc, :ref_note, :user_id, :sale_id)");
                 $stmtMove->execute([':tank_id' => (int)$tank_id, ':liters' => $lit2, ':unit_price' => round($fuel_price, 2), ':ref_doc' => $sale_data['receipt_no'], ':ref_note' => 'POS sale', ':user_id' => $current_user_id, ':sale_id' => $sale_id]);
                 $move_id = (int)$pdo->lastInsertId();
-
                 if ($move_id > 0 && has_column($pdo, 'fuel_lot_allocations', 'lot_id')) {
                     $liters_to_allocate = $liters_db;
                     $getLots = $pdo->prepare("SELECT id, remaining_liters, unit_cost_full FROM v_open_fuel_lots WHERE tank_id = :tid ORDER BY received_at ASC, id ASC");
                     $getLots->execute([':tid' => (int)$tank_id]);
                     $insAlloc = $pdo->prepare("INSERT INTO fuel_lot_allocations (lot_id, move_id, allocated_liters, unit_cost_snapshot) VALUES (:lot_id, :move_id, :liters, :cost)");
-                    
                     while ($liters_to_allocate > 1e-6 && ($lot = $getLots->fetch(PDO::FETCH_ASSOC))) {
-                        $lot_id = (int)$lot['id'];
-                        $available_in_lot = (float)$lot['remaining_liters'];
-                        $cost_snapshot = (float)$lot['unit_cost_full'];
-                        $take_from_lot = min($liters_to_allocate, $available_in_lot);
-
+                        $lot_id = (int)$lot['id']; $available_in_lot = (float)$lot['remaining_liters'];
+                        $cost_snapshot = (float)$lot['unit_cost_full']; $take_from_lot = min($liters_to_allocate, $available_in_lot);
                         if ($take_from_lot > 0) {
                             $insAlloc->execute([':lot_id' => $lot_id, ':move_id' => $move_id, ':liters' => $take_from_lot, ':cost' => $cost_snapshot]);
                             $liters_to_allocate -= $take_from_lot;
                         }
                     }
-                    if ($liters_to_allocate > 1e-6) {
-                        error_log("COGS Warning: สต็อกใน Lot ไม่พอสำหรับ Tank ID {$tank_id} (ขาดไป {$liters_to_allocate} ลิตร) แต่ยังคงการขายไว้");
-                    }
+                    if ($liters_to_allocate > 1e-6) { error_log("COGS Warning: สต็อกใน Lot ไม่พอสำหรับ Tank ID {$tank_id} (ขาดไป {$liters_to_allocate} ลิตร) แต่ยังคงการขายไว้"); }
                 }
                 if (has_column($pdo, 'fuel_stock', 'fuel_id')) {
                     $sync = $pdo->prepare("UPDATE fuel_stock SET current_stock = GREATEST(0, current_stock - :l) WHERE station_id = :sid AND fuel_id = :fid");
@@ -311,7 +282,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
             } else { error_log("Tank not found (FOR UPDATE) id={$tank_id}"); }
           } else { error_log("No active tank for station {$station_id} and fuel {$fuel_id} with enough stock ({$liters_db}L) for sale {$sale_id}"); }
         } catch (Throwable $invE) { error_log("Inventory update skipped: ".$invE->getMessage()); }
-        
         if ($points_earned > 0 && ($customer_phone !== '' || $household_no !== '')) {
           try {
             $member_id = null; $where_conditions = []; $params = [];
@@ -320,8 +290,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
             if (!empty($where_conditions)) {
               $where_clause = implode(' OR ', $where_conditions);
               $q = $pdo->prepare("SELECT m.id AS member_id FROM users u INNER JOIN members m ON m.user_id = u.id WHERE m.is_active = 1 AND ({$where_clause}) LIMIT 1");
-              $q->execute($params);
-              $member_id = $q->fetchColumn();
+              $q->execute($params); $member_id = $q->fetchColumn();
               if (!$member_id) error_log("Member not found - Phone: {$customer_phone}, House: {$household_no}");
             }
             if ($member_id) {
@@ -331,7 +300,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
             }
           } catch (Throwable $ptsE) { error_log("Point earn error: ".$ptsE->getMessage()); }
         }
-
         $pdo->commit();
         $sale_success   = true;
         $sale_data_json = json_encode($sale_data, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT);
@@ -373,9 +341,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
         font-family: 'Prompt', sans-serif;
         background-color: #f4f7f6; /* สีพื้นหลังอ่อนๆ */
     }
-    .main-content {
+    /* ใช้ .container แทน .main-content เพื่อให้ Bootstrap จัดการความกว้าง */
+    .container {
         max-width: 1200px;
-        margin: 0 auto;
     }
     .avatar-circle {
         width: 40px; height: 40px; border-radius: 50%;
@@ -777,10 +745,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                         <button type="button" class="quick-btn" data-liter="10">10 ลิตร</button>
                         <button type="button" class="quick-btn" data-liter="20">20 ลิตร</button>
                         <button type="button" class="quick-btn" data-liter="30">30 ลิตร</button>
-                        <button type="button" class="quick-btn btn-full-tank" data-liter="full" disabled>
-                            <i class="bi bi-fuel-pump"></i> เต็มถัง
-                        </button>
-                    </div>
+                        </div>
                 </div>
                 <div class="numpad-grid">
                   <button type="button" class="numpad-btn" data-num="7">7</button>
@@ -965,8 +930,8 @@ let currentInput = '0';
 const fuelCards = document.querySelectorAll('.fuel-card');
 const saleTypeCards = document.querySelectorAll('.sale-type-card');
 const numpadBtns = document.querySelectorAll('.numpad-btn');
-const quickAmountBtns = document.querySelectorAll('#quickAmountPanel .quick-btn'); // *** ปุ่มลัด (บาท) ***
-const quickLiterBtns = document.querySelectorAll('#quickLiterPanel .quick-btn');   // *** ปุ่มลัด (ลิตร) ***
+const quickAmountBtns = document.querySelectorAll('#quickAmountPanel .quick-btn'); 
+const quickLiterBtns = document.querySelectorAll('#quickLiterPanel .quick-btn');   
 const display = document.getElementById('amountDisplay');
 const quantityInput = document.getElementById('quantityInput');
 const selectedFuelInp = document.getElementById('selectedFuel');
@@ -983,8 +948,8 @@ const finalSummaryDiv = document.getElementById('finalSummary');
 fuelCards.forEach(card => card.addEventListener('click', handleFuelSelect));
 saleTypeCards.forEach(card => card.addEventListener('click', handleSaleTypeSelect));
 numpadBtns.forEach(btn => btn.addEventListener('click', handleNumpad));
-quickAmountBtns.forEach(btn => btn.addEventListener('click', handleQuickAmount)); // *** เพิ่ม Listener ***
-quickLiterBtns.forEach(btn => btn.addEventListener('click', handleQuickLiter));   // *** เพิ่ม Listener ***
+quickAmountBtns.forEach(btn => btn.addEventListener('click', handleQuickAmount)); 
+quickLiterBtns.forEach(btn => btn.addEventListener('click', handleQuickLiter));   
 discountInput?.addEventListener('input', updateFinalSummary);
 customerPhoneInput.addEventListener('input', handleMemberSearch);
 householdNoInput.addEventListener('input', handleMemberSearch);
@@ -1012,8 +977,8 @@ function handleFuelSelect(e) {
   document.getElementById('nextToStep2').disabled = false;
   updateStepIndicator(1, 'completed');
   
-  // (UX) เมื่อเลือกน้ำมัน ให้ไปขั้นตอนถัดไปอัตโนมัติ
-  setTimeout(() => goToStep(2), 100); 
+  // (UX) ลบ Auto-Next ออก
+  // setTimeout(() => goToStep(2), 100); 
 }
 
 // ===== Step 2: Select Sale Type =====
@@ -1028,17 +993,14 @@ function handleSaleTypeSelect(e) {
   document.getElementById('nextToStep3').disabled = false;
   updateStepIndicator(2, 'completed');
   
-  // รีเซ็ตค่าตัวเลขเมื่อเปลี่ยนประเภท
   currentInput = '0';
   updateDisplay();
   
-  // (UX) เมื่อเลือกประเภท ให้ไปขั้นตอนถัดไปอัตโนมัติ
-  setTimeout(() => goToStep(3), 100); 
+  // (UX) ลบ Auto-Next ออก
+  // setTimeout(() => goToStep(3), 100); 
 }
 
 // ===== Step 3: Enter Amount =====
-
-// *** ฟังก์ชันใหม่: สำหรับปุ่มลัด (20, 50, 100 บาท) ***
 function handleQuickAmount(e) {
   const amount = e.currentTarget.dataset.amount;
   if (!amount || saleType !== 'amount') return; 
@@ -1046,11 +1008,10 @@ function handleQuickAmount(e) {
   currentInput = amount;
   updateDisplay();
   
-  // (UX) ข้ามไปขั้นตอนที่ 4 เลย
-  setTimeout(() => goToStep(4), 100);
+  // (UX) ลบ Auto-Next ออก
+  // setTimeout(() => goToStep(4), 100);
 }
 
-// *** ฟังก์ชันใหม่: สำหรับปุ่มลัด (10 ลิตร, 20 ลิตร) ***
 function handleQuickLiter(e) {
   const liters = e.currentTarget.dataset.liter;
   if (!liters || saleType !== 'liters') return; 
@@ -1063,8 +1024,8 @@ function handleQuickLiter(e) {
   currentInput = liters;
   updateDisplay();
   
-  // (UX) ข้ามไปขั้นตอนที่ 4 เลย
-  setTimeout(() => goToStep(4), 100);
+  // (UX) ลบ Auto-Next ออก
+  // setTimeout(() => goToStep(4), 100);
 }
 
 
@@ -1075,9 +1036,8 @@ function handleNumpad(e) {
 
   if (num !== undefined) {
     if (currentInput === '0') currentInput = '';
-    // ตรวจสอบทศนิยม 2 ตำแหน่ง
     if (currentInput.includes('.') && currentInput.split('.')[1].length >= 2) {
-       return; // ไม่ให้พิมพ์เพิ่ม
+       return; 
     }
     if (currentInput.length < 9) {
        currentInput += num;
@@ -1230,7 +1190,6 @@ function goToStep(step) {
     const label = saleType === 'liters' ? ' (ลิตร)' : ' (บาท)';
     document.getElementById('saleTypeLabel').textContent = label;
     
-    // *** แก้ไข: ซ่อน/แสดงปุ่มลัดตามประเภท ***
     const isAmountMode = (saleType === 'amount');
     document.getElementById('quickAmountPanel').style.display = isAmountMode ? 'block' : 'none';
     document.getElementById('quickLiterPanel').style.display = isAmountMode ? 'none' : 'block';
@@ -1382,10 +1341,14 @@ function printReceipt() {
   const receiptModalEl = document.getElementById('receiptModal');
   if (receiptModalEl) {
     const receiptModal = new bootstrap.Modal(receiptModalEl);
+    
+    // แสดง Modal ก่อน
     receiptModal.show();
     
-    // รีเซ็ตฟอร์มหลังจากแสดง Modal
-    resetAll(); 
+    // เมื่อ Modal ถูกปิด (ไม่ว่าจะกดปุ่มไหน) ให้รีเซ็ตฟอร์ม
+    receiptModalEl.addEventListener('hidden.bs.modal', event => {
+        resetAll();
+    });
   }
 <?php endif; ?>
 
