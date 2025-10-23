@@ -709,8 +709,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
 
           <div class="text-center mt-4">
             <button type="button" class="btn btn-outline-secondary" id="backToStep2Btn">
-              <i class="bi bi-arrow-left me-2"></i> ย้อนกลับ
-            </button>
+                <i class="bi bi-arrow-left me-2"></i> ย้อนกลับ
+              </button>
             <button type="button" class="btn btn-primary btn-lg" id="nextToStep3" disabled>
               ถัดไป <i class="bi bi-arrow-right ms-2"></i>
             </button>
@@ -776,8 +776,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                 <div class="text-center mt-4 d-grid gap-2">
                     <button type="button" class="btn btn-primary btn-lg" id="nextToStep4" disabled>
                         ถัดไป <i class="bi bi-arrow-right ms-2"></i>
-                        <button type="button" class="btn btn-outline-secondary" id="backToStep3Btn">
-                            <i class="bi bi-arrow-left me-2"></i> ย้อนกลับ
+                        <button type="button" class="btn btn-outline-secondary" id="backToStep2Btn">
+                          <i class="bi bi-arrow-left me-2"></i> ย้อนกลับ
                         </button>
                 </div>
             </div>
@@ -840,9 +840,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                     <i class="bi bi-check-circle-fill me-2"></i>
                     ยืนยันและบันทึกการขาย
                   </button>
-                  <button type="button" class="btn btn-outline-secondary" id="backToStep4Btn">
-                        <i class="bi bi-arrow-left me-2"></i> ย้อนกลับ
-                    </button>
+                  <button type="button" class="btn btn-outline-secondary" onclick="goToStep(3)">
+                    <i class="bi bi-arrow-left me-2"></i> ย้อนกลับ
+                  </button>
                   <button type="button" class="btn btn-outline-danger" onclick="resetAll()">
                     <i class="bi bi-x-circle me-2"></i> ยกเลิกทั้งหมด
                   </button>
@@ -1150,24 +1150,17 @@ function updateFinalSummary() {
   finalSummaryDiv.innerHTML = html;
 }
 
-// ปรับปุ่มย้อนกลับให้ถูกต้อง
-document.getElementById('backToStep2Btn').addEventListener('click', () => goToStep(2)); // ขั้นตอน 2
-document.getElementById('backToStep3Btn').addEventListener('click', () => goToStep(3)); // ขั้นตอน 3
-document.getElementById('backToStep4Btn').addEventListener('click', () => goToStep(4)); // ขั้นตอน 4
-
+// ===== Navigation =====
 function goToStep(step) {
     currentStep = step;
-
-    // ซ่อนทุก panel
+    
     document.getElementById('step1-panel').style.display = 'none';
     document.getElementById('step2-panel').style.display = 'none';
     document.getElementById('step3-panel').style.display = 'none';
     document.getElementById('step4-panel').style.display = 'none';
-
-    // แสดง panel ตามลำดับขั้นตอน
+    
     document.getElementById(`step${currentStep}-panel`).style.display = 'block';
-
-    // อัปเดต Step Indicator
+    
     for (let i = 1; i <= 4; i++) {
         const indicator = document.getElementById(`step${i}-indicator`);
         indicator.classList.remove('active', 'completed');
@@ -1177,23 +1170,22 @@ function goToStep(step) {
             indicator.classList.add('active');
         }
     }
-
-    // อัปเดตข้อมูลต่างๆ ตามขั้นตอน
+    
     if (step === 1) {
         document.getElementById('nextToStep2').disabled = !selectedFuel;
     } else if (step === 2) {
         document.getElementById('selectedFuelInfo').innerHTML = `
-            <strong>เลือกแล้ว:</strong> ${selectedFuelName} (${currentPrice.toFixed(2)} ฿/ลิตร)
+          <strong>เลือกแล้ว:</strong> ${selectedFuelName} (${currentPrice.toFixed(2)} ฿/ลิตร)
         `;
         document.getElementById('nextToStep3').disabled = !saleType;
     } else if (step === 3) {
         const label = saleType === 'liters' ? ' (ลิตร)' : ' (บาท)';
         document.getElementById('saleTypeLabel').textContent = label;
-
+        
         const isAmountMode = (saleType === 'amount');
         document.getElementById('quickAmountPanel').style.display = isAmountMode ? 'block' : 'none';
         document.getElementById('quickLiterPanel').style.display = isAmountMode ? 'none' : 'block';
-
+        
         updateDisplay();
     } else if (step === 4) {
         updateFinalSummary();
