@@ -1162,54 +1162,54 @@ function updateFinalSummary() {
 
 // ===== Navigation =====
 function goToStep(step) {
-  currentStep = step;
-  
-  document.getElementById('step1-panel').style.display = 'none';
-  document.getElementById('step2-panel').style.display = 'none';
-  document.getElementById('step3-panel').style.display = 'none';
-  document.getElementById('step4-panel').style.display = 'none';
-  
-  document.getElementById(`step${currentStep}-panel`).style.display = 'block';
-  
-  // อัปเดตตัวบ่งชี้ขั้นตอน
-  for (let i = 1; i <= 4; i++) {
-    const indicator = document.getElementById(`step${i}-indicator`);
-    indicator.classList.remove('active', 'completed');
-    if (i < currentStep) {
-      indicator.classList.add('completed');
-    } else if (i === currentStep) {
-      indicator.classList.add('active');
+    currentStep = step;
+    
+    // ซ่อนทุกๆ ขั้นตอน
+    document.getElementById('step1-panel').style.display = 'none';
+    document.getElementById('step2-panel').style.display = 'none';
+    document.getElementById('step3-panel').style.display = 'none';
+    document.getElementById('step4-panel').style.display = 'none';
+    
+    // แสดงขั้นตอนที่เลือก
+    document.getElementById(`step${currentStep}-panel`).style.display = 'block';
+    
+    // อัปเดตตัวบ่งชี้ขั้นตอน (ขั้นตอนที่เสร็จแล้วจะมีคลาส 'completed', ขั้นตอนที่กำลังทำอยู่จะมีคลาส 'active')
+    for (let i = 1; i <= 4; i++) {
+        const indicator = document.getElementById(`step${i}-indicator`);
+        indicator.classList.remove('active', 'completed');
+        if (i < currentStep) {
+            indicator.classList.add('completed');
+        } else if (i === currentStep) {
+            indicator.classList.add('active');
+        }
     }
-  }
-  
-  // *** START: โค้ดแก้ไขปุ่ม "ถัดไป" เมื่อย้อนกลับ ***
-  if (step === 1) {
-      // ตรวจสอบว่าเลือกน้ำมันไว้หรือยัง
-      document.getElementById('nextToStep2').disabled = !selectedFuel;
-  }
-  else if (step === 2) {
-    document.getElementById('selectedFuelInfo').innerHTML = `
-      <strong>เลือกแล้ว:</strong> ${selectedFuelName} (${currentPrice.toFixed(2)} ฿/ลิตร)
-    `;
-    // ตรวจสอบว่าเลือกประเภทไว้หรือยัง
-    document.getElementById('nextToStep3').disabled = !saleType;
+    
+    // การตรวจสอบปุ่ม
+    if (step === 1) {
+        // ตรวจสอบว่าเลือกน้ำมันไว้หรือยัง
+        document.getElementById('nextToStep2').disabled = !selectedFuel;
+    } else if (step === 2) {
+        // แสดงข้อมูลน้ำมันที่เลือก
+        document.getElementById('selectedFuelInfo').innerHTML = `
+          <strong>เลือกแล้ว:</strong> ${selectedFuelName} (${currentPrice.toFixed(2)} ฿/ลิตร)
+        `;
+        // ตรวจสอบว่าเลือกประเภทการขายหรือยัง
+        document.getElementById('nextToStep3').disabled = !saleType;
+    } else if (step === 3) {
+        const label = saleType === 'liters' ? ' (ลิตร)' : ' (บาท)';
+        document.getElementById('saleTypeLabel').textContent = label;
+        
+        const isAmountMode = (saleType === 'amount');
+        document.getElementById('quickAmountPanel').style.display = isAmountMode ? 'block' : 'none';
+        document.getElementById('quickLiterPanel').style.display = isAmountMode ? 'none' : 'block';
+        
+        updateDisplay(); // อัปเดตการแสดงผลและการคำนวณ
+    } else if (step === 4) {
+        updateFinalSummary();
+    }
 
-  } else if (step === 3) {
-    const label = saleType === 'liters' ? ' (ลิตร)' : ' (บาท)';
-    document.getElementById('saleTypeLabel').textContent = label;
-    
-    const isAmountMode = (saleType === 'amount');
-    document.getElementById('quickAmountPanel').style.display = isAmountMode ? 'block' : 'none';
-    document.getElementById('quickLiterPanel').style.display = isAmountMode ? 'none' : 'block';
-    
-    updateDisplay(); // อัปเดต display และ preview (ซึ่งจะเปิดปุ่ม 'nextToStep4' ให้เอง)
-  
-  } else if (step === 4) {
-    updateFinalSummary();
-  }
-  // *** END: โค้ดแก้ไข ***
-  
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+    // เลื่อนหน้าจอขึ้นไปที่ด้านบน
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function updateStepIndicator(step, status) {
