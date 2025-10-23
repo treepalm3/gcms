@@ -61,8 +61,7 @@ $role_th_map = [
   'employee'=>'พนักงาน',  'member'=>'สมาชิกสหกรณ์',
   'committee'=>'กรรมการ'
 ];
-$current_role_th = $role_th_map[$current_role] ?? 'ผู้ใช้งาน';
-$avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
+
 
 $station_id = get_setting($pdo, 'station_id', 1);
 
