@@ -901,7 +901,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
             </div>
           </div>
           <div class="col-md-4">
-            <div class="bg-success bg-opacity-10 rounded p-3 border border-success">
+            <div class="bg-success bg-opacity-10 rounded p-3 ">
               <div class="text-success small mb-1 fw-semibold">
                 <i class="bi bi-gift me-1"></i>วงเงินปันผลได้ (10%)               </div>
               <h4 class="mb-0 text-success">฿<?= nf($yearly_available_for_dividend) ?></h4>
