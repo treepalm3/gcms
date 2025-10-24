@@ -338,6 +338,11 @@ try {
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="rebate-tab" data-bs-toggle="tab" data-bs-target="#rebate-panel" type="button" role="tab" aria-controls="rebate-panel" aria-selected="false">
+                        <i class="bi bi-arrow-repeat me-2"></i>งวดเฉลี่ยคืน (ตามยอดซื้อ)
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
                     <button class="nav-link" id="members-tab" data-bs-toggle="tab" data-bs-target="#members-panel" type="button" role="tab" aria-controls="members-panel" aria-selected="false">
                         <i class="bi bi-people-fill me-2"></i>ผู้ถือหุ้น
                     </button>
@@ -410,6 +415,73 @@ try {
                                                         <i class="bi bi-check2-circle me-1"></i> อนุมัติงวดนี้
                                                     </button>
                                                     <?php endif; ?>
+                                               </div>
+                                           </div>
+                                       </div>
+                                   </div>
+                                   <?php endforeach; ?>
+                               <?php endif; ?>
+                           </div>
+                       </div>
+                   </div>
+                </div>
+
+                <div class="tab-pane fade" id="rebate-panel" role="tabpanel" aria-labelledby="rebate-tab">
+                    <div class="card shadow-sm mb-4">
+                       <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-arrow-repeat me-2"></i>งวดเฉลี่ยคืนตามยอดซื้อ</h5>
+                             <button class="btn btn-info" data-bs-toggle="modal" data-bs-target="#modalCreateRebate">
+                                <i class="fa-solid fa-plus me-1"></i> สร้างงวดเฉลี่ยคืน
+                            </button>
+                       </div>
+                       <div class="card-body">
+                           <div class="row g-3">
+                               <?php if (empty($rebate_periods)): ?>
+                                   <div class="col-12"><div class="alert alert-info text-center mb-0">ยังไม่มีงวดเฉลี่ยคืน (ต้องสร้างตาราง `rebate_periods` ก่อน)</div></div>
+                               <?php else: ?>
+                                   <?php foreach($rebate_periods as $period): ?>
+                                   <div class="col-md-6 col-lg-4">
+                                       <div class="card dividend-card h-100 shadow-sm">
+                                          <div class="card-body d-flex flex-column">
+                                               <div class="d-flex justify-content-between align-items-start mb-2">
+                                                   <div>
+                                                       <h5 class="card-title mb-0">ปี <?= htmlspecialchars($period['year']) ?></h5>
+                                                       <small class="text-muted d-block mb-1"><?= htmlspecialchars($period['period_name']) ?></small>
+                                                   </div>
+                                                   <span class="status-<?= htmlspecialchars($period['status']) ?>">
+                                                        <?= ['paid' => 'จ่ายแล้ว', 'approved' => 'อนุมัติ', 'pending' => 'รออนุมัติ'][$period['status']] ?? '?' ?>
+                                                   </span>
+                                               </div>
+                                               <div class="row text-center my-3 flex-grow-1 align-items-center">
+                                                   <div class="col-6 border-end">
+                                                       <small class="text-muted">อัตรา/งบ</small><br>
+                                                       <span class="rebate-rate">
+                                                          <?php
+                                                            if (isset($period['rebate_per_baht']) && (float)$period['rebate_per_baht'] > 0) {
+                                                                echo '฿' . nf($period['rebate_per_baht'], 4) . '/บาท';
+                                                            } elseif (isset($period['rebate_rate_percent']) && (float)$period['rebate_rate_percent'] > 0) {
+                                                                echo nf($period['rebate_rate_percent'], 1) . '%';
+                                                            } else {
+                                                                echo '-';
+                                                            }
+                                                          ?>
+                                                       </span>
+                                                   </div>
+                                                   <div class="col-6">
+                                                       <small class="text-muted">ยอดรวม</small><br>
+                                                       <span class="rebate-amount">฿<?= number_format($period['total_rebate_budget'], 0) ?></span>
+                                                   </div>
+                                               </div>
+                                               <div class="d-flex flex-column gap-1 small text-muted border-top pt-2 mb-3">
+                                                   <div class="d-flex justify-content-between"><span>ยอดซื้อรวม:</span> <span>฿<?= number_format($period['total_purchase_amount'], 0) ?></span></div>
+                                                   <?php if($period['payment_date']): ?>
+                                                   <div class="d-flex justify-content-between"><span>วันที่จ่าย:</span> <span><?= d($period['payment_date']) ?></span></div>
+                                                   <?php endif; ?>
+                                               </div>
+                                               <div class="mt-auto d-grid gap-2">
+                                                    <button class="btn btn-sm btn-outline-info" onclick="viewRebateDetails(<?= (int)$period['id'] ?>)">
+                                                        <i class="bi bi-eye me-1"></i> ดูรายละเอียด
+                                                    </button>
                                                </div>
                                            </div>
                                        </div>
@@ -523,94 +595,23 @@ try {
     <div class="modal-dialog modal-lg">
         <form class="modal-content" method="post" action="dividend_create_period.php">
             <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
-            <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title"><i class="fa-solid fa-plus me-2"></i>สร้างงวดปันผลและเฉลี่ยคืน</h5>
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fa-solid fa-plus me-2"></i>สร้างงวดปันผล (ตามหุ้น)</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-
             <div class="modal-body">
                 <div class="row g-3">
-                    <div class="col-sm-6">
-                        <label class="form-label"><i class="bi bi-calendar me-1"></i>ปี <span class="text-danger">*</span></label>
-                        <input type="number" name="year" id="dividendYear" class="form-control" value="<?= date('Y') ?>" required min="2020" max="2050" onchange="updateDateRange()">
-                    </div>
-                    <div class="col-sm-6">
-                        <label class="form-label"><i class="bi bi-card-text me-1"></i>ชื่องวด</label>
-                        <input type="text" name="period_name" id="periodName" class="form-control" placeholder="เช่น ปันผลประจำปี <?= date('Y') ?>" value="ปันผลประจำปี <?= date('Y') ?>">
-                    </div>
-                    <div class="col-sm-6">
-                        <label class="form-label"><i class="bi bi-calendar-event me-1"></i>วันที่เริ่มต้น <span class="text-danger">*</span></label>
-                        <input type="date" name="start_date" id="startDate" class="form-control" value="<?= date('Y') ?>-01-01" required>
-                    </div>
-                    <div class="col-sm-6">
-                        <label class="form-label"><i class="bi bi-calendar-check me-1"></i>วันที่สิ้นสุด <span class="text-danger">*</span></label>
-                        <input type="date" name="end_date" id="endDate" class="form-control" value="<?= date('Y') ?>-12-31" required>
-                    </div>
-                    <div class="col-12">
-                         <div class="alert alert-light border mb-0 py-2">
-                             <small class="text-muted d-flex justify-content-between">
-                                 <span><i class="bi bi-calendar-range me-1"></i> <strong>ช่วงเวลา:</strong> <span id="dateRangeDisplay">1 ม.ค. <?= date('Y') ?> - 31 ธ.ค. <?= date('Y') ?></span></span>
-                                 <span>(<span id="daysCount">365</span> วัน)</span>
-                             </small>
-                         </div>
-                    </div>
-
-                    <div class="col-12"><hr class="my-2"><h6 class="text-primary"><i class="bi bi-coin me-2"></i>1. ปันผลตามหุ้น</h6></div>
-                    <div class="col-sm-6">
-                        <label class="form-label"><i class="bi bi-currency-dollar me-1"></i>กำไรสุทธิ (บาท) <span class="text-danger">*</span></label>
-                        <input type="number" name="total_profit" id="modalProfit" class="form-control" step="0.01" min="0.01" required placeholder="0.00" oninput="updateModalCalc()">
-                    </div>
-                    <div class="col-sm-6">
-                        <label class="form-label"><i class="bi bi-percent me-1"></i>อัตราปันผล (หุ้น) (%) <span class="text-danger">*</span></label>
-                        <input type="number" name="dividend_rate" id="modalRate" class="form-control" step="0.1" min="0.1" max="100" required placeholder="เช่น 15" oninput="updateModalCalc()">
-                    </div>
-                    <div class="col-sm-6">
-                        <label class="form-label"><i class="bi bi-diagram-3 me-1"></i>จำนวนหุ้นรวม (ณ สิ้นงวด)</label>
-                         <input type="number" name="total_shares_at_time" class="form-control bg-light" value="<?= $total_shares ?>" required readonly>
-                    </div>
-                    <div class="col-sm-6">
-                        <label class="form-label"><i class="bi bi-cash-stack me-1"></i>ยอดปันผล (หุ้น) (บาท)</label>
-                        <input type="text" id="modalTotal" name="total_dividend_amount_display" class="form-control bg-light" value="0.00" readonly>
-                         <input type="hidden" name="total_dividend_amount" id="modalTotalHidden" value="0">
-                    </div>
-
-                    <div class="col-12"><hr class="my-2"><h6 class="text-info"><i class="bi bi-arrow-repeat me-2"></i>2. เฉลี่ยคืนตามยอดซื้อ</h6></div>
-                     <div class="col-sm-6 col-md-4">
-                        <label class="form-label">ฐานคำนวณ</label>
-                        <select name="rebate_base" id="modalRebateBase" class="form-select" onchange="updateModalCalc()">
-                            <option value="profit" selected>จากกำไรสุทธิ</option>
-                            <option value="net">จากคงเหลือ (หลังหักสำรอง)</option>
-                        </select>
-                    </div>
-                     <div class="col-sm-6 col-md-4">
-                        <label class="form-label">รูปแบบเฉลี่ย</label>
-                        <select name="rebate_mode" id="modalRebateMode" class="form-select">
-                            <option value="weighted" selected>ถ่วงน้ำหนักตามยอดซื้อ</option>
-                            <option value="equal">เท่ากัน (เฉพาะผู้ซื้อ)</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                         <label class="form-label"><i class="bi bi-cash-stack me-1"></i>ยอดเฉลี่ยคืน (บาท)</label>
-                         <input type="text" id="modalRebateTotal" class="form-control bg-light" value="0.00" readonly>
-                         <input type="hidden" name="rebate_value" id="modalRebateValueHidden" value="0"> </div>
-                    <div class="col-12">
-                        <label class="form-label">กำหนดงบเฉลี่ยคืน</label>
-                        <div class="input-group">
-                           <input type="number" id="modalRebateRate" class="form-control" placeholder="%" step="0.1" oninput="updateModalRebateType('rate')">
-                            <span class="input-group-text">%</span>
-                            <span class="input-group-text">หรือ</span>
-                            <input type="number" id="modalRebateFixed" class="form-control" placeholder="บาท" step="0.01" oninput="updateModalRebateType('fixed')">
-                            <span class="input-group-text">บาท</span>
-                        </div>
-                        <input type="hidden" name="rebate_type" id="modalRebateTypeHidden" value="rate"> </div>
-
-                    <div class="col-12">
-                        <label class="form-label"><i class="bi bi-chat-left-text me-1"></i>หมายเหตุ (ถ้ามี)</label>
-                        <textarea name="notes" class="form-control" rows="2" placeholder="เช่น รายละเอียดการคำนวณ, มติที่ประชุม..."></textarea>
-                    </div>
+                    <div class="col-sm-6"><label class="form-label"><i class="bi bi-calendar me-1"></i>ปี <span class="text-danger">*</span></label><input type="number" name="year" id="dividendYear" class="form-control" value="<?= date('Y') ?>" required min="2020" max="2050" onchange="updateDateRange('dividend')"></div>
+                    <div class="col-sm-6"><label class="form-label"><i class="bi bi-card-text me-1"></i>ชื่องวด</label><input type="text" name="period_name" id="dividendPeriodName" class="form-control" placeholder="เช่น ปันผลประจำปี <?= date('Y') ?>" value="ปันผลประจำปี <?= date('Y') ?>"></div>
+                    <div class="col-sm-6"><label class="form-label"><i class="bi bi-calendar-event me-1"></i>วันที่เริ่มต้น <span class="text-danger">*</span></label><input type="date" name="start_date" id="dividendStartDate" class="form-control" value="<?= date('Y') ?>-01-01" required></div>
+                    <div class="col-sm-6"><label class="form-label"><i class="bi bi-calendar-check me-1"></i>วันที่สิ้นสุด <span class="text-danger">*</span></label><input type="date" name="end_date" id="dividendEndDate" class="form-control" value="<?= date('Y') ?>-12-31" required></div>
+                    <div class="col-12"><div class="alert alert-light border mb-0 py-2"><small class="text-muted d-flex justify-content-between"><span><i class="bi bi-calendar-range me-1"></i> <strong>ช่วงเวลา:</strong> <span id="dividendDateRangeDisplay">1 ม.ค. <?= date('Y') ?> - 31 ธ.ค. <?= date('Y') ?></span></span> <span>(<span id="dividendDaysCount">365</span> วัน)</span></small></div></div>
+                    <div class="col-sm-6"><label class="form-label"><i class="bi bi-currency-dollar me-1"></i>กำไรสุทธิ (บาท) <span class="text-danger">*</span></label><input type="number" name="total_profit" id="modalProfit" class="form-control" step="0.01" min="0.01" required placeholder="0.00" oninput="updateModalCalc('dividend')"></div>
+                    <div class="col-sm-6"><label class="form-label"><i class="bi bi-percent me-1"></i>อัตราปันผล (หุ้น) (%) <span class="text-danger">*</span></label><input type="number" name="dividend_rate" id="modalRate" class="form-control" step="0.1" min="0.1" max="100" required placeholder="เช่น 15" oninput="updateModalCalc('dividend')"></div>
+                    <div class="col-sm-6"><label class="form-label"><i class="bi bi-diagram-3 me-1"></i>จำนวนหุ้นรวม (ณ สิ้นงวด)</label><input type="number" name="total_shares_at_time" class="form-control bg-light" value="<?= $total_shares ?>" required readonly></div>
+                    <div class="col-sm-6"><label class="form-label"><i class="bi bi-cash-stack me-1"></i>ยอดปันผลรวม (บาท)</label><input type="text" id="modalTotal" class="form-control bg-light" value="0.00" readonly><input type="hidden" name="total_dividend_amount" id="modalTotalHidden" value="0"></div>
                 </div>
             </div>
-
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle me-1"></i>ยกเลิก</button>
                 <button type="submit" class="btn btn-primary"><i class="bi bi-save2 me-1"></i>สร้างงวดปันผล</button>
@@ -619,51 +620,59 @@ try {
     </div>
 </div>
 
-<div class="modal fade" id="modalMemberHistory" tabindex="-1">
+<div class="modal fade" id="modalCreateRebate" tabindex="-1">
     <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-clock-history me-2"></i>ประวัติการรับปันผล</h5>
+        <form class="modal-content" method="post" action="rebate_create_period.php"> <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+            <div class="modal-header bg-info text-dark">
+                <h5 class="modal-title"><i class="bi bi-arrow-repeat me-2"></i>สร้างงวดเฉลี่ยคืน (ตามยอดซื้อ)</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <div class="row mb-3 small">
-                    <div class="col-sm-4"><strong>รหัส:</strong> <span id="historyMemberId">-</span></div>
-                    <div class="col-sm-5"><strong>ชื่อ:</strong> <span id="historyMemberName">-</span></div>
-                    <div class="col-sm-3"><strong>ประเภท:</strong> <span id="historyMemberType">-</span></div>
-                </div>
-                <div class="history-summary mb-3"></div> <div class="table-responsive">
-                    <table class="table table-sm table-hover">
-                        <thead class="table-light">
-                            <tr>
-                                <th>ปี</th>
-                                <th class="text-center">หุ้น (ณ เวลานั้น)</th>
-                                <th class="text-end">อัตรา (%)</th>
-                                <th class="text-end">ปันผลที่ได้รับ</th>
-                                <th class="text-center">สถานะ</th>
-                            </tr>
-                        </thead>
-                        <tbody id="memberHistoryTable">
-                            <tr><td colspan="5" class="text-center text-muted">กำลังโหลด...</td></tr>
-                        </tbody>
-                    </table>
+                <div class="row g-3">
+                    <div class="col-sm-6"><label class="form-label"><i class="bi bi-calendar me-1"></i>ปี <span class="text-danger">*</span></label><input type="number" name="year" id="rebateYear" class="form-control" value="<?= date('Y') ?>" required min="2020" max="2050" onchange="updateDateRange('rebate')"></div>
+                    <div class="col-sm-6"><label class="form-label"><i class="bi bi-card-text me-1"></i>ชื่องวด</label><input type="text" name="period_name" id="rebatePeriodName" class="form-control" placeholder="เช่น เฉลี่ยคืนประจำปี <?= date('Y') ?>" value="เฉลี่ยคืนประจำปี <?= date('Y') ?>"></div>
+                    <div class="col-sm-6"><label class="form-label"><i class="bi bi-calendar-event me-1"></i>วันที่เริ่มต้น (สำหรับยอดซื้อ) <span class="text-danger">*</span></label><input type="date" name="start_date" id="rebateStartDate" class="form-control" value="<?= date('Y') ?>-01-01" required></div>
+                    <div class="col-sm-6"><label class="form-label"><i class="bi bi-calendar-check me-1"></i>วันที่สิ้นสุด (สำหรับยอดซื้อ) <span class="text-danger">*</span></label><input type="date" name="end_date" id="rebateEndDate" class="form-control" value="<?= date('Y') ?>-12-31" required></div>
+                    <div class="col-12"><div class="alert alert-light border mb-0 py-2"><small class="text-muted d-flex justify-content-between"><span><i class="bi bi-calendar-range me-1"></i> <strong>ช่วงเวลา:</strong> <span id="rebateDateRangeDisplay">1 ม.ค. <?= date('Y') ?> - 31 ธ.ค. <?= date('Y') ?></span></span> <span>(<span id="rebateDaysCount">365</span> วัน)</span></small></div></div>
+
+                    <div class="col-12"><hr class="my-2"><h6 class="text-info"><i class="bi bi-calculator me-2"></i>กำหนดงบประมาณเฉลี่ยคืน</h6></div>
+                    <div class="col-12"><label class="form-label"><i class="bi bi-currency-dollar me-1"></i>กำไรสุทธิ (สำหรับอ้างอิง)</label><input type="number" id="rebateModalProfit" class="form-control" placeholder="กรอกกำไรสุทธิเพื่อคำนวณ %" oninput="updateModalCalc('rebate')"></div>
+                    <div class="col-sm-6"><label class="form-label">ฐานคำนวณ</label><select name="rebate_base" id="modalRebateBase" class="form-select" onchange="updateModalCalc('rebate')"><option value="profit" selected>จากกำไรสุทธิ</option><option value="net">จากคงเหลือ (หลังหักสำรอง)</option></select></div>
+                    <div class="col-sm-6"><label class="form-label">รูปแบบเฉลี่ย</label><select name="rebate_mode" id="modalRebateMode" class="form-select"><option value="weighted" selected>ถ่วงน้ำหนักตามยอดซื้อ</option><option value="equal">เท่ากัน (เฉพาะผู้ซื้อ)</option></select></div>
+
+                    <div class="col-12">
+                        <label class="form-label">กำหนดงบ (เลือก % หรือ บาท) <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                           <input type="number" id="modalRebateRate" class="form-control" placeholder="%" step="0.1" oninput="updateModalRebateType('rate')">
+                            <span class="input-group-text">%</span>
+                            <span class="input-group-text">หรือ</span>
+                            <input type="number" id="modalRebateFixed" class="form-control" placeholder="บาท" step="0.01" oninput="updateModalRebateType('fixed')">
+                            <span class="input-group-text">บาท</span>
+                        </div>
+                        <input type="hidden" name="rebate_type" id="modalRebateTypeHidden" value="rate">
+                        <input type="hidden" name="rebate_value" id="modalRebateValueHidden" value="0">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label"><i class="bi bi-cash-stack me-1"></i>งบประมาณเฉลี่ยคืนรวม (บาท)</label>
+                        <input type="text" id="modalRebateTotal" class="form-control bg-light" value="0.00" readonly>
+                        <input type="hidden" name="total_rebate_budget" id="modalRebateTotalHidden" value="0">
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ปิด</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle me-1"></i>ยกเลิก</button>
+                <button type="submit" class="btn btn-info text-dark"><i class="bi bi-save2 me-1"></i>สร้างงวดเฉลี่ยคืน</button>
             </div>
-        </div>
+        </form>
     </div>
 </div>
 
-<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1080">
-    <div id="liveToast" class="toast border-0 align-items-center" role="alert" aria-live="assertive" aria-atomic="true">
-        <div class="d-flex">
-            <div class="toast-body"></div>
-            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-        </div>
+
+<div class="modal fade" id="modalMemberHistory" tabindex="-1">
     </div>
-</div>
+
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1080">
+    </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
@@ -674,12 +683,10 @@ const $$ = (s, p=document) => [...p.querySelectorAll(s)];
 
 const membersData = <?= json_encode(array_values($members_dividends), JSON_UNESCAPED_UNICODE | JSON_NUMERIC_CHECK) ?>;
 const dividendPeriodsData = <?= json_encode($dividend_periods, JSON_UNESCAPED_UNICODE | JSON_NUMERIC_CHECK) ?>;
+// [เพิ่ม]
+const rebatePeriodsData = <?= json_encode($rebate_periods, JSON_UNESCAPED_UNICODE | JSON_NUMERIC_CHECK) ?>;
 
 const CSRF_TOKEN = '<?= $_SESSION['csrf_token'] ?>';
-// [ลบ] Calculator-related variables
-// const purchasesByMember = {};
-// const codeToKey = {};
-// membersData.forEach(m => { codeToKey[m.code] = `${m.type}_${m.id}`; });
 
 const toast = (msg, success = true) => {
     const t = $('#liveToast');
@@ -710,7 +717,6 @@ function applyMemberFilter(){
     const keyword = normalize(memberSearch?.value || '');
     const type = filterMemberType?.value || '';
     const minS = parseInt(minShares?.value || '0', 10);
-
     $$('#membersTable tbody tr').forEach(tr => {
         const searchText = normalize(`${tr.dataset.memberName} ${tr.dataset.memberKey}`);
         const memberType = tr.dataset.memberType;
@@ -725,35 +731,31 @@ memberSearch?.addEventListener('input', applyMemberFilter);
 filterMemberType?.addEventListener('change', applyMemberFilter);
 minShares?.addEventListener('input', applyMemberFilter);
 
-// ===== [ลบ] CALCULATOR FUNCTIONS =====
-// [ลบ] calculateDividend()
-// [ลบ] updateDividendPreview()
-// [ลบ] applyRebateYear()
-// [ลบ] fetchPurchasesByRange()
 
-// ===== MODAL DATE RANGE (คงเดิม) =====
-function updateDateRange() {
-    const yearSelect = $('#dividendYear');
-    const startDateInput = $('#startDate');
-    const endDateInput = $('#endDate');
-    const periodNameInput = $('#periodName');
+// ===== [แก้ไข] MODAL DATE RANGE (รองรับ 2 Modals) =====
+function updateDateRange(prefix) { // prefix = 'dividend' หรือ 'rebate'
+    const yearSelect = $(`#${prefix}Year`);
+    const startDateInput = $(`#${prefix}StartDate`);
+    const endDateInput = $(`#${prefix}EndDate`);
+    const periodNameInput = $(`#${prefix}PeriodName`);
     if (!yearSelect || !startDateInput || !endDateInput) return;
 
     const year = yearSelect.value || <?= (int)date('Y') ?>;
     startDateInput.value = `${year}-01-01`;
     endDateInput.value = `${year}-12-31`;
 
-    if (periodNameInput && (periodNameInput.value === '' || periodNameInput.value.startsWith('ปันผลประจำปี'))) {
-        periodNameInput.value = `ปันผลประจำปี ${year}`;
+    if (periodNameInput && (periodNameInput.value === '' || periodNameInput.value.includes('ประจำปี'))) {
+        const defaultName = (prefix === 'dividend') ? 'ปันผลประจำปี' : 'เฉลี่ยคืนประจำปี';
+        periodNameInput.value = `${defaultName} ${year}`;
     }
-    calculateDateRange();
+    calculateDateRange(prefix);
 }
 
-function calculateDateRange() {
-    const startInput = $('#startDate');
-    const endInput = $('#endDate');
-    const display = $('#dateRangeDisplay');
-    const daysCount = $('#daysCount');
+function calculateDateRange(prefix) {
+    const startInput = $(`#${prefix}StartDate`);
+    const endInput = $(`#${prefix}EndDate`);
+    const display = $(`#${prefix}DateRangeDisplay`);
+    const daysCount = $(`#${prefix}DaysCount`);
     if (!startInput || !endInput || !display || !daysCount) return;
 
     try {
@@ -784,56 +786,52 @@ function calculateDateRange() {
     }
 }
 
-// ===== [แก้ไข] MODAL CALC (สำหรับคำนวณยอดสรุปใน Modal) =====
-function updateModalCalc() {
-    // 1. ดึงค่า Input
-    const profitInput = $('#modalProfit');
-    const rateInput = $('#modalRate');
-    const rebateBaseSelect = $('#modalRebateBase');
-    const rebateTypeHidden = $('#modalRebateTypeHidden');
-    const rebateRateInput = $('#modalRebateRate');
-    const rebateFixedInput = $('#modalRebateFixed');
+// ===== [แก้ไข] MODAL CALC (รองรับ 2 Modals) =====
+function updateModalCalc(prefix) {
+    if (prefix === 'dividend') {
+        const profitInput = $('#modalProfit');
+        const rateInput = $('#modalRate');
+        const totalDisplay = $('#modalTotal');
+        const totalHidden = $('#modalTotalHidden');
+        if (!profitInput || !rateInput || !totalDisplay || !totalHidden) return;
+        const profit = parseFloat(profitInput.value || '0');
+        const rate = parseFloat(rateInput.value || '0');
+        const totalDividend = profit * (rate / 100);
+        totalDisplay.value = '฿' + totalDividend.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        totalHidden.value = totalDividend.toFixed(2);
+    } else if (prefix === 'rebate') {
+        const profitInput = $('#rebateModalProfit');
+        const rebateBaseSelect = $('#modalRebateBase');
+        const rebateTypeHidden = $('#modalRebateTypeHidden');
+        const rebateRateInput = $('#modalRebateRate');
+        const rebateFixedInput = $('#modalRebateFixed');
+        const rebateTotalDisplay = $('#modalRebateTotal');
+        const rebateValueHidden = $('#modalRebateValueHidden');
+        const rebateTotalHidden = $('#modalRebateTotalHidden');
+        if (!profitInput || !rebateBaseSelect || !rebateTotalDisplay) return;
 
-    // 2. ดึงค่า Output
-    const totalDisplay = $('#modalTotal');
-    const totalHidden = $('#modalTotalHidden');
-    const rebateTotalDisplay = $('#modalRebateTotal');
-    const rebateValueHidden = $('#modalRebateValueHidden');
-
-    if (!profitInput || !rateInput || !totalDisplay || !totalHidden || !rebateBaseSelect || !rebateTotalDisplay) return;
-
-    // 3. คำนวณปันผลตามหุ้น
-    const profit = parseFloat(profitInput.value || '0');
-    const rate = parseFloat(rateInput.value || '0');
-    const totalDividend = profit * (rate / 100);
-
-    totalDisplay.value = '฿' + totalDividend.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    totalHidden.value = totalDividend.toFixed(2);
-
-    // 4. คำนวณงบเฉลี่ยคืน
-    const reserveFund = profit * 0.10;
-    const welfareFund = profit * 0.05;
-    const netAvailable = profit - reserveFund - welfareFund; // 85%
-
-    const rebateBase = rebateBaseSelect.value || 'profit';
-    const rebateType = rebateTypeHidden.value || 'rate';
-    const rebateRate = parseFloat(rebateRateInput.value || '0');
-    const rebateFixed = parseFloat(rebateFixedInput.value || '0');
-
-    const baseAmt = (rebateBase === 'net') ? Math.max(0, netAvailable) : profit;
-    let rebateBudget = 0;
-    let rebateValue = 0; // ค่าที่จะส่งไป PHP
-
-    if (rebateType === 'fixed') {
-        rebateBudget = Math.max(0, rebateFixed || 0);
-        rebateValue = rebateBudget;
-    } else { // rate
-        rebateBudget = Math.max(0, baseAmt * (rebateRate / 100));
-        rebateValue = rebateRate;
+        const profit = parseFloat(profitInput.value || '0');
+        const reserveFund = profit * 0.10;
+        const welfareFund = profit * 0.05;
+        const netAvailable = profit - reserveFund - welfareFund;
+        const rebateBase = rebateBaseSelect.value || 'profit';
+        const rebateType = rebateTypeHidden.value || 'rate';
+        const rebateRate = parseFloat(rebateRateInput.value || '0');
+        const rebateFixed = parseFloat(rebateFixedInput.value || '0');
+        const baseAmt = (rebateBase === 'net') ? Math.max(0, netAvailable) : profit;
+        let rebateBudget = 0;
+        let rebateValue = 0;
+        if (rebateType === 'fixed') {
+            rebateBudget = Math.max(0, rebateFixed || 0);
+            rebateValue = rebateBudget;
+        } else {
+            rebateBudget = Math.max(0, baseAmt * (rebateRate / 100));
+            rebateValue = rebateRate;
+        }
+        rebateTotalDisplay.value = '฿' + rebateBudget.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        rebateValueHidden.value = rebateValue.toFixed(4);
+        rebateTotalHidden.value = rebateBudget.toFixed(2); // ส่งยอดรวมไปด้วย
     }
-
-    rebateTotalDisplay.value = '฿' + rebateBudget.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    rebateValueHidden.value = rebateValue.toFixed(4); // ส่งค่า % หรือ บาท
 }
 
 // [เพิ่ม] Function สลับประเภทการกรอกเฉลี่ยคืนใน Modal
@@ -841,24 +839,19 @@ function updateModalRebateType(selectedType) {
     const hiddenInput = $('#modalRebateTypeHidden');
     const rateInput = $('#modalRebateRate');
     const fixedInput = $('#modalRebateFixed');
-
     if (!hiddenInput || !rateInput || !fixedInput) return;
-
     hiddenInput.value = selectedType;
-
     if (selectedType === 'rate') {
-        fixedInput.value = ''; // Clear the other input
+        fixedInput.value = '';
         rateInput.disabled = false;
         fixedInput.disabled = true;
-    } else { // fixed
-        rateInput.value = ''; // Clear the other input
+    } else {
+        rateInput.value = '';
         fixedInput.disabled = false;
         rateInput.disabled = true;
     }
-    // คำนวณใหม่ทุกครั้งที่เปลี่ยน
-    updateModalCalc();
+    updateModalCalc('rebate'); // คำนวณใหม่
 }
-
 
 // ===== MEMBER HISTORY (คงเดิม) =====
 async function viewMemberHistory(memberKey) {
@@ -880,6 +873,7 @@ async function viewMemberHistory(memberKey) {
   historyModal.show();
 
   try {
+      // [แก้ไข] ต้องอัปเดตไฟล์นี้ให้ดึงประวัติ *ทั้งปันผลและเฉลี่ยคืน*
       const response = await fetch(`dividend_member_history.php?member_id=${memberId}&member_type=${memberType}`);
       if (!response.ok) throw new Error(`ไม่สามารถดึงข้อมูลได้ (HTTP ${response.status})`);
       const data = await response.json();
@@ -929,21 +923,22 @@ async function viewMemberHistory(memberKey) {
 
 // ===== DIVIDEND ACTIONS (คงเดิม) =====
 function viewDividendDetails(periodId) {
-    // [แก้ไข] เปลี่ยนเป็นใช้ periodId แทน year
-    // คุณอาจจะต้องสร้างหน้าใหม่ หรือปรับ report.php ให้รองรับ
-    window.location.href = `report.php?type=dividend_period&period_id=${periodId}`; // Example
+    window.location.href = `report.php?type=dividend_period&period_id=${periodId}`;
+}
+// [เพิ่ม] Function สำหรับดูรายละเอียดเฉลี่ยคืน
+function viewRebateDetails(periodId) {
+    // !!! ต้องสร้างหน้านี้ หรือปรับ report.php !!!
+    window.location.href = `report.php?type=rebate_period&period_id=${periodId}`;
 }
 
 async function processPayout(periodId, csrfToken) {
     const period = dividendPeriodsData.find(p => p.id === periodId);
-    if (!confirm(`ยืนยันการจ่ายปันผลปี ${period?.year || periodId}?\n\nสถานะจะเปลี่ยนเป็น "จ่ายแล้ว" และไม่สามารถย้อนกลับได้`)) {
-        return;
-    }
+    if (!confirm(`ยืนยันการจ่ายปันผลปี ${period?.year || periodId}?\n\nสถานะจะเปลี่ยนเป็น "จ่ายแล้ว" และไม่สามารถย้อนกลับได้`)) { return; }
     try {
         const response = await fetch('dividend_payout.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify({ period_id: periodId, csrf_token: csrfToken }) // [แก้ไข] ส่ง period_id
+            body: JSON.stringify({ period_id: periodId, csrf_token: csrfToken })
         });
         const data = await response.json();
         if (data.ok) {
@@ -956,14 +951,11 @@ async function processPayout(periodId, csrfToken) {
     }
 }
 
-// [เพิ่ม] Function Approve Dividend
 async function approveDividend(periodId, csrfToken) {
     const period = dividendPeriodsData.find(p => p.id === periodId);
-     if (!confirm(`ยืนยันการอนุมัติงวดปันผลปี ${period?.year || periodId}?\n\nสถานะจะเปลี่ยนเป็น "อนุมัติแล้ว" และจะสามารถกดจ่ายปันผลได้`)) {
-        return;
-    }
+     if (!confirm(`ยืนยันการอนุมัติงวดปันผลปี ${period?.year || periodId}?\n\nสถานะจะเปลี่ยนเป็น "อนุมัติแล้ว"`)) { return; }
      try {
-        const response = await fetch('dividend_approve.php', { // Endpoint นี้คุณต้องสร้างเอง
+        const response = await fetch('dividend_approve.php', { // !!! ต้องสร้างไฟล์นี้ !!!
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify({ period_id: periodId, csrf_token: csrfToken })
@@ -978,22 +970,24 @@ async function approveDividend(periodId, csrfToken) {
         toast('เกิดข้อผิดพลาด: ' + error.message, false);
     }
 }
+// [หมายเหตุ] คุณต้องสร้างฟังก์ชัน approveRebate() และ processRebatePayout() ที่คล้ายกันสำหรับแท็บเฉลี่ยคืน
 
 
 // ===== EXPORT (คงเดิม) =====
 function exportMembers() {
-  const headers = ['รหัส', 'ชื่อ', 'ประเภท', 'หุ้น', 'รวมรับปันผล'];
+  const headers = ['รหัส', 'ชื่อ', 'ประเภท', 'หุ้น', 'รวมรับปันผล', 'รวมรับเฉลี่ยคืน'];
   const rows = [headers];
   $$('#membersTable tbody tr').forEach(tr => {
       if (tr.style.display === 'none') return;
       const cells = tr.querySelectorAll('td');
-      if (cells.length >= 5) {
+      if (cells.length >= 6) { // [แก้ไข] เช็คจำนวนคอลัมน์
           rows.push([
-              cells[0].textContent.trim(),
-              cells[1].textContent.trim(),
-              cells[2].textContent.trim(),
-              tr.dataset.shares,
-              cells[cells.length - 2].textContent.replace(/[฿,]/g, '').trim()
+              cells[0].textContent.trim(), // Code
+              cells[1].textContent.trim(), // Name
+              cells[2].textContent.trim(), // Type
+              tr.dataset.shares,           // Shares
+              cells[4].textContent.replace(/[฿,]/g, '').trim(), // Total Dividend
+              cells[5].textContent.replace(/[฿,]/g, '').trim()  // Total Rebate
           ]);
       }
   });
@@ -1009,35 +1003,32 @@ function exportMembers() {
 
 // ===== INITIALIZE =====
 document.addEventListener('DOMContentLoaded', () => {
-    // Modal Date Range listeners
-    const startDateInput = $('#startDate');
-    const endDateInput = $('#endDate');
-    if (startDateInput) startDateInput.addEventListener('change', calculateDateRange);
-    if (endDateInput)   endDateInput.addEventListener('change', calculateDateRange);
-    calculateDateRange();
-
-    // [เพิ่ม] Modal Rebate Type listeners
-    const modalRebateRateInput = $('#modalRebateRate');
-    const modalRebateFixedInput = $('#modalRebateFixed');
-    if(modalRebateRateInput) modalRebateRateInput.addEventListener('input', () => updateModalRebateType('rate'));
-    if(modalRebateFixedInput) modalRebateFixedInput.addEventListener('input', () => updateModalRebateType('fixed'));
-    updateModalRebateType('rate'); // เริ่มต้นโดยเปิดใช้งาน Rate
-
-    // [เพิ่ม] Modal Calc listeners
-    $('#modalProfit')?.addEventListener('input', updateModalCalc);
-    $('#modalRate')?.addEventListener('input', updateModalCalc);
-    $('#modalRebateBase')?.addEventListener('change', updateModalCalc);
+    // Listeners for Dividend Modal
+    $('#dividendStartDate')?.addEventListener('change', () => calculateDateRange('dividend'));
+    $('#dividendEndDate')?.addEventListener('change', () => calculateDateRange('dividend'));
+    calculateDateRange('dividend');
+    $('#modalProfit')?.addEventListener('input', () => updateModalCalc('dividend'));
+    $('#modalRate')?.addEventListener('input', () => updateModalCalc('dividend'));
+    
+    // Listeners for Rebate Modal
+    $('#rebateStartDate')?.addEventListener('change', () => calculateDateRange('rebate'));
+    $('#rebateEndDate')?.addEventListener('change', () => calculateDateRange('rebate'));
+    calculateDateRange('rebate');
+    $('#rebateModalProfit')?.addEventListener('input', () => updateModalCalc('rebate'));
+    $('#modalRebateBase')?.addEventListener('change', () => updateModalCalc('rebate'));
+    $('#modalRebateRate')?.addEventListener('input', () => updateModalRebateType('rate'));
+    $('#modalRebateFixed')?.addEventListener('input', () => updateModalRebateType('fixed'));
+    updateModalRebateType('rate'); // Default
 
     // Activate tab based on URL hash
-    const hash = window.location.hash;
-    const tabTrigger = hash ? $(`button[data-bs-target="${hash}"]`) : $('#periods-tab');
+    const hash = window.location.hash || '#periods-panel'; // Default to first tab
+    const tabTrigger = $(`button[data-bs-target="${hash}"]`);
     if (tabTrigger) {
         bootstrap.Tab.getOrCreateInstance(tabTrigger).show();
     }
      // Add listener to update URL hash when tab changes
      $$('button[data-bs-toggle="tab"]').forEach(tabEl => {
         tabEl.addEventListener('shown.bs.tab', event => {
-            // ใช้ history.pushState เพื่อเปลี่ยน URL โดยไม่รีโหลดหน้า
             history.pushState(null, null, event.target.dataset.bsTarget);
         })
     });
