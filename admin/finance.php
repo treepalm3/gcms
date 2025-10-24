@@ -835,13 +835,30 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                     <option value="expense">ค่าใช้จ่าย</option>
                 </select>
                 <select id="filterCategory" class="form-select" style="width:auto;">
-                    <option value="">ทุกหมวดหมู่</option>
-                    <?php
-                      $allCats = array_unique(array_merge($categories['income'],$categories['expense']));
-                      sort($allCats, SORT_NATURAL | SORT_FLAG_CASE);
-                      foreach($allCats as $c) echo '<option value="'.htmlspecialchars($c).'">'.htmlspecialchars($c).'</option>';
-                    ?>
-                </select>
+                      <option value="">ทุกหมวดหมู่</option>
+                      <?php
+                        // กำหนดหมวดหมู่หลักที่ต้องการ และหมวดหมู่ที่ไม่ต้องการแสดง
+                        $coreCategories = ['ค่าสาธารณูปโภค', 'เงินลงทุน', 'รายได้อื่น', 'จ่ายเงินรายวัน'];
+                        $excludedCategories = ['เงินเดือน', 'ต้นทุนซื้อน้ำมัน']; // เพิ่มหมวดหมู่อื่นๆ ที่ไม่ต้องการที่นี่
+
+                        // ดึงหมวดหมู่ที่มีอยู่จากข้อมูล
+                        $existingCats = array_unique(array_merge($categories['income'],$categories['expense']));
+
+                        // รวมหมวดหมู่หลักกับหมวดหมู่ที่มีอยู่ ลบตัวซ้ำ แล้วกรองตัวที่ไม่ต้องการออก
+                        $finalCats = array_unique(array_merge($coreCategories, $existingCats));
+                        $finalCats = array_filter($finalCats, function($cat) use ($excludedCategories) {
+                            return !in_array($cat, $excludedCategories);
+                        });
+
+                        // เรียงลำดับรายการสุดท้าย
+                        sort($finalCats, SORT_NATURAL | SORT_FLAG_CASE);
+
+                        // สร้าง <option>
+                        foreach($finalCats as $c) {
+                            echo '<option value="'.htmlspecialchars($c).'">'.htmlspecialchars($c).'</option>';
+                        }
+                      ?>
+                  </select>
               </div>
               <div class="d-flex gap-2">
                 <button class="btn btn-outline-secondary" id="btnTxnShowAll" title="ล้างตัวกรอง"><i class="bi bi-arrow-clockwise"></i></button>
