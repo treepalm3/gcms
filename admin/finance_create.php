@@ -76,11 +76,12 @@ try {
 
   $pdo->beginTransaction();
 
+  // [แก้ไข] ลบ updated_at ออกจาก INSERT statement
   $ins = $pdo->prepare("
     INSERT INTO financial_transactions
-      (transaction_code, transaction_date, type, category, description, amount, reference_id, user_id, created_at, updated_at, station_id)
+      (transaction_code, transaction_date, type, category, description, amount, reference_id, user_id, created_at, station_id)
     VALUES
-      (:code, :dt, :type, :cat, :desc, :amt, :ref, :uid, NOW(), NOW(), :sid)
+      (:code, :dt, :type, :cat, :desc, :amt, :ref, :uid, NOW(), :sid)
   ");
 
   $success = $ins->execute([
@@ -93,6 +94,7 @@ try {
     ':ref'  => ($reference !== '' ? $reference : null),
     ':uid'  => (int)$_SESSION['user_id'],
     ':sid'  => (int)$stationId, // บันทึก station_id
+    // ไม่ต้องมี parameter สำหรับ updated_at แล้ว
   ]);
 
   if ($success) {
