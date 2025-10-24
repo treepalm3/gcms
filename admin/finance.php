@@ -65,23 +65,21 @@ $today = new DateTime('today');
 $from = null; $to = null;
 
 if ($in_from && $in_to) {
-  $from = new DateTime($in_from);
-  $to = new DateTime($in_to);
-  $quick = ''; // Mark as custom range
+    $from = new DateTime($in_from);
+    $to = new DateTime($in_to);
 } else {
-  switch ($quick) {
-    case 'today':      $from=$today; $to=clone $today; break;
-    case 'yesterday':  $from=(clone $today)->modify('-1 day'); $to=(clone $today)->modify('-1 day'); break;
-    case '30d':        $from=(clone $today)->modify('-29 day'); $to=$today; break;
-    case 'this_month': $from=new DateTime(date('Y-m-01')); $to=$today; break;
-    case 'last_month': $from=new DateTime(date('Y-m-01', strtotime('first day of last month'))); $to=new DateTime(date('Y-m-t', strtotime('last day of last month'))); break;
-    case 'this_year':  $from=new DateTime(date('Y-01-01')); $to=$today; break;
-    case 'all':        $from=null; $to=null; break;
-    default:           $from=(clone $today)->modify('-6 day'); $to=$today; $quick = '7d'; break; // Default 7 วัน
-  }
+    switch ($quick) {
+      case 'today':      $from=$today; $to=clone $today; break;
+      case 'yesterday':  $from=(clone $today)->modify('-1 day'); $to=(clone $today)->modify('-1 day'); break;
+      case '30d':        $from=(clone $today)->modify('-29 day'); $to=$today; break;
+      case 'this_month': $from=new DateTime(date('Y-m-01')); $to=$today; break;
+      case 'last_month': $from=new DateTime(date('Y-m-01', strtotime('first day of last month'))); $to=new DateTime(date('Y-m-t', strtotime('last day of last month'))); break;
+      case 'this_year':  $from=new DateTime(date('Y-01-01')); $to=$today; break;
+      case 'all':        $from=null; $to=null; break;
+      default:           $from=(clone $today)->modify('-6 day'); $to=$today; $quick = '7d'; break; // Default 7 วัน
+    }
 }
-
-if ($from && $to && $to < $from) { list($from, $to) = [$to, $from]; }
+if ($from && $to && $to < $from) { $tmp=$from; $from=$to; $to=$tmp; }
 if ($from && $to) { // จำกัดช่วงสูงสุด ~1 ปี
   $diffDays = (int)$from->diff($to)->format('%a');
   if ($diffDays > 366) { $from=(clone $to)->modify('-366 day'); }
@@ -312,9 +310,16 @@ try {
   $categories = ['income'=>['ขายน้ำมัน'],'expense'=>['Error']];
 }
 
-// ตัดเหลือ 7 รายการสำหรับแสดงผล
+// Pagination - รายการการเงิน
+$per_fin = 7;
+$page_fin = max(1, (int)($_GET['page_fin'] ?? 1));
+$offset_fin = ($page_fin - 1) * $per_fin;
+
 $total_transactions_all = count($transactions);
-$transactions_display = array_slice($transactions, 0, 7);
+$transactions_display = array_slice($transactions, $offset_fin, $per_fin);
+$total_pages_fin = max(1, (int)ceil($total_transactions_all / $per_fin));
+$fin_from_i = $total_transactions_all ? $offset_fin + 1 : 0;
+$fin_to_i   = min($offset_fin + $per_fin, $total_transactions_all);
 
 
 /* ===== ดึง "รายการขาย" (ผูกกับช่วงวันที่ส่วนกลาง) ===== */
@@ -325,7 +330,7 @@ try {
 
   if ($rangeFromStr) { $sw.=" AND DATE(s.sale_date) >= :f"; $sp[':f']=$rangeFromStr; }
   if ($rangeToStr)   { $sw.=" AND DATE(s.sale_date) <= :t"; $sp[':t']=$rangeToStr; }
-
+  
   $ss = $pdo->prepare("
     SELECT s.sale_date AS date, s.sale_code AS code, s.total_amount AS amount,
            CONCAT('ขายเชื้อเพลิง (', COALESCE(s.payment_method,''), ')') AS description,
@@ -352,9 +357,16 @@ try {
   $sales_rows = []; $sales_total = 0; $sales_count = 0;
 }
 
-// ตัดเหลือ 7 รายการสำหรับแสดงผล
+// Pagination - รายการขาย
+$per_sales = 7;
+$page_sales = max(1, (int)($_GET['page_sales'] ?? 1));
+$offset_sales = ($page_sales - 1) * $per_sales;
+
 $total_sales_all = count($sales_rows);
-$sales_rows_display = array_slice($sales_rows, 0, 7);
+$sales_rows_display = array_slice($sales_rows, $offset_sales, $per_sales);
+$total_pages_sales = max(1, (int)ceil($total_sales_all / $per_sales));
+$sales_from_i = $total_sales_all ? $offset_sales + 1 : 0;
+$sales_to_i   = min($offset_sales + $per_sales, $total_sales_all);
 
 
 /* ===== ดึง "รายการจ่าย" (ผูกกับช่วงวันที่ส่วนกลาง) ===== */
@@ -367,7 +379,7 @@ try {
   $whereR = "WHERE 1=1";
   if ($rangeFromStr) { $whereR.=" AND DATE(fr.received_date) >= :f"; $paramsR[':f']=$rangeFromStr; }
   if ($rangeToStr)   { $whereR.=" AND DATE(fr.received_date) <= :t"; $paramsR[':t']=$rangeToStr; }
-
+  
   $qR = $pdo->prepare("
     SELECT
       'RCV' AS origin,
@@ -444,9 +456,17 @@ try {
   error_log("Payment rows error: " . $e->getMessage());
 }
 
-// ตัดเหลือ 7 รายการสำหรับแสดงผล
+// Pagination - รายการจ่าย
+$per_pay = 7;
+$page_pay = max(1, (int)($_GET['page_pay'] ?? 1));
+$offset_pay = ($page_pay - 1) * $per_pay;
+
 $total_pay_all = count($pay_rows);
-$pay_rows_display = array_slice($pay_rows, 0, 7);
+$pay_rows_display = array_slice($pay_rows, $offset_pay, $per_pay);
+$total_pages_pay = max(1, (int)ceil($total_pay_all / $per_pay));
+$pay_from_i = $total_pay_all ? $offset_pay + 1 : 0;
+$pay_to_i   = min($offset_pay + $per_pay, $total_pay_all);
+
 
 
 /* ===== กราฟแนวโน้ม (รายวัน) ===== */
@@ -577,6 +597,9 @@ $date_query_string = '';
 if ($rangeFromStr) { $date_query_string .= '&from=' . urlencode($rangeFromStr); }
 if ($rangeToStr)   { $date_query_string .= '&to='   . urlencode($rangeToStr); }
 
+// เก็บพารามิเตอร์เดิมไว้ (คงช่วงวันที่/ตัวกรอง)
+$base_qs = $_GET;
+unset($base_qs['page_fin'], $base_qs['page_sales'], $base_qs['page_pay']); // จะเติมใหม่ในแต่ละแท็บ
 
 $role_th_map = ['admin'=>'ผู้ดูแลระบบ','manager'=>'ผู้บริหาร','employee'=>'พนักงาน','member'=>'สมาชิกสหกรณ์','committee'=>'กรรมการ'];
 $current_role_th = $role_th_map[$current_role] ?? 'ผู้ใช้งาน';
@@ -702,39 +725,35 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
         </div>
       </div>
 
-      <div class="card card-body shadow-sm filter-bar-card mb-4">
-        <form method="GET" action="">
-            <div class="row g-2 align-items-end">
-                <div class="col-md">
+      <div class="card card-body shadow-sm filter-bar-card">
+        <form method="GET" action="" class="d-flex flex-wrap align-items-end gap-2">
+            <div class="flex-grow-1" style="min-width: 200px;">
                 <label for="gp_from" class="form-label small fw-bold">จากวันที่</label>
                 <input type="date" class="form-control form-control-sm" name="gp_from" id="gp_from" value="<?= htmlspecialchars($rangeFromStr ?? '') ?>">
-                </div>
-                <div class="col-md">
+            </div>
+            <div class="flex-grow-1" style="min-width: 200px;">
                 <label for="gp_to" class="form-label small fw-bold">ถึงวันที่</label>
                 <input type="date" class="form-control form-control-sm" name="gp_to" id="gp_to" value="<?= htmlspecialchars($rangeToStr ?? '') ?>">
+            </div>
+            <div class="flex-grow-1" style="min-width: 300px;">
+                <label class="form-label small d-none d-md-block">&nbsp;</label>
+                <div class="btn-group w-100" role="group">
+                    <a href="?gp_quick=7d" class="btn btn-sm btn-outline-secondary <?= $quick === '7d' ? 'active' : '' ?>">7 วัน</a>
+                    <a href="?gp_quick=30d" class="btn btn-sm btn-outline-secondary <?= $quick === '30d' ? 'active' : '' ?>">30 วัน</a>
+                    <a href="?gp_quick=this_month" class="btn btn-sm btn-outline-secondary <?= $quick === 'this_month' ? 'active' : '' ?>">เดือนนี้</a>
+                    <a href="?gp_quick=last_month" class="btn btn-sm btn-outline-secondary <?= $quick === 'last_month' ? 'active' : '' ?>">เดือนก่อน</a>
+                    <a href="?gp_quick=this_year" class="btn btn-sm btn-outline-secondary <?= $quick === 'this_year' ? 'active' : '' ?>">ปีนี้</a>
                 </div>
-                <div class="col-md">
-                    <label for="gp_quick" class="form-label small fw-bold">หรือเลือกช่วง</label>
-                    <select name="gp_quick" id="gp_quick" class="form-select form-select-sm">
-                        <option value="" <?= !$quick || $quick === 'custom' ? 'selected' : '' ?>>-- กำหนดเอง --</option>
-                        <option value="7d" <?= $quick === '7d' ? 'selected' : '' ?>>7 วันล่าสุด</option>
-                        <option value="30d" <?= $quick === '30d' ? 'selected' : '' ?>>30 วันล่าสุด</option>
-                        <option value="this_month" <?= $quick === 'this_month' ? 'selected' : '' ?>>เดือนนี้</option>
-                        <option value="last_month" <?= $quick === 'last_month' ? 'selected' : '' ?>>เดือนที่แล้ว</option>
-                        <option value="this_year" <?= $quick === 'this_year' ? 'selected' : '' ?>>ปีนี้</option>
-                        <option value="all" <?= $quick === 'all' ? 'selected' : '' ?>>ทั้งหมด</option>
-                    </select>
-                </div>
-                <div class="col-md-auto">
-                    <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-search"></i> กรอง</button>
-                </div>
+            </div>
+            <div class="flex-grow-0">
+                <label class="form-label small d-none d-md-block">&nbsp;</label>
+                <button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-search"></i> กรองข้อมูล</button>
             </div>
         </form>
       </div>
 
       
-       <div class="row g-3 my-4">
-        <div class="col-lg-4">
+       <div class="row g-3 my-4"> <div class="col-lg-4">
           <div class="card card-body shadow-sm text-center h-100">
             <h6 class="text-muted"><i class="bi bi-currency-dollar me-2"></i>รายได้รวม (ช่วง)</h6>
             <h3 class="text-success mb-0">฿<?= nf($total_income) ?></h3>
@@ -754,29 +773,32 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
         </div>
       </div>
 
-      <div class="mb-4">
-        <h5 class="mb-3"><i class="bi bi-bar-chart-line-fill me-2"></i>สรุปภาพรวม (ตามช่วงที่เลือก)</h5>
-        
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light border-bottom-0">
+          <h5 class="mb-0"><i class="bi bi-bar-chart-line-fill me-2"></i>สรุปภาพรวม (ตามช่วงที่เลือก)</h5>
+        </div>
+        <div class="card-body">
           <div class="row g-3">
             <div class="col-lg-4 col-md-6">
-              <div class="panel h-100">
+              <div class="card card-body h-100">
                 <h6 class="mb-3"><i class="bi bi-pie-chart me-1"></i> สัดส่วนรายได้-ค่าใช้จ่าย</h6>
                 <div class="chart-container"><canvas id="pieChart"></canvas></div>
               </div>
             </div>
             <div class="col-lg-4 col-md-6">
-              <div class="panel h-100">
+              <div class="card card-body h-100">
                 <h6 class="mb-3"><i class="bi bi-graph-up me-1"></i> แนวโน้มการเงิน</h6>
                 <div class="chart-container"><canvas id="lineChart"></canvas></div>
               </div>
             </div>
             <div class="col-lg-4 col-md-12">
-              <div class="panel h-100">
+              <div class="card card-body h-100">
                 <h6 class="mb-3"><i class="bi bi-cash-coin me-1"></i> แนวโน้มกำไรขั้นต้น (GP)</h6>
                 <div class="chart-container"><canvas id="gpBarChart"></canvas></div>
               </div>
             </div>
           </div>
+        </div>
       </div>
 
 
@@ -823,12 +845,16 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
               </div>
               <div class="d-flex gap-2">
                 <button class="btn btn-outline-secondary" id="btnTxnShowAll" title="ล้างตัวกรอง"><i class="bi bi-arrow-clockwise"></i></button>
-              </div>
+                </div>
             </div>
-            <div class="panel">
+            <div class="card shadow-sm">
+              <div class="card-header bg-light border-bottom-0">
                 <div class="d-flex justify-content-between align-items-center">
                   <h6 class="mb-0"><i class="fa-solid fa-list-ul me-1"></i> รายการการเงิน (แสดง 7 รายการล่าสุด)</h6>
                   <?php if (!$has_ft): ?><span class="badge text-bg-secondary">โหมดอ่านอย่างเดียว (รวมจากยอดขาย/รับน้ำมัน)</span><?php endif; ?>
+                </div>
+              </div>
+              <div class="card-body p-0">
                 <div class="table-responsive">
                   <table class="table table-hover align-middle mb-0" id="txnTable">
                     <thead class="table-light">
@@ -884,19 +910,11 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                         <td class="d-none d-xl-table-cell"><?= htmlspecialchars($tx['created_by']) ?></td>
                         <td class="text-end pe-3">
                           <div class="btn-group">
-                            <div class="dropdown">
-                                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                    <i class="bi bi-three-dots"></i>
-                                </button>
-                                <ul class="dropdown-menu dropdown-menu-end">
-                                    <li><a class="dropdown-item btnReceipt" href="#"><i class="bi bi-receipt me-2"></i>ดูใบเสร็จ</a></li>
-                                    <?php if ($has_ft): ?>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item btnEdit" href="#"><i class="bi bi-pencil-square me-2"></i>แก้ไข</a></li>
-                                    <li><a class="dropdown-item btnDel text-danger" href="#"><i class="bi bi-trash me-2"></i>ลบ</a></li>
-                                    <?php endif; ?>
-                                </ul>
-                            </div>
+                            <button class="btn btn-sm btn-outline-secondary btnReceipt" title="ดูใบเสร็จ"><i class="bi bi-receipt"></i></button>
+                            <?php if ($has_ft): ?>
+                              <button class="btn btn-sm btn-outline-primary btnEdit" title="แก้ไข"><i class="bi bi-pencil-square"></i></button>
+                              <button class="btn btn-sm btn-outline-danger btnDel" title="ลบ"><i class="bi bi-trash"></i></button>
+                            <?php endif; ?>
                           </div>
                         </td>
                       </tr>
@@ -904,13 +922,19 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                     </tbody>
                   </table>
                 </div>
-                <?php if ($total_transactions_all > 7): ?>
-                <div class="text-center mt-3">
-                    <a href="report.php?type=financial<?= $date_query_string ?>" class="btn btn-outline-primary btn-sm">
-                        ดูทั้งหมด <?= (int)$total_transactions_all ?> รายการ <i class="bi bi-arrow-right-short"></i>
-                    </a>
+              </div>           
+              <?php if ($total_pages_fin > 1): 
+                $qs_prev = http_build_query(array_merge($base_qs, ['tab'=>'financial','page_fin'=>$page_fin-1]));
+                $qs_next = http_build_query(array_merge($base_qs, ['tab'=>'financial','page_fin'=>$page_fin+1]));
+              ?>
+                <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
+                  <small class="text-muted">แสดง <?= $fin_from_i ?>–<?= $fin_to_i ?> จาก <?= (int)$total_transactions_all ?> รายการ</small>
+                  <div class="btn-group">
+                    <a class="btn btn-sm btn-outline-secondary <?= $page_fin<=1?'disabled':'' ?>" href="?<?= htmlspecialchars($qs_prev) ?>#stock-price-panel">ก่อนหน้า</a>
+                    <a class="btn btn-sm btn-outline-primary  <?= $page_fin>=$total_pages_fin?'disabled':'' ?>" href="?<?= htmlspecialchars($qs_next) ?>#stock-price-panel">ถัดไป</a>
+                  </div>
                 </div>
-                <?php endif; ?>
+              <?php endif; ?>        
             </div>
           </div>
 
@@ -926,11 +950,14 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                 </button>
               </div>
             </div>
-            <div class="panel">
+            <div class="card shadow-sm">
+              <div class="card-header bg-light border-bottom-0">
                 <div class="d-flex justify-content-between align-items-center">
                   <h6 class="mb-0"><i class="bi bi-cash-coin me-1"></i> รายการขาย (แสดง 7 รายการล่าสุด)</h6>
                   <span class="muted">รวม <?= (int)$sales_count ?> รายการ | ยอดขาย ฿<?= nf($sales_total) ?></span>
                 </div>
+              </div>
+              <div class="card-body p-0">
                 <div class="table-responsive">
                   <table class="table table-hover align-middle mb-0" id="salesTable">
                     <thead class="table-light"><tr><th>วันที่</th><th>รหัสขาย</th><th>รายละเอียด</th><th class="text-end">จำนวนเงิน</th><th class="d-none d-lg-table-cell">ผู้บันทึก</th><th class="text-end">ใบเสร็จ</th></tr></thead>
@@ -964,13 +991,19 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                     </tbody>
                   </table>
                 </div>
-                <?php if ($total_sales_all > 7): ?>
-                <div class="text-center mt-3">
-                    <a href="report.php?type=sales<?= $date_query_string ?>" class="btn btn-outline-primary btn-sm">
-                        ดูทั้งหมด <?= (int)$total_sales_all ?> รายการ <i class="bi bi-arrow-right-short"></i>
-                    </a>
+              </div>
+              <?php if ($total_pages_sales > 1): 
+                $qs_prev = http_build_query(array_merge($base_qs, ['tab'=>'sales','page_sales'=>$page_sales-1]));
+                $qs_next = http_build_query(array_merge($base_qs, ['tab'=>'sales','page_sales'=>$page_sales+1]));
+              ?>
+                <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
+                  <small class="text-muted">แสดง <?= $sales_from_i ?>–<?= $sales_to_i ?> จาก <?= (int)$total_sales_all ?> รายการ</small>
+                  <div class="btn-group">
+                    <a class="btn btn-sm btn-outline-secondary <?= $page_sales<=1?'disabled':'' ?>" href="?<?= htmlspecialchars($qs_prev) ?>#price-panel">ก่อนหน้า</a>
+                    <a class="btn btn-sm btn-outline-primary  <?= $page_sales>=$total_pages_sales?'disabled':'' ?>" href="?<?= htmlspecialchars($qs_next) ?>#price-panel">ถัดไป</a>
+                  </div>
                 </div>
-                <?php endif; ?>
+              <?php endif; ?>  
             </div>
           </div>
 
@@ -986,11 +1019,14 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                 </button>
               </div>
             </div>
-            <div class="panel">
+            <div class="card shadow-sm">
+              <div class="card-header bg-light border-bottom-0">
                 <div class="d-flex justify-content-between align-items-center">
                   <h6 class="mb-0"><i class="bi bi-credit-card-2-back me-1"></i> รายการจ่าย: รับเข้าคลัง/เข้าถัง (แสดง 7 รายการล่าสุด)</h6>
                   <span class="muted">รวม <?= (int)$pay_count ?> รายการ | ยอดจ่าย ฿<?= nf($pay_total) ?></span>
                 </div>
+              </div>
+              <div class="card-body p-0">
                 <div class="table-responsive">
                   <table class="table table-hover align-middle mb-0" id="payTable">
                     <thead class="table-light"><tr><th>วันที่</th><th>ประเภท</th><th>รหัส</th><th>รายละเอียด</th><th class="text-end">จำนวนเงิน</th><th class="d-none d-lg-table-cell">ผู้บันทึก</th><th class="text-end">ใบเสร็จ</th></tr></thead>
@@ -1031,13 +1067,19 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                     </tbody>
                   </table>
                 </div>
-                <?php if ($total_pay_all > 7): ?>
-                <div class="text-center mt-3">
-                    <a href="report.php?type=payments<?= $date_query_string ?>" class="btn btn-outline-primary btn-sm">
-                        ดูทั้งหมด <?= (int)$total_pay_all ?> รายการ <i class="bi bi-arrow-right-short"></i>
-                    </a>
+              </div>
+              <?php if ($total_pages_pay > 1): 
+                $qs_prev = http_build_query(array_merge($base_qs, ['tab'=>'payments','page_pay'=>$page_pay-1]));
+                $qs_next = http_build_query(array_merge($base_qs, ['tab'=>'payments','page_pay'=>$page_pay+1]));
+              ?>
+                <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
+                  <small class="text-muted">แสดง <?= $pay_from_i ?>–<?= $pay_to_i ?> จาก <?= (int)$total_pay_all ?> รายการ</small>
+                  <div class="btn-group">
+                    <a class="btn btn-sm btn-outline-secondary <?= $page_pay<=1?'disabled':'' ?>" href="?<?= htmlspecialchars($qs_prev) ?>#receive-panel">ก่อนหน้า</a>
+                    <a class="btn btn-sm btn-outline-primary  <?= $page_pay>=$total_pages_pay?'disabled':'' ?>" href="?<?= htmlspecialchars($qs_next) ?>#receive-panel">ถัดไป</a>
+                  </div>
                 </div>
-                <?php endif; ?>
+              <?php endif; ?> 
             </div>
           </div>
 
@@ -1244,9 +1286,8 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   };
 
   document.querySelectorAll('.btnReceipt').forEach(btn=>{
-    btn.addEventListener('click', (e)=>{
+    btn.addEventListener('click', ()=>{
       const tr = btn.closest('tr');
-      e.preventDefault();
       const direct = tr?.dataset?.receiptUrl;
       const type   = tr?.dataset?.receiptType;
       const code   = tr?.dataset?.receiptCode;
@@ -1342,12 +1383,11 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 
   if (canEdit) {
     document.querySelectorAll('#txnTable .btnEdit').forEach(btn=>{
-      btn.addEventListener('click', (e)=>{
-        e.preventDefault();
+      btn.addEventListener('click', ()=>{
         const tr = btn.closest('tr'); const d = tr.dataset;
         const dt = new Date(d.date);
         const dtString = dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0') + 'T' + String(dt.getHours()).padStart(2,'0') + ':' + String(dt.getMinutes()).padStart(2,'0');
-
+        
         document.getElementById('editTransactionCode').value = d.id;
         document.getElementById('editDate').value = dtString;
         document.getElementById('editType').value = d.type;
@@ -1360,8 +1400,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     });
 
     document.querySelectorAll('#txnTable .btnDel').forEach(btn=>{
-      btn.addEventListener('click', (e)=>{
-        e.preventDefault();
+      btn.addEventListener('click', ()=>{ 
         const tr=btn.closest('tr'); 
         const code = tr.dataset.id;
         document.getElementById('delTxnId').textContent = code; 
@@ -1376,6 +1415,15 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   const errMsg = urlParams.get('err');
   if (okMsg) { showToast(okMsg, true); window.history.replaceState({}, document.title, window.location.pathname + window.location.hash); }
   if (errMsg) { showToast(errMsg, false); window.history.replaceState({}, document.title, window.location.pathname + window.location.hash); }
+
+  // เปิดแท็บตามพารามิเตอร์ ?tab=financial|sales|payments
+  const params = new URLSearchParams(location.search);
+  const tab = params.get('tab');
+  const map = { financial:'#stock-price-panel', sales:'#price-panel', payments:'#receive-panel' };
+  if (tab && map[tab]) {
+    const trigger = document.querySelector(`[data-bs-target="${map[tab]}"]`);
+    if (trigger) bootstrap.Tab.getOrCreateInstance(trigger).show();
+  }
 
 })();
 </script>
