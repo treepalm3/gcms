@@ -30,7 +30,7 @@ $dividend_rate = (float)$_POST['dividend_rate'];
 $total_shares_at_time = (int)$_POST['total_shares_at_time'];
 $total_dividend_amount = (float)$_POST['total_dividend_amount'];
 $dividend_per_share = ($total_shares_at_time > 0) ? ($total_dividend_amount / $total_shares_at_time) : 0;
-$notes = trim($_POST['notes'] ?? '');
+// $notes = trim($_POST['notes'] ?? ''); // [ลบ] ไม่ต้องรับค่า notes แล้ว
 
 if ($year <= 2020 || empty($start_date) || empty($end_date) || $total_profit <= 0 || $dividend_rate <= 0 || $total_shares_at_time <= 0) {
     redirect_back('ข้อมูลไม่ถูกต้อง กรุณากรอกข้อมูลสำคัญให้ครบ', true);
@@ -47,16 +47,18 @@ try {
     }
 
     // 2. สร้างงวดปันผลหลัก
+    // [แก้ไข] ลบ 'notes' ออกจาก SQL
     $ins_period = $pdo->prepare("
         INSERT INTO dividend_periods
             (year, period_name, start_date, end_date, total_profit, dividend_rate,
-             total_shares_at_time, total_dividend_amount, dividend_per_share, status, created_at, approved_by, notes)
+             total_shares_at_time, total_dividend_amount, dividend_per_share, status, created_at, approved_by)
         VALUES
-            (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW(), ?, ?)
+            (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW(), ?)
     ");
+    // [แก้ไข] ลบ $notes ออกจาก execute
     $ins_period->execute([
         $year, $period_name, $start_date, $end_date, $total_profit, $dividend_rate,
-        $total_shares_at_time, $total_dividend_amount, $dividend_per_share, $_SESSION['full_name'], $notes
+        $total_shares_at_time, $total_dividend_amount, $dividend_per_share, $_SESSION['full_name']
     ]);
     $period_id = $pdo->lastInsertId();
 
