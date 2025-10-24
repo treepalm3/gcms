@@ -588,7 +588,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 <html lang="th">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>การเงินและบัญชี | <?= htmlspecialchars($site_name) ?></title>
 
   <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
@@ -596,73 +596,46 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
   <link rel="stylesheet" href="../assets/css/admin_dashboard.css" />
-
   <style>
-    :root{
-      --header-h: 56px;
-      --sticky-bg: #ffffffcc;
-      --radius: 12px;
-    }
-    body{ font-family: "Noto Sans Thai","Prompt",system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif; }
-    .navbar{ position: sticky; top: 0; z-index: 1030; }
-    /* Sticky filter bar */
-    .filter-bar{
-      position: sticky; top: var(--header-h); z-index: 1020;
-      background: var(--sticky-bg); backdrop-filter: saturate(180%) blur(8px);
-      border-bottom: 1px solid #e9ecef; padding: .75rem .75rem 1rem .75rem; margin-left: -0.75rem; margin-right:-0.75rem;
-    }
-    @media (min-width:992px){ .filter-bar{ top: 0; border-radius: var(--radius); margin: 0 0 1rem 0; } }
-
-    /* Cards grid */
-    .stats-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:1rem }
-    @media (max-width: 992px){ .stats-grid{ grid-template-columns:1fr } }
-    .stat-card{ background:#fff;border:1px solid #e9ecef;border-radius:var(--radius);padding:1rem }
-    .muted{ color:#6c757d }
-
-    /* Panels & tables */
-    .panel{ background:#fff;border:1px solid #e9ecef;border-radius:var(--radius);padding:1rem }
-    .table-sticky thead th{ position: sticky; top: 0; z-index: 1; background: #fff; box-shadow: inset 0 -1px 0 #e9ecef; }
-    .table thead th{ white-space: nowrap; }
-    .table-hover>tbody>tr:hover{ background:#f7fbff; }
+    /* === [ปรับปรุง] สไตล์ === */
     .income-row { border-left: 4px solid #198754; }
     .expense-row{ border-left: 4px solid #dc3545; }
-    .amount-income{ color:#198754; font-weight:600; }
-    .amount-expense{ color:#dc3545; font-weight:600; }
+    .amount-income{ color:#198754; font-weight:600; } .amount-expense{ color:#dc3545; font-weight:600; }
     .transaction-type{ padding:4px 8px; border-radius:12px; font-size:.8rem; font-weight:500; }
-    .type-income{ background:#d1edff; color:#0969da; } 
-    .type-expense{ background:#ffebe9; color:#cf222e; }
-
-    /* Compact mode (remembered) */
-    .compact .table td, .compact .table th{ padding:.45rem .5rem; font-size:.92rem }
-    .compact .form-control, .compact .form-select, .compact .btn{ padding:.375rem .5rem; font-size:.92rem }
-    .compact .btn-group>.btn{ padding:.375rem .5rem }
-
-    /* Chips */
-    .chip.btn{ border-radius: 999px; }
-    .chip.btn.active{ background:#0d6efd; color:#fff; border-color:#0d6efd; }
-
-    /* Floating action button (mobile) */
-    .fab{ position: fixed; right: 16px; bottom: 16px; z-index: 1050; border-radius: 999px; padding:.85rem 1rem; box-shadow: 0 10px 20px rgba(13,110,253,.25) }
-    @media (min-width: 992px){ .fab{ display:none } }
-
-    /* Utilities */
-    .shadow-sm-up:hover{ box-shadow: 0 8px 24px rgba(0,0,0,.06) }
-    .offcanvas .sidebar-menu a.active{ background: rgba(255,255,255,.15); border-radius: 8px; }
-    .table-note{ font-size:.85rem }
-
-    /* Small visual polish */
-    .chart-container{ position:relative; height:320px; width:100% }
-    @media (max-width: 576px){ .chart-container{ height:260px } }
+    .type-income{ background:#d1edff; color:#0969da; } .type-expense{ background:#ffebe9; color:#cf222e; }
+    
+    /* ใช้ .panel เดิม หรือ .card ก็ได้ */
+    .panel, .card {
+        background:#fff;
+        border:1px solid #dee2e6; /* อัปเดตสีขอบ */
+        border-radius: 0.5rem; /* 8px */
+    }
+    .panel .panel-head {
+        padding: 1rem 1rem 0.5rem;
+        font-weight: 600;
+        border-bottom: 1px solid #dee2e6;
+        background-color: #f8f9fa;
+        border-top-left-radius: 0.5rem;
+        border-top-right-radius: 0.5rem;
+    }
+    .panel .panel-body, .card .card-body {
+        padding: 1rem;
+    }
+    
+    .chart-container{position:relative;height:300px;width:100%}
+    .muted{color:#6c757d}
+    .filter-bar-card {
+        background-color: #f8f9fa;
+    }
+    /* === [สิ้นสุด] สไตล์ === */
   </style>
 </head>
-<body class="">
-<!-- Navbar -->
+<body>
+
 <nav class="navbar navbar-dark bg-primary">
   <div class="container-fluid">
     <div class="d-flex align-items-center gap-2">
-      <button class="navbar-toggler d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasSidebar" aria-label="เมนู">
-        <span class="navbar-toggler-icon"></span>
-      </button>
+      <button class="navbar-toggler d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasSidebar"><span class="navbar-toggler-icon"></span></button>
       <a class="navbar-brand" href="admin_dashboard.php"><?= htmlspecialchars($site_name) ?></a>
     </div>
     <div class="d-flex align-items-center gap-3 ms-auto">
@@ -675,11 +648,10 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   </div>
 </nav>
 
-<!-- Offcanvas -->
-<div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasSidebar" aria-labelledby="offcanvasLabel">
+<div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasSidebar">
   <div class="offcanvas-header">
-    <h5 class="offcanvas-title" id="offcanvasLabel"><?= htmlspecialchars($site_name) ?></h5>
-    <button class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="ปิด"></button>
+    <h5 class="offcanvas-title"><?= htmlspecialchars($site_name) ?></h5>
+    <button class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
   </div>
   <div class="offcanvas-body sidebar">
     <div class="side-brand mb-2"><h3><span>Admin</span></h3></div>
@@ -701,7 +673,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 
 <div class="container-fluid">
   <div class="row">
-    <!-- Sidebar Desktop -->
     <aside class="col-lg-2 d-none d-lg-flex flex-column sidebar py-4">
       <div class="side-brand mb-3"><h3><span>Admin</span></h3></div>
       <nav class="sidebar-menu flex-grow-1">
@@ -719,569 +690,664 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
       <a class="logout" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
     </aside>
 
-    <!-- Content -->
-    <main class="col-lg-10 p-3 p-lg-4">
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <h2 class="mb-0"><i class="fa-solid fa-wallet me-2"></i>การเงินและบัญชี</h2>
-
-        <!-- View switches -->
-        <div class="d-none d-md-flex align-items-center gap-2">
-          <div class="form-check form-switch">
-            <input class="form-check-input" type="checkbox" id="toggleCompact">
-            <label class="form-check-label" for="toggleCompact">โหมดกะทัดรัด</label>
-          </div>
-          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#modalSummary">
-            <i class="bi bi-calculator me-1"></i>สรุปช่วง
-          </button>
-        </div>
+    <main class="col-lg-10 p-4">
+      <div class="main-header ">
+        <h2 class="mb-0"><i class="fa-solid fa-wallet"></i> การเงินและบัญชี</h2>
       </div>
 
-      <!-- Sticky Date Range Filter -->
-      <div class="filter-bar rounded">
-        <form method="GET" action="" class="row g-2 align-items-end">
-          <div class="col-6 col-md-3 col-lg-2">
-            <label for="gp_from" class="form-label small">จากวันที่</label>
-            <input type="date" class="form-control form-control-sm" name="gp_from" id="gp_from" value="<?= htmlspecialchars($rangeFromStr ?? '') ?>">
-          </div>
-          <div class="col-6 col-md-3 col-lg-2">
-            <label for="gp_to" class="form-label small">ถึงวันที่</label>
-            <input type="date" class="form-control form-control-sm" name="gp_to" id="gp_to" value="<?= htmlspecialchars($rangeToStr ?? '') ?>">
-          </div>
-          <div class="col-12 col-md-5 col-lg-6">
-            <label class="form-label small d-none d-md-block">ช่วงด่วน</label>
-            <div class="d-flex flex-wrap gap-2">
-              <a href="?gp_quick=7d" class="btn btn-sm btn-outline-secondary chip <?= $quick==='7d'?'active':'' ?>">7 วัน</a>
-              <a href="?gp_quick=30d" class="btn btn-sm btn-outline-secondary chip <?= $quick==='30d'?'active':'' ?>">30 วัน</a>
-              <a href="?gp_quick=this_month" class="btn btn-sm btn-outline-secondary chip <?= $quick==='this_month'?'active':'' ?>">เดือนนี้</a>
-              <a href="?gp_quick=last_month" class="btn btn-sm btn-outline-secondary chip <?= $quick==='last_month'?'active':'' ?>">เดือนก่อน</a>
-              <a href="?gp_quick=this_year" class="btn btn-sm btn-outline-secondary chip <?= $quick==='this_year'?'active':'' ?>">ปีนี้</a>
-              <a href="?gp_quick=all" class="btn btn-sm btn-outline-secondary chip <?= $quick==='all'?'active':'' ?>">ทั้งหมด</a>
+      <div class="card card-body shadow-sm mb-4 filter-bar-card">
+        <form method="GET" action="" class="d-flex flex-wrap align-items-end gap-2">
+            <div class="flex-grow-1" style="min-width: 200px;">
+                <label for="gp_from" class="form-label small fw-bold">จากวันที่</label>
+                <input type="date" class="form-control form-control-sm" name="gp_from" id="gp_from" value="<?= htmlspecialchars($rangeFromStr ?? '') ?>">
             </div>
-          </div>
-          <div class="col-12 col-md-1 col-lg-2 d-grid">
-            <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search me-1"></i>กรอง</button>
-          </div>
+            <div class="flex-grow-1" style="min-width: 200px;">
+                <label for="gp_to" class="form-label small fw-bold">ถึงวันที่</label>
+                <input type="date" class="form-control form-control-sm" name="gp_to" id="gp_to" value="<?= htmlspecialchars($rangeToStr ?? '') ?>">
+            </div>
+
+            <div class="flex-grow-1" style="min-width: 300px;">
+                <label class="form-label small d-none d-md-block">&nbsp;</label>
+                <div class="btn-group w-100" role="group">
+                    <a href="?gp_quick=7d" class="btn btn-sm btn-outline-secondary <?= $quick === '7d' ? 'active' : '' ?>">7 วัน</a>
+                    <a href="?gp_quick=30d" class="btn btn-sm btn-outline-secondary <?= $quick === '30d' ? 'active' : '' ?>">30 วัน</a>
+                    <a href="?gp_quick=this_month" class="btn btn-sm btn-outline-secondary <?= $quick === 'this_month' ? 'active' : '' ?>">เดือนนี้</a>
+                    <a href="?gp_quick=last_month" class="btn btn-sm btn-outline-secondary <?= $quick === 'last_month' ? 'active' : '' ?>">เดือนก่อน</a>
+                    <a href="?gp_quick=this_year" class="btn btn-sm btn-outline-secondary <?= $quick === 'this_year' ? 'active' : '' ?>">ปีนี้</a>
+                </div>
+            </div>
+
+            <div class="flex-grow-0">
+                <label class="form-label small d-none d-md-block">&nbsp;</label>
+                <button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-search"></i> กรองข้อมูล</button>
+            </div>
         </form>
       </div>
 
-      <!-- Summary cards -->
-      <div class="stats-grid mt-3">
-        <div class="stat-card shadow-sm-up">
-          <h6 class="mb-1"><i class="bi bi-currency-dollar me-2"></i>รายได้รวม (ช่วง)</h6>
-          <h3 class="text-success mb-1">฿<?= nf($total_income) ?></h3>
-          <div class="table-note muted">รวมรายการ: <?= (int)$total_transactions ?></div>
+      
+       <div class="row g-3 mb-4">
+        <div class="col-lg-4">
+          <div class="card card-body shadow-sm text-center h-100">
+            <h6 class="text-muted"><i class="bi bi-currency-dollar me-2"></i>รายได้รวม (ช่วง)</h6>
+            <h3 class="text-success mb-0">฿<?= nf($total_income) ?></h3>
+          </div>
         </div>
-        <div class="stat-card shadow-sm-up">
-          <h6 class="mb-1"><i class="bi bi-arrow-down-circle-fill me-2"></i>ค่าใช้จ่ายรวม (ช่วง)</h6>
-          <h3 class="text-danger mb-1">฿<?= nf($total_expense) ?></h3>
-          <div class="table-note muted">ปรับอัตโนมัติเมื่อกรอง</div>
+        <div class="col-lg-4">
+          <div class="card card-body shadow-sm text-center h-100">
+            <h6 class="text-muted"><i class="bi bi-arrow-down-circle-fill me-2"></i>ค่าใช้จ่ายรวม (ช่วง)</h6>
+            <h3 class="text-danger mb-0">฿<?= nf($total_expense) ?></h3>
+          </div>
         </div>
-        <div class="stat-card shadow-sm-up">
-          <h6 class="mb-1"><i class="bi bi-wallet2 me-2"></i>กำไรสุทธิ (ช่วง)</h6>
-          <h3 class="<?= ($net_profit>=0?'text-success':'text-danger') ?> mb-1">฿<?= nf($net_profit) ?></h3>
-          <div class="table-note muted">อัปเดตตามช่วงด้านบน</div>
+        <div class="col-lg-4">
+          <div class="card card-body shadow-sm text-center h-100">
+            <h6 class="text-muted"><i class="bi bi-wallet2 me-2"></i>กำไรสุทธิ (ช่วง)</h6>
+            <h3 class="<?= ($net_profit>=0?'text-success':'text-danger') ?> mb-0">฿<?= nf($net_profit) ?></h3>
+            <small class="muted mt-1"><?= (int)$total_transactions ?> รายการ</small>
+          </div>
         </div>
       </div>
 
-      <!-- Charts -->
-      <div class="row">
-        <div class="col-md-6 mb-4">
-          <div class="panel">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <h6 class="mb-0"><i class="bi bi-pie-chart me-1"></i> สัดส่วนรายได้-ค่าใช้จ่าย</h6>
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light border-bottom-0">
+          <h5 class="mb-0"><i class="bi bi-bar-chart-line-fill me-2"></i>สรุปภาพรวม (ตามช่วงที่เลือก)</h5>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-lg-4 col-md-6">
+              <div class="card card-body h-100">
+                <h6 class="mb-3"><i class="bi bi-pie-chart me-1"></i> สัดส่วนรายได้-ค่าใช้จ่าย</h6>
+                <div class="chart-container"><canvas id="pieChart"></canvas></div>
+              </div>
             </div>
-            <div class="chart-container"><canvas id="pieChart" aria-label="สัดส่วนรายได้ค่าใช้จ่าย"></canvas></div>
-          </div>
-        </div>
-        <div class="col-md-6 mb-4">
-          <div class="panel">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <h6 class="mb-0"><i class="bi bi-graph-up me-1"></i> แนวโน้มการเงิน (ช่วง)</h6>
+            <div class="col-lg-4 col-md-6">
+              <div class="card card-body h-100">
+                <h6 class="mb-3"><i class="bi bi-graph-up me-1"></i> แนวโน้มการเงิน</h6>
+                <div class="chart-container"><canvas id="lineChart"></canvas></div>
+              </div>
             </div>
-            <div class="chart-container"><canvas id="lineChart" aria-label="กราฟแนวโน้มรายวัน"></canvas></div>
+            <div class="col-lg-4 col-md-12">
+              <div class="card card-body h-100">
+                <h6 class="mb-3"><i class="bi bi-cash-coin me-1"></i> แนวโน้มกำไรขั้นต้น (GP)</h6>
+                <div class="chart-container"><canvas id="gpBarChart"></canvas></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <?php if ($has_gpv): ?>
-      <div class="mb-4">
-        <div class="panel">
-          <div class="d-flex justify-content-between align-items-center mb-2">
-            <h6 class="mb-0"><i class="bi bi-bar-chart-steps me-1"></i> กำไรขั้นต้นรายวัน (Gross Profit)</h6>
-          </div>
-          <div class="chart-container"><canvas id="gpBarChart" aria-label="กำไรขั้นต้น"></canvas></div>
-        </div>
-      </div>
-      <?php endif; ?>
 
-      <!-- Tabs -->
-      <div class="mt-3">
+      <div class="mt-4">
         <ul class="nav nav-tabs mb-3" id="inventoryTab" role="tablist">
           <li class="nav-item" role="presentation">
-            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tx-panel" type="button" role="tab">
-              <i class="fa-solid fa-oil-can me-2"></i>รายการการเงิน
+            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#stock-price-panel" type="button" role="tab">
+              <i class="fa-solid fa-list-ul me-2"></i>รายการการเงิน (<?= (int)$total_transactions ?>)
             </button>
           </li>
           <li class="nav-item" role="presentation">
-            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#sales-panel" type="button" role="tab">
-              <i class="fa-solid fa-tags me-2"></i>รายการขาย
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#price-panel" type="button" role="tab">
+              <i class="bi bi-receipt-cutoff me-2"></i>รายการขาย (<?= (int)$sales_count ?>)
             </button>
           </li>
           <li class="nav-item" role="presentation">
-            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#pay-panel" type="button" role="tab">
-              <i class="fa-solid fa-gas-pump me-2"></i>รายการจ่าย
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#receive-panel" type="button" role="tab">
+              <i class="bi bi-cart-dash-fill me-2"></i>รายการจ่าย (<?= (int)$pay_count ?>)
             </button>
           </li>
         </ul>
 
-        <div class="tab-content">
-          <!-- TAB: รายการการเงิน -->
-          <div class="tab-pane fade show active" id="tx-panel" role="tabpanel" aria-labelledby="tab-tx">
-            <!-- Toolbar -->
+        <div class="tab-content" id="inventoryTabContent">
+          <div class="tab-pane fade show active" id="stock-price-panel" role="tabpanel">
             <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
               <div class="d-flex flex-wrap gap-2 align-items-center">
                 <div class="input-group" style="max-width:320px;">
                   <span class="input-group-text"><i class="bi bi-search"></i></span>
-                  <input type="search" id="txnSearch" class="form-control" placeholder="ค้นหา: รหัส/รายละเอียด/อ้างอิง" aria-label="ค้นหารายการการเงิน">
+                  <input type="search" id="txnSearch" class="form-control" placeholder="ค้นหา: รหัส/รายละเอียด/อ้างอิง">
                 </div>
                 <select id="filterType" class="form-select" style="width:auto;">
-                  <option value="">ทุกประเภท</option>
-                  <option value="income">รายได้</option>
-                  <option value="expense">ค่าใช้จ่าย</option>
+                    <option value="">ทุกประเภท</option>
+                    <option value="income">รายได้</option>
+                    <option value="expense">ค่าใช้จ่าย</option>
                 </select>
                 <select id="filterCategory" class="form-select" style="width:auto;">
-                  <option value="">ทุกหมวดหมู่</option>
-                  <?php
-                    $allCats = array_unique(array_merge($categories['income'],$categories['expense']));
-                    sort($allCats, SORT_NATURAL | SORT_FLAG_CASE);
-                    foreach($allCats as $c) echo '<option value="'.htmlspecialchars($c).'">'.htmlspecialchars($c).'</option>';
-                  ?>
+                    <option value="">ทุกหมวดหมู่</option>
+                    <?php
+                      $allCats = array_unique(array_merge($categories['income'],$categories['expense']));
+                      sort($allCats, SORT_NATURAL | SORT_FLAG_CASE);
+                      foreach($allCats as $c) echo '<option value="'.htmlspecialchars($c).'">'.htmlspecialchars($c).'</option>';
+                    ?>
                 </select>
-                <input type="date" id="filterDate" class="form-control" style="width:auto;">
-                <button class="btn btn-outline-secondary" id="btnTxnShowAll" title="ล้างตัวกรอง" aria-label="ล้างตัวกรอง"><i class="bi bi-arrow-clockwise"></i></button>
-              </div>
-              <div class="d-flex flex-wrap gap-2">
-                <div class="btn-group">
-                  <button class="btn btn-outline-secondary" id="btnExportData" title="ส่งออก CSV"><i class="bi bi-filetype-csv me-1"></i>Export</button>
-                  <button class="btn btn-outline-secondary" id="btnPrint" title="พิมพ์"><i class="bi bi-printer me-1"></i>พิมพ์</button>
-                  <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalSummary"><i class="bi bi-calculator me-1"></i>สรุป</button>
                 </div>
+              <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary" id="btnTxnShowAll" title="ล้างตัวกรอง"><i class="bi bi-arrow-clockwise"></i></button>
                 <?php if ($has_ft): ?>
-                <button class="btn btn-success d-none d-lg-inline-flex" data-bs-toggle="modal" data-bs-target="#modalAddTransaction">
-                  <i class="bi bi-plus-circle me-1"></i> เพิ่มรายการ
-                </button>
+                <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalAddTransaction"><i class="bi bi-plus-circle me-1"></i> เพิ่มรายการ</button>
                 <?php endif; ?>
               </div>
             </div>
-
-            <div class="panel">
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <h6 class="mb-0"><i class="fa-solid fa-list-ul me-1"></i> รายการการเงิน (ตารางหลัก)</h6>
-                <?php if (!$has_ft): ?><span class="badge text-bg-secondary">โหมดอ่านอย่างเดียว (รวมจากยอดขาย/รับน้ำมัน)</span><?php endif; ?>
+            <div class="card shadow-sm">
+              <div class="card-header bg-light border-bottom-0">
+                <div class="d-flex justify-content-between align-items-center">
+                  <h6 class="mb-0"><i class="fa-solid fa-list-ul me-1"></i> รายการการเงิน (ตามช่วงที่เลือก)</h6>
+                  <?php if (!$has_ft): ?><span class="badge text-bg-secondary">โหมดอ่านอย่างเดียว (รวมจากยอดขาย/รับน้ำมัน)</span><?php endif; ?>
+                </div>
               </div>
-              <div class="table-responsive table-sticky">
-                <table class="table table-hover align-middle mb-0" id="txnTable">
-                  <thead>
-                    <tr>
-                      <th>วันที่</th>
-                      <th>รหัส</th>
-                      <th>ประเภท</th>
-                      <th>รายละเอียด</th>
-                      <th class="text-end">จำนวนเงิน</th>
-                      <th class="d-none d-xl-table-cell col-created-by">ผู้บันทึก</th>
-                      <th class="text-end col-receipt">ใบเสร็จ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <?php foreach($transactions as $tx): 
-                      $isIncome = ($tx['type']==='income');
-                      $id   = (string)$tx['id'];
-                      $ref  = (string)($tx['reference'] ?? '');
-                      $rtype = ''; $rcode = ''; $receiptUrl = '';
+              <div class="card-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-hover align-middle mb-0" id="txnTable">
+                    <thead class="table-light">
+                      <tr>
+                        <th>วันที่</th><th>รหัส</th><th>ประเภท</th><th>รายละเอียด</th>
+                        <th class="text-end">จำนวนเงิน</th>
+                        <th class="d-none d-xl-table-cell">ผู้บันทึก</th>
+                        <th class="text-end">จัดการ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <?php if (empty($transactions)): ?>
+                        <tr><td colspan="7" class="text-center text-muted p-4">ไม่พบข้อมูลใน่ชวงวันที่ที่เลือก</td></tr>
+                      <?php endif; ?>
+                      <?php foreach($transactions as $tx): 
+                        $isIncome = ($tx['type']==='income');
+                        $id   = (string)$tx['id'];
+                        $ref  = (string)($tx['reference'] ?? '');
+                        $rtype = ''; $rcode = ''; $receiptUrl = '';
 
-                      if (preg_match('/^SALE-(.+)$/', $id, $m)) {
-                        $rtype = 'sale'; $rcode = $ref ?: $m[1];
-                        $receiptUrl = 'sales_receipt.php?code=' . urlencode($rcode);
-                      } elseif (preg_match('/^RCV-(\d+)/', $id, $m)) {
-                        $rtype = 'receive'; $rcode = $ref ?: $m[1];
-                        $receiptUrl = 'receive_view.php?id=' . urlencode($rcode);
-                      } elseif (preg_match('/^LOT-(.+)$/', $id, $m)) {
-                        $rtype = 'lot'; $rcode = $ref ?: $m[1];
-                        $receiptUrl = 'lot_view.php?code=' . urlencode($rcode);
-                      } elseif (preg_match('/^FT-(\d+)$/', $id, $m)) {
-                        $rtype = 'transaction'; $rcode = $m[1];
-                        $receiptUrl = 'txn_receipt.php?id=' . urlencode($rcode);
-                      } elseif (preg_match('/^FT-/', $id)) {
-                        $rtype = 'transaction'; $rcode = $id;
-                        $receiptUrl = 'txn_receipt.php?code=' . urlencode($rcode);
-                      }
-                    ?>
-                    <tr class="<?= $isIncome ? 'income-row' : 'expense-row' ?>"
-                        data-id="<?= htmlspecialchars($tx['id']) ?>"
-                        data-date="<?= htmlspecialchars(date('Y-m-d H:i', strtotime($tx['date']))) ?>"
-                        data-type="<?= htmlspecialchars($tx['type']) ?>"
-                        data-category="<?= htmlspecialchars($tx['category'] ?? '') ?>"
-                        data-description="<?= htmlspecialchars($tx['description']) ?>"
-                        data-amount="<?= htmlspecialchars($tx['amount']) ?>"
-                        data-created-by="<?= htmlspecialchars($tx['created_by']) ?>"
-                        data-reference="<?= htmlspecialchars($tx['reference'] ?? '') ?>"
-                        data-receipt-type="<?= htmlspecialchars($rtype) ?>"
-                        data-receipt-code="<?= htmlspecialchars($rcode) ?>"
-                        data-receipt-url="<?= htmlspecialchars($receiptUrl) ?>">
-                      <td><?= htmlspecialchars(date('d/m/Y', strtotime($tx['date']))) ?></td>
-                      <td><b><?= htmlspecialchars($tx['id']) ?></b></td>
-                      <td><span class="transaction-type <?= $isIncome ? 'type-income' : 'type-expense' ?>"><?= $isIncome ? 'รายได้' : 'ค่าใช้จ่าย' ?></span></td>
-                      <td><?= htmlspecialchars($tx['description']) ?></td>
-                      <td class="text-end"><span class="<?= $isIncome ? 'amount-income' : 'amount-expense' ?>"><?= $isIncome ? '+' : '-' ?>฿<?= nf($tx['amount']) ?></span></td>
-                      <td class="d-none d-xl-table-cell col-created-by"><?= htmlspecialchars($tx['created_by']) ?></td>
-                      <td class="text-end col-receipt">
-                        <div class="btn-group">
-                          <button class="btn btn-sm btn-outline-secondary btnReceipt" title="ดูใบเสร็จ"><i class="bi bi-receipt"></i></button>
-                          <?php if ($has_ft): ?>
-                          <button class="btn btn-sm btn-outline-primary btnEdit" title="แก้ไข"><i class="bi bi-pencil-square"></i></button>
-                          <button class="btn btn-sm btn-outline-danger btnDel" title="ลบ"><i class="bi bi-trash"></i></button>
-                          <?php endif; ?>
-                        </div>
-                      </td>
-                    </tr>
-                    <?php endforeach; ?>
-                  </tbody>
-                </table>
+                        if (preg_match('/^SALE-(.+)$/', $id, $m)) {
+                          $rtype = 'sale'; $rcode = $ref ?: $m[1];
+                          $receiptUrl = 'sales_receipt.php?code=' . urlencode($rcode);
+                        } elseif (preg_match('/^RCV-(\d+)/', $id, $m)) {
+                          $rtype = 'receive'; $rcode = $ref ?: $m[1];
+                          $receiptUrl = 'receive_view.php?id=' . urlencode($rcode);
+                        } elseif (preg_match('/^LOT-(.+)$/', $id, $m)) {
+                          $rtype = 'lot'; $rcode = $ref ?: $m[1];
+                          $receiptUrl = 'lot_view.php?code=' . urlencode($rcode);
+                        } elseif (preg_match('/^FT-(\d+)$/', $id, $m)) {
+                          $rtype = 'transaction'; $rcode = $m[1]; $receiptUrl = 'txn_receipt.php?id=' . urlencode($rcode);
+                        } elseif (preg_match('/^FT-/', $id)) {
+                          $rtype = 'transaction'; $rcode = $id; $receiptUrl = 'txn_receipt.php?code=' . urlencode($rcode);
+                        }                                           
+                      ?>
+                      <tr class="<?= $isIncome ? 'income-row' : 'expense-row' ?>"
+                          data-id="<?= htmlspecialchars($tx['id']) ?>"
+                          data-date="<?= htmlspecialchars(date('Y-m-d', strtotime($tx['date']))) ?>"
+                          data-type="<?= htmlspecialchars($tx['type']) ?>"
+                          data-category="<?= htmlspecialchars($tx['category'] ?? '') ?>"
+                          data-description="<?= htmlspecialchars($tx['description']) ?>"
+                          data-amount="<?= htmlspecialchars($tx['amount']) ?>"
+                          data-created-by="<?= htmlspecialchars($tx['created_by']) ?>"
+                          data-reference="<?= htmlspecialchars($tx['reference'] ?? '') ?>"
+                          data-receipt-type="<?= htmlspecialchars($rtype) ?>"
+                          data-receipt-code="<?= htmlspecialchars($rcode) ?>"
+                          data-receipt-url="<?= htmlspecialchars($receiptUrl) ?>">
+                        <td class="ps-3"><?= htmlspecialchars(date('d/m/Y', strtotime($tx['date']))) ?></td>
+                        <td><b><?= htmlspecialchars($tx['id']) ?></b></td>
+                        <td><span class="transaction-type <?= $isIncome ? 'type-income' : 'type-expense' ?>"><?= $isIncome ? 'รายได้' : 'ค่าใช้จ่าย' ?></span></td>
+                        <td><?= htmlspecialchars($tx['description']) ?></td>
+                        <td class="text-end"><span class="<?= $isIncome ? 'amount-income' : 'amount-expense' ?>"><?= $isIncome ? '+' : '-' ?>฿<?= nf($tx['amount']) ?></span></td>
+                        <td class="d-none d-xl-table-cell"><?= htmlspecialchars($tx['created_by']) ?></td>
+                        <td class="text-end pe-3">
+                          <div class="btn-group">
+                            <button class="btn btn-sm btn-outline-secondary btnReceipt" title="ดูใบเสร็จ"><i class="bi bi-receipt"></i></button>
+                            <?php if ($has_ft): ?>
+                              <button class="btn btn-sm btn-outline-primary btnEdit" title="แก้ไข"><i class="bi bi-pencil-square"></i></button>
+                              <button class="btn btn-sm btn-outline-danger btnDel" title="ลบ"><i class="bi bi-trash"></i></button>
+                            <?php endif; ?>
+                          </div>
+                        </td>
+                      </tr>
+                      <?php endforeach; ?>
+                    </tbody>
+                  </table>
+                </div>
               </div>
-              <div class="mt-2 table-note muted"><i class="bi bi-info-circle me-1"></i>เลื่อนตารางแนวนอนได้บนจอเล็ก หัวตารางจะติดอยู่ด้านบน</div>
             </div>
           </div>
 
-          <!-- TAB: รายการขาย -->
-          <div class="tab-pane fade" id="sales-panel" role="tabpanel" aria-labelledby="tab-sales">
+          <div class="tab-pane fade" id="price-panel" role="tabpanel">
             <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
               <div class="d-flex flex-wrap gap-2">
                 <div class="input-group" style="max-width:320px;">
                   <span class="input-group-text"><i class="bi bi-search"></i></span>
                   <input type="search" id="salesSearch" class="form-control" placeholder="ค้นหา: รหัส/รายละเอียด/ผู้บันทึก">
                 </div>
-                <input type="date" id="salesDate" class="form-control" style="max-width:160px;">
-                <button id="salesShowAll" class="btn btn-outline-secondary me-1">แสดงทั้งหมด</button>
+                <button id="salesShowAll" class="btn btn-outline-secondary me-1" title="ล้างตัวกรอง" >
+                  <i class="bi bi-arrow-clockwise"></i>
+                </button>
               </div>
             </div>
-            <div class="panel">
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <h6 class="mb-0"><i class="bi bi-cash-coin me-1"></i> รายการขาย</h6>
-                <span class="muted">รวม <?= (int)$sales_count ?> รายการ | ยอดขายรวม ฿<?= nf($sales_total) ?></span>
+            <div class="card shadow-sm">
+              <div class="card-header bg-light border-bottom-0">
+                <div class="d-flex justify-content-between align-items-center">
+                  <h6 class="mb-0"><i class="bi bi-cash-coin me-1"></i> รายการขาย (ตามช่วงที่เลือก)</h6>
+                  <span class="muted">รวม <?= (int)$sales_count ?> รายการ | ยอดขาย ฿<?= nf($sales_total) ?></span>
+                </div>
               </div>
-              <div class="table-responsive table-sticky">
-                <table class="table table-striped align-middle mb-0" id="salesTable">
-                  <thead><tr>
-                    <th>วันที่</th>
-                    <th>รหัสขาย</th>
-                    <th>รายละเอียด</th>
-                    <th class="text-end">จำนวนเงิน</th>
-                    <th class="d-none d-lg-table-cell col-created-by">ผู้บันทึก</th>
-                    <th class="text-end col-receipt">ใบเสร็จ</th>
-                  </tr></thead>
-                  <tbody>
-                    <?php foreach($sales_rows as $r): ?>
-                    <tr
-                      data-receipt-type="sale"
-                      data-receipt-code="<?= htmlspecialchars($r['code']) ?>"
-                      data-receipt-url="sales_receipt.php?code=<?= urlencode($r['code']) ?>"
-                      data-code="<?= htmlspecialchars($r['code']) ?>"
-                      data-description="<?= htmlspecialchars($r['description']) ?>"
-                      data-amount="<?= htmlspecialchars($r['amount']) ?>"
-                      data-created-by="<?= htmlspecialchars($r['created_by']) ?>"
-                      data-date="<?= htmlspecialchars(date('Y-m-d H:i', strtotime($r['date']))) ?>"
-                    >
-                      <td><?= htmlspecialchars($r['date']) ?></td>
-                      <td><b><?= htmlspecialchars($r['code']) ?></b></td>
-                      <td><?= htmlspecialchars($r['description']) ?></td>
-                      <td class="text-end"><span class="amount-income">+฿<?= nf($r['amount']) ?></span></td>
-                      <td class="d-none d-lg-table-cell"><?= htmlspecialchars($r['created_by']) ?></td>
-                      <td class="text-end">
-                        <button class="btn btn-sm btn-outline-secondary btnReceipt">
-                          <i class="bi bi-receipt"></i>
-                        </button>
-                      </td>
-                    </tr>
-                    <?php endforeach; ?>
-                    <?php if (empty($sales_rows)): ?>
-                    <tr><td colspan="6" class="text-center text-muted">ไม่มีข้อมูลในช่วงที่เลือก</td></tr>
-                    <?php endif; ?>
-                  </tbody>
-                </table>
+              <div class="card-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-hover align-middle mb-0" id="salesTable">
+                    <thead class="table-light"><tr><th>วันที่</th><th>รหัสขาย</th><th>รายละเอียด</th><th class="text-end">จำนวนเงิน</th><th class="d-none d-lg-table-cell">ผู้บันทึก</th><th class="text-end">ใบเสร็จ</th></tr></thead>
+                    <tbody>
+                      <?php if (empty($sales_rows)): ?>
+                        <tr><td colspan="6" class="text-center text-muted p-4">ไม่พบข้อมูลใน่ชวงวันที่ที่เลือก</td></tr>
+                      <?php endif; ?>
+                      <?php foreach($sales_rows as $r): ?>
+                        <tr
+                          data-receipt-type="sale"
+                          data-receipt-code="<?= htmlspecialchars($r['code']) ?>"
+                          data-receipt-url="sales_receipt.php?code=<?= urlencode($r['code']) ?>"
+                          data-code="<?= htmlspecialchars($r['code']) ?>"
+                          data-description="<?= htmlspecialchars($r['description']) ?>"
+                          data-amount="<?= htmlspecialchars($r['amount']) ?>"
+                          data-created-by="<?= htmlspecialchars($r['created_by']) ?>"
+                          data-date="<?= htmlspecialchars(date('Y-m-d', strtotime($r['date']))) ?>"
+                        >
+                          <td class="ps-3"><?= htmlspecialchars(date('d/m/Y H:i', strtotime($r['date']))) ?></td>
+                          <td><b><?= htmlspecialchars($r['code']) ?></b></td>
+                          <td><?= htmlspecialchars($r['description']) ?></td>
+                          <td class="text-end"><span class="amount-income">+฿<?= nf($r['amount']) ?></span></td>
+                          <td class="d-none d-lg-table-cell"><?= htmlspecialchars($r['created_by']) ?></td>
+                          <td class="text-end pe-3">
+                            <button class="btn btn-sm btn-outline-secondary btnReceipt" title="ดูใบเสร็จ">
+                              <i class="bi bi-receipt"></i>
+                            </button>
+                          </td>
+                        </tr>
+                      <?php endforeach; ?>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
 
-          <!-- TAB: รายการจ่าย -->
-          <div class="tab-pane fade" id="pay-panel" role="tabpanel" aria-labelledby="tab-pay">
+          <div class="tab-pane fade" id="receive-panel" role="tabpanel">
             <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
               <div class="d-flex flex-wrap gap-2">
                 <div class="input-group" style="max-width:320px;">
                   <span class="input-group-text"><i class="bi bi-search"></i></span>
                   <input type="search" id="paySearch" class="form-control" placeholder="ค้นหา: รหัส/รายละเอียด/ผู้บันทึก">
                 </div>
-                <input type="date" id="payDate" class="form-control" style="max-width:160px;">
-                <button id="payShowAll" class="btn btn-outline-secondary me-1">แสดงทั้งหมด</button>
+                <button id="payShowAll" class="btn btn-outline-secondary me-1" title="ล้างตัวกรอง">
+                  <i class="bi bi-arrow-clockwise"></i>
+                </button>
               </div>
             </div>
-            <div class="panel">
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <h6 class="mb-0"><i class="bi bi-credit-card-2-back me-1"></i> รายการจ่าย: รับเข้าคลัง/เข้าถัง</h6>
-                <span class="muted">รวม <?= (int)$pay_count ?> รายการ | ยอดจ่ายรวม ฿<?= nf($pay_total) ?></span>
+            <div class="card shadow-sm">
+              <div class="card-header bg-light border-bottom-0">
+                <div class="d-flex justify-content-between align-items-center">
+                  <h6 class="mb-0"><i class="bi bi-credit-card-2-back me-1"></i> รายการจ่าย: รับเข้าคลัง/เข้าถัง (ตามช่วงที่เลือก)</h6>
+                  <span class="muted">รวม <?= (int)$pay_count ?> รายการ | ยอดจ่าย ฿<?= nf($pay_total) ?></span>
+                </div>
               </div>
-              <div class="table-responsive table-sticky">
-                <table class="table table-striped align-middle mb-0" id="payTable">
-                  <thead><tr>
-                    <th>วันที่</th>
-                    <th>ประเภท</th>
-                    <th>รหัส</th>
-                    <th>รายละเอียด</th>
-                    <th class="text-end">จำนวนเงิน</th>
-                    <th class="d-none d-lg-table-cell col-created-by">ผู้บันทึก</th>
-                    <th class="text-end col-receipt">ใบเสร็จ</th>
-                  </tr></thead>
-                  <tbody>
-                    <?php foreach($pay_rows as $r):
-                      $rtype = ($r['origin']==='LOT' ? 'lot' : 'receive');
-                      $rurl  = $rtype==='lot'
-                        ? ('lot_view.php?code='.urlencode($r['code']))
-                        : ('receive_view.php?id='.urlencode($r['code']));
-                    ?>
-                    <tr
-                      data-receipt-type="<?= $rtype ?>"
-                      data-receipt-code="<?= htmlspecialchars($r['code']) ?>"
-                      data-receipt-url="<?= htmlspecialchars($rurl) ?>"
-                      data-origin="<?= $r['origin']==='LOT' ? 'เข้าถัง' : 'เข้าคลัง' ?>"
-                      data-code="<?= htmlspecialchars($r['code']) ?>"
-                      data-description="<?= htmlspecialchars($r['description']) ?>"
-                      data-amount="<?= htmlspecialchars($r['amount']) ?>"
-                      data-created-by="<?= htmlspecialchars($r['created_by']) ?>"
-                      data-date="<?= htmlspecialchars(date('Y-m-d H:i', strtotime($r['date']))) ?>"
-                    >
-                      <td><?= htmlspecialchars($r['date']) ?></td>
-                      <td><?= $r['origin']==='LOT' ? 'เข้าถัง' : 'เข้าคลัง' ?></td>
-                      <td><b><?= htmlspecialchars($r['code']) ?></b></td>
-                      <td><?= htmlspecialchars($r['description']) ?></td>
-                      <td class="text-end"><span class="amount-expense">-฿<?= nf($r['amount']) ?></span></td>
-                      <td class="d-none d-lg-table-cell"><?= htmlspecialchars($r['created_by']) ?></td>
-                      <td class="text-end">
-                        <button class="btn btn-sm btn-outline-secondary btnReceipt">
-                          <i class="bi bi-receipt"></i>
-                        </button>
-                      </td>
-                    </tr>
-                    <?php endforeach; ?>
-                    <?php if (empty($pay_rows)): ?>
-                    <tr><td colspan="7" class="text-center text-muted">ไม่มีข้อมูลในช่วงที่เลือก</td></tr>
-                    <?php endif; ?>
-                  </tbody>
-                </table>
+              <div class="card-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-hover align-middle mb-0" id="payTable">
+                    <thead class="table-light"><tr><th>วันที่</th><th>ประเภท</th><th>รหัส</th><th>รายละเอียด</th><th class="text-end">จำนวนเงิน</th><th class="d-none d-lg-table-cell">ผู้บันทึก</th><th class="text-end">ใบเสร็จ</th></tr></thead>
+                    <tbody>
+                      <?php if (empty($pay_rows)): ?>
+                        <tr><td colspan="7" class="text-center text-muted p-4">ไม่พบข้อมูลใน่ชวงวันที่ที่เลือก</td></tr>
+                      <?php endif; ?>
+                      <?php foreach($pay_rows as $r):
+                        $rtype = ($r['origin']==='LOT' ? 'lot' : 'receive');
+                        $rurl  = $rtype==='lot'
+                          ? ('lot_view.php?code='.urlencode($r['code']))
+                          : ('receive_view.php?id='.urlencode($r['code']));
+                      ?>
+                        <tr
+                          data-receipt-type="<?= $rtype ?>"
+                          data-receipt-code="<?= htmlspecialchars($r['code']) ?>"
+                          data-receipt-url="<?= htmlspecialchars($rurl) ?>"
+                          data-origin="<?= $r['origin']==='LOT' ? 'เข้าถัง' : 'เข้าคลัง' ?>"
+                          data-code="<?= htmlspecialchars($r['code']) ?>"
+                          data-description="<?= htmlspecialchars($r['description']) ?>"
+                          data-amount="<?= htmlspecialchars($r['amount']) ?>"
+                          data-created-by="<?= htmlspecialchars($r['created_by']) ?>"
+                          data-date="<?= htmlspecialchars(date('Y-m-d', strtotime($r['date']))) ?>"
+                        >
+                          <td class="ps-3"><?= htmlspecialchars(date('d/m/Y H:i', strtotime($r['date']))) ?></td>
+                          <td><?= $r['origin']==='LOT' ? 'เข้าถัง' : 'เข้าคลัง' ?></td>
+                          <td><b><?= htmlspecialchars($r['code']) ?></b></td>
+                          <td><?= htmlspecialchars($r['description']) ?></td>
+                          <td class="text-end"><span class="amount-expense">-฿<?= nf($r['amount']) ?></span></td>
+                          <td class="d-none d-lg-table-cell"><?= htmlspecialchars($r['created_by']) ?></td>
+                          <td class="text-end pe-3">
+                            <button class="btn btn-sm btn-outline-secondary btnReceipt" title="ดูใบเสร็จ">
+                              <i class="bi bi-receipt"></i>
+                            </button>
+                          </td>
+                        </tr>
+                      <?php endforeach; ?>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
 
-        </div><!-- /tab-content -->
-      </div><!-- /Tabs -->
-
-      <footer class="footer mt-4">© <?= date('Y') ?> <?= htmlspecialchars($site_name) ?> — จัดการการเงินและบัญชี</footer>
-    </main>
+        </div></div></main>
   </div>
 </div>
 
-<?php if ($has_ft): ?>
-<!-- FAB (Mobile) -->
-<button class="btn btn-success fab" data-bs-toggle="modal" data-bs-target="#modalAddTransaction">
-  <i class="bi bi-plus-lg me-1"></i> เพิ่มรายการ
-</button>
-<?php endif; ?>
+<footer class="footer">© <?= date('Y') ?> <?= htmlspecialchars($site_name) ?> — จัดการการเงินและบัญชี</footer>
 
-<!-- ========== Modals (ใช้ชุดเดิมของคุณได้เลย) ========== -->
-<?= /* ใช้โมดัลเดิมทั้งชุดของไฟล์คุณ (Add/Edit/Summary/Delete) ไม่มีอะไรต้องแก้ */ '' ?>
+<div class="modal fade" id="modalAddTransaction" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <form class="modal-content" id="formAddTransaction" method="post" action="finance_create.php">
+      <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+      <div class="modal-header"><h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>เพิ่มรายการการเงิน</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <?php if (!$has_ft): ?><div class="alert alert-warning">โหมดอ่านอย่างเดียว ไม่สามารถเพิ่มรายการได้</div><?php endif; ?>
+        <div class="row g-3">
+          <div class="col-sm-6">
+            <label class="form-label" for="addTransactionCode">รหัสรายการ (ไม่บังคับ)</label>
+            <input type="text" class="form-control" name="transaction_code" id="addTransactionCode" placeholder="เว้นว่างเพื่อสร้างอัตโนมัติ" <?= $has_ft?'':'disabled' ?>>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label" for="addTransactionDate">วันที่และเวลา</label>
+            <input type="datetime-local" class="form-control" name="transaction_date" id="addTransactionDate" value="<?= date('Y-m-d\TH:i') ?>" required <?= $has_ft?'':'disabled' ?>>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label" for="addType">ประเภท</label>
+            <select name="type" id="addType" class="form-select" required <?= $has_ft?'':'disabled' ?>>
+                <option value="">เลือกประเภท...</option>
+                <option value="income">รายได้ (Income)</option>
+                <option value="expense">ค่าใช้จ่าย (Expense)</option>
+            </select>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label" for="addCategory">หมวดหมู่</label>
+            <input type="text" class="form-control" name="category" id="addCategory" required list="categoryList" placeholder="เช่น เงินลงทุน, เงินเดือน, ค่าไฟ" <?= $has_ft?'':'disabled' ?>>
+            <datalist id="categoryList">
+                <option value="เงินลงทุน">
+                <option value="รายได้อื่น">
+                <option value="เงินเดือน">
+                <option value="ค่าสาธารณูปโภค">
+                <option value="ต้นทุนซื้อน้ำมัน">
+                <?php
+                  $allCatsModal = array_unique(array_merge($categories['income'],$categories['expense']));
+                  foreach($allCatsModal as $c) echo '<option value="'.htmlspecialchars($c).'">';
+                ?>
+            </datalist>
+          </div>
+          <div class="col-12">
+            <label class="form-label" for="addDescription">รายละเอียด</label>
+            <input type="text" class="form-control" name="description" id="addDescription" required <?= $has_ft?'':'disabled' ?>>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label" for="addAmount">จำนวนเงิน (บาท)</label>
+            <input type="number" class="form-control" name="amount" id="addAmount" step="0.01" min="0" required <?= $has_ft?'':'disabled' ?>>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label" for="addReference">อ้างอิง (ถ้ามี)</label>
+            <input type="text" class="form-control" name="reference_id" id="addReference" <?= $has_ft?'':'disabled' ?>>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-primary" type="submit" <?= $has_ft?'':'disabled' ?>><i class="bi bi-save2 me-1"></i> บันทึก</button><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">ยกเลิก</button></div>
+    </form>
+  </div>
+</div>
 
-<!-- Toast -->
-<div class="position-fixed bottom-0 end-0 p-3" style="z-index:1080">
-  <div id="liveToast" class="toast align-items-center text-bg-dark border-0" role="status" aria-live="polite">
-    <div class="d-flex">
-      <div class="toast-body" id="toastMsg">ดำเนินการสำเร็จ</div>
-      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="ปิด"></button>
+<div class="modal fade" id="modalEditTransaction" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <form class="modal-content" id="formEditTransaction" method="post" action="finance_edit.php">
+      <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+      <div class="modal-header"><h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>แก้ไขรายการการเงิน</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <?php if (!$has_ft): ?><div class="alert alert-warning">โหมดอ่านอย่างเดียว ไม่สามารถแก้ไขได้</div><?php endif; ?>
+        <div class="row g-3">
+          <div class="col-sm-6"><label class="form-label">รหัสรายการ</label><input type="text" class="form-control" name="transaction_code" id="editTransactionCode" readonly></div>
+          <div class="col-sm-6"><label class="form-label">วันที่</label><input type="datetime-local" class="form-control" name="transaction_date" id="editDate" required <?= $has_ft?'':'disabled' ?>></div>
+          <div class="col-sm-6"><label class="form-label">ประเภท</label><select name="type" id="editType" class="form-select" required <?= $has_ft?'':'disabled' ?>><option value="income">รายได้</option><option value="expense">ค่าใช้จ่าย</option></select></div>
+          <div class="col-sm-6"><label class="form-label">หมวดหมู่</label><input type="text" class="form-control" name="category" id="editCategory" required list="categoryList" <?= $has_ft?'':'disabled' ?>></div>
+          <div class="col-12"><label class="form-label">รายละเอียด</label><input type="text" class="form-control" name="description" id="editDescription" required <?= $has_ft?'':'disabled' ?>></div>
+          <div class="col-sm-6"><label class="form-label">จำนวนเงิน (บาท)</label><input type="number" class="form-control" name="amount" id="editAmount" step="0.01" min="0" required <?= $has_ft?'':'disabled' ?>></div>
+          <div class="col-sm-6"><label class="form-label">อ้างอิง (ถ้ามี)</label><input type="text" class="form-control" name="reference_id" id="editReference" <?= $has_ft?'':'disabled' ?>></div>
+        </div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-primary" type="submit" <?= $has_ft?'':'disabled' ?>><i class="bi bi-save2 me-1"></i> บันทึก</G></button><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">ยกเลิก</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="modal fade" id="modalSummary" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title"><i class="bi bi-calculator me-2"></i>สรุปยอด (ช่วงที่เลือก)</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="row text-center">
+          <div class="col-4"><h6 class="text-success">รายได้รวม</h6><h4 class="text-success">฿<?= nf($total_income) ?></h4></div>
+          <div class="col-4"><h6 class="text-danger">ค่าใช้จ่ายรวม</h6><h4 class="text-danger">฿<?= nf($total_expense) ?></h4></div>
+          <div class="col-4"><h6 class="<?= $net_profit>=0?'text-success':'text-danger' ?>">กำไรสุทธิ</h6><h4 class="<?= $net_profit>=0?'text-success':'text-danger' ?>">฿<?= nf($net_profit) ?></h4></div>
+        </div>
+        <hr><p class="muted mb-0"><i class="bi bi-info-circle me-1"></i>ข้อมูลคำนวณตามช่วงวันที่ที่เลือก</p>
+      </div>
+      <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">ปิด</button></div>
     </div>
   </div>
 </div>
 
-<!-- Scripts -->
+<div class="modal fade" id="modalDeleteTransaction" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <form class="modal-content" id="deleteForm" method="POST" action="finance_delete.php">
+      <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+      <input type="hidden" name="transaction_code" id="deleteFormCode">
+      <div class="modal-header"><h5 class="modal-title text-danger"><i class="bi bi-trash me-2"></i>ลบรายการการเงิน</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">ต้องการลบรายการ <b id="delTxnId"></b> ใช่หรือไม่?<br><small class="muted">การดำเนินการนี้ไม่สามารถยกเลิกได้</small></div>
+      <div class="modal-footer"><button class="btn btn-danger" type="submit"><i class="bi bi-check2-circle me-1"></i> ยืนยันลบ</button><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">ยกเลิก</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index:1080">
+  <div id="liveToast" class="toast align-items-center text-bg-dark border-0" role="status" aria-live="polite">
+    <div class="d-flex">
+      <div class="toast-body" id="toastMsg">ดำเนินการสำเร็จ</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script> <script>
 (function(){
   const canEdit = <?= $has_ft ? 'true' : 'false' ?>;
 
-  /* ===== Compact mode (remember) ===== */
-  const compactKey = 'finance.compact';
-  const root = document.body;
-  const toggleCompact = document.getElementById('toggleCompact');
-  if (localStorage.getItem(compactKey) === '1') {
-    root.classList.add('compact');
-    if (toggleCompact) toggleCompact.checked = true;
-  }
-  toggleCompact?.addEventListener('change', (e)=>{
-    if (e.target.checked) { root.classList.add('compact'); localStorage.setItem(compactKey,'1'); }
-    else { root.classList.remove('compact'); localStorage.removeItem(compactKey); }
-  });
+  // ตั้งค่าสีกลางของ Chart.js
+  Chart.defaults.borderColor = '#dee2e6';
+  Chart.defaults.color = '#6c757d';
+  Chart.defaults.font.family = "'Prompt', sans-serif";
+  Chart.defaults.plugins.legend.position = 'bottom';
+  Chart.defaults.plugins.tooltip.backgroundColor = '#212529';
+  Chart.defaults.plugins.tooltip.titleFont.weight = 'bold';
+  Chart.defaults.plugins.tooltip.bodyFont.weight = '500';
 
-  /* ===== Charts ===== */
+  // Charts
   const pieCtx = document.getElementById('pieChart')?.getContext('2d');
   const lineCtx = document.getElementById('lineChart')?.getContext('2d');
-  const gpCtx = document.getElementById('gpBarChart')?.getContext('2d');
+  
+  if (pieCtx) {
+    new Chart(pieCtx, { 
+      type: 'doughnut', 
+      data: { 
+        labels: ['รายได้','ค่าใช้จ่าย'], 
+        datasets: [{ 
+          data: [<?= json_encode(round($total_income,2)) ?>, <?= json_encode(round($total_expense,2)) ?>],
+          backgroundColor: ['#198754', '#dc3545'],
+          borderColor: '#ffffff',
+          borderWidth: 2 
+        }] 
+      }, 
+      options: { responsive:true, maintainAspectRatio: false } 
+    });
+  }
+  
+  if (lineCtx) {
+    new Chart(lineCtx, { 
+      type: 'line', 
+      data: { 
+        labels: <?= json_encode($labels) ?>, 
+        datasets: [ 
+          { label: 'รายได้', data: <?= json_encode($seriesIncome) ?>, tension:.3, fill:false, borderColor: '#198754', borderWidth: 2, pointBackgroundColor: '#198754' }, 
+          { label: 'ค่าใช้จ่าย', data: <?= json_encode($seriesExpense) ?>, tension:.3, fill:false, borderColor: '#dc3545', borderWidth: 2, pointBackgroundColor: '#dc3545' } 
+        ]
+      }, 
+      options: { responsive:true, maintainAspectRatio: false, scales:{ y:{ beginAtZero:true } } } 
+    });
+  }
+  
+  // [เพิ่ม] กราฟ Gross Profit
+  const gpCanvas = document.getElementById('gpBarChart');
+  if (gpCanvas) {
+    const gpLabels = <?= json_encode($gp_labels, JSON_UNESCAPED_UNICODE) ?>;
+    const gpSeries = <?= json_encode($gp_series) ?>;
+    new Chart(gpCanvas, {
+      type: 'bar',
+      data: { 
+        labels: gpLabels, 
+        datasets: [{ 
+          label: 'กำไรขั้นต้น', 
+          data: gpSeries,
+          backgroundColor: 'rgba(13, 110, 253, 0.7)',
+          borderColor: 'rgba(13, 110, 253, 1)',
+          borderWidth: 1
+        }] 
+      },
+      options: { responsive:true, maintainAspectRatio: false, scales:{ y:{ beginAtZero:true } } }
+    });
+  }
 
-  if (pieCtx) new Chart(pieCtx, {
-    type: 'doughnut',
-    data: { labels: ['รายได้','ค่าใช้จ่าย'], datasets: [{ data: [<?= json_encode(round($total_income,2)) ?>, <?= json_encode(round($total_expense,2)) ?>], borderWidth: 0 }] },
-    options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom' } }, animation:{ duration: 300 } }
-  });
-  if (lineCtx) new Chart(lineCtx, {
-    type: 'line',
-    data: { labels: <?= json_encode($labels) ?>,
-      datasets: [
-        { label: 'รายได้', data: <?= json_encode($seriesIncome) ?>, tension:.35, fill:true, pointRadius:2 },
-        { label: 'ค่าใช้จ่าย', data: <?= json_encode($seriesExpense) ?>, tension:.35, fill:true, pointRadius:2 }
-      ]},
-    options: { responsive:true, maintainAspectRatio:false, scales:{ y:{ beginAtZero:true } }, plugins:{ legend:{ position:'bottom' } }, animation:{ duration: 250 } }
-  });
-  if (gpCtx) new Chart(gpCtx, {
-    type: 'bar',
-    data: { labels: <?= json_encode($gp_labels, JSON_UNESCAPED_UNICODE) ?>, datasets: [{ label: 'กำไรขั้นต้น', data: <?= json_encode($gp_series) ?> }] },
-    options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom' } }, scales:{ y:{ beginAtZero:true } }, animation:{ duration: 250 } }
-  });
-
-  /* ===== ใบเสร็จ (ทุกตาราง) ===== */
+  // เส้นทางใบเสร็จ
   const receiptRoutes = {
     sale:   code => `sales_receipt.php?code=${encodeURIComponent(code)}`,
     receive:id   => `receive_view.php?id=${encodeURIComponent(id)}`,
     lot:    code => `lot_view.php?code=${encodeURIComponent(code)}`,
     transaction: token => /^\d+$/.test(String(token))
-      ? `txn_receipt.php?id=${encodeURIComponent(token)}`
-      : `txn_receipt.php?code=${encodeURIComponent(token)}`
+    ? `txn_receipt.php?id=${encodeURIComponent(token)}`
+    : `txn_receipt.php?code=${encodeURIComponent(token)}`
   };
+
+  // ปุ่มใบเสร็จ (ทุกตาราง)
   document.querySelectorAll('.btnReceipt').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const tr = btn.closest('tr');
-      const direct = tr?.dataset?.receiptUrl?.trim();
+      const direct = tr?.dataset?.receiptUrl;
       const type   = tr?.dataset?.receiptType;
       const code   = tr?.dataset?.receiptCode;
-      let url = direct || (type && code && receiptRoutes[type] ? receiptRoutes[type](code) : '');
+      let url = (direct && direct.trim()) ? direct.trim() : '';
+      if (!url && type && code && receiptRoutes[type]) url = receiptRoutes[type](code);
       if (!url) return alert('ยังไม่มีลิงก์ใบเสร็จสำหรับรายการนี้');
       window.open(url, '_blank');
     });
   });
 
-  /* ===== ฟิลเตอร์ตารางหลัก (debounce) ===== */
+  // ===== [ปรับปรุง] ฟิลเตอร์ฝั่งไคลเอนต์สำหรับตารางหลัก =====
   const q = document.getElementById('txnSearch');
   const fType = document.getElementById('filterType');
   const fCat  = document.getElementById('filterCategory');
-  const fDate = document.getElementById('filterDate');
+  // [ลบ] fDate
   const tbody = document.querySelector('#txnTable tbody');
-
-  const debounce = (fn, wait=250)=>{ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args),wait); }; };
-  const normalize = s => (s||'').toString().toLowerCase();
-
+  
+  function normalize(s){ return (s||'').toString().toLowerCase(); }
+  
   function applyFilters(){
-    const text = normalize(q?.value || '');
-    const type = fType?.value || '';
-    const cat  = fCat?.value || '';
-    const date = fDate?.value || '';
-    tbody?.querySelectorAll('tr').forEach(tr=>{
-      const d = tr.dataset || {};
-      let ok = true;
+    const text = q ? normalize(q.value) : '';
+    const type = fType ? fType.value : '';
+    const cat  = fCat ? fCat.value : '';
+    // [ลบ] date
+  
+    tbody.querySelectorAll('tr').forEach(tr=>{
+      const d = tr.dataset; let ok = true;
       if (type && d.type !== type) ok = false;
       if (cat  && d.category !== cat) ok = false;
-      if (date) {
-        const rowDate = (d.date || '').slice(0,10);
-        if (rowDate !== date) ok = false;
-      }
-      if (text) {
-        const blob = (d.id+' '+(d.category||'')+' '+(d.description||'')+' '+(d.reference||'')+' '+(d.createdBy||'')+' '+tr.textContent).toLowerCase();
+      // [ลบ] เงื่อนไข date
+      
+      if (ok && text) { // [แก้ไข] ตรวจสอบ text หลังสุด
+        const blob = (d.id+' '+(d.category||'')+' '+(d.description||'')+' '+(d.reference||'')+' '+(d.createdBy||'')).toLowerCase();
         if (!blob.includes(text)) ok = false;
       }
       tr.style.display = ok? '' : 'none';
     });
   }
-  [q,fType,fCat,fDate].forEach(el=>el && el.addEventListener('input', debounce(applyFilters, 200)));
+  
+  [q,fType,fCat].forEach(el=>el && el.addEventListener('input', applyFilters));
+  
   document.getElementById('btnTxnShowAll')?.addEventListener('click', ()=>{
     if (q) q.value = '';
     if (fType) fType.value = '';
     if (fCat) fCat.value = '';
-    if (fDate) fDate.value = '';
+    // [ลบ] fDate
     applyFilters();
   });
-  applyFilters();
+  
+  if (tbody) applyFilters();
 
-  /* ===== ฟิลเตอร์สำหรับตาราง “ขาย” และ “จ่าย” ===== */
-  function wireSimpleTable({tableId, searchId, dateId, resetId}) {
+   // ===== [ปรับปรุง] ฟิลเตอร์สำหรับ "รายการขาย" และ "รายการจ่าย" =====
+   function wireSimpleTable({tableId, searchId, resetId}) {
     const table = document.getElementById(tableId);
     if (!table) return;
     const tbody = table.querySelector('tbody');
     const q = document.getElementById(searchId);
-    const d = document.getElementById(dateId);
+    // [ลบ] d (dateId)
     const resetBtn = document.getElementById(resetId);
+
     const norm = s => (s||'').toString().toLowerCase();
-    const toYmd = raw => String(raw || '').slice(0,10);
 
     function apply(){
       const text = norm(q?.value || '');
-      const date = d?.value || '';
+      // [ลบ] date
       tbody.querySelectorAll('tr').forEach(tr=>{
         const ds = tr.dataset || {};
         let ok = true;
-        if (date) ok = toYmd(ds.date) === date;
+
+        // [ลบ] เงื่อนไข date
+
         if (ok && text) {
-          const blob = [ds.code, ds.description, ds.createdBy, ds.origin, ds.amount, tr.textContent].join(' ').toLowerCase();
+          const blob = [
+            ds.code, ds.description, ds.createdBy, ds.origin, ds.amount,
+            tr.textContent
+          ].join(' ').toLowerCase();
           ok = blob.includes(text);
         }
         tr.style.display = ok ? '' : 'none';
       });
     }
-    q && q.addEventListener('input', debounce(apply, 200));
-    d && d.addEventListener('input', apply);
-    resetBtn && resetBtn.addEventListener('click', ()=>{ if (q) q.value = ''; if (d) d.value = ''; apply(); });
+
+    q && q.addEventListener('input', apply);
+    // [ลบ] d.addEventListener
+    resetBtn && resetBtn.addEventListener('click', ()=>{
+      if (q) q.value = '';
+      // [ลบ] d.value = ''
+      apply();
+    });
+
     apply();
   }
-  wireSimpleTable({ tableId:'salesTable', searchId:'salesSearch', dateId:'salesDate', resetId:'salesShowAll' });
-  wireSimpleTable({ tableId:'payTable',   searchId:'paySearch',   dateId:'payDate',   resetId:'payShowAll'   });
 
-  /* ===== CSV / Print ===== */
-  function exportCSV(){
-    const rows = [['วันที่','รหัส','ประเภท','หมวดหมู่','รายละเอียด','จำนวนเงิน','อ้างอิง','ผู้บันทึก']];
-    document.querySelectorAll('#txnTable tbody tr').forEach(tr=>{
-      if (tr.style.display==='none') return;
-      const d = tr.dataset;
-      const dateObj = new Date(d.date);
-      const dd = String(dateObj.getDate()).padStart(2,'0')+'/'+String(dateObj.getMonth()+1).padStart(2,'0')+'/'+dateObj.getFullYear();
-      const amt = parseFloat(d.amount||'0');
-      rows.push([dd, d.id, d.type==='income'?'รายได้':'ค่าใช้จ่าย', d.category||'', d.description||'', amt.toFixed(2), d.reference||'', d.createdBy||'']);
-    });
-    const csv = rows.map(r=>r.map(x=>`"${String(x??'').replace(/"/g,'""')}"`).join(',')).join('\r\n');
-    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'finance_export.csv'; a.click(); URL.revokeObjectURL(a.href);
-  }
-  document.getElementById('btnExportData')?.addEventListener('click', exportCSV);
-  document.getElementById('btnPrint')?.addEventListener('click', ()=>window.print());
+  // [ปรับปรุง] ผูกใช้งานกับ 2 ตาราง (ลบ dateId ออก)
+  wireSimpleTable({ tableId:'salesTable', searchId:'salesSearch', resetId:'salesShowAll' });
+  wireSimpleTable({ tableId:'payTable',   searchId:'paySearch',   resetId:'payShowAll'   });
 
-  /* ===== Toast messages from URL ===== */
+
+  // Toast (ถ้าต้องใช้)
   const toastEl = document.getElementById('liveToast'); const toastMsg = document.getElementById('toastMsg');
   const toast = toastEl ? new bootstrap.Toast(toastEl, {delay:2000}) : null;
-  function showToast(msg){ if(!toast) return alert(msg); toastMsg.textContent=msg; toast.show(); }
-  const urlParams = new URLSearchParams(window.location.search);
-  const okMsg = urlParams.get('ok'); const errMsg = urlParams.get('err');
-  if (okMsg) { showToast(okMsg); window.history.replaceState({}, document.title, window.location.pathname + window.location.hash); }
-  if (errMsg) { showToast(errMsg); window.history.replaceState({}, document.title, window.location.pathname + window.location.hash); }
+  function showToast(msg, isSuccess = true){ 
+    if(!toast) return alert(msg); 
+    toastEl.classList.toggle('text-bg-dark', isSuccess); // ใช้สีเข้มปกติ
+    toastEl.classList.toggle('text-bg-danger', !isSuccess); // หรือสีแดงถ้าล้มเหลว
+    toastMsg.textContent=msg; 
+    toast.show(); 
+  }
 
-  /* ===== Modal handlers (ใช้ของเดิม) ===== */
+  // Modal Handlers (ไม่เปลี่ยนแปลง)
   if (canEdit) {
     document.querySelectorAll('#txnTable .btnEdit').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const tr = btn.closest('tr'); const d = tr.dataset;
         const dt = new Date(d.date);
         const dtString = dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0') + 'T' + String(dt.getHours()).padStart(2,'0') + ':' + String(dt.getMinutes()).padStart(2,'0');
+        
         document.getElementById('editTransactionCode').value = d.id;
         document.getElementById('editDate').value = dtString;
         document.getElementById('editType').value = d.type;
@@ -1292,6 +1358,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
         new bootstrap.Modal(document.getElementById('modalEditTransaction')).show();
       });
     });
+
     document.querySelectorAll('#txnTable .btnDel').forEach(btn=>{
       btn.addEventListener('click', ()=>{ 
         const tr=btn.closest('tr'); 
@@ -1302,6 +1369,14 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
       });
     });
   }
+
+  // Handle toast messages from URL
+  const urlParams = new URLSearchParams(window.location.search);
+  const okMsg = urlParams.get('ok');
+  const errMsg = urlParams.get('err');
+  if (okMsg) { showToast(okMsg, true); window.history.replaceState({}, document.title, window.location.pathname + window.location.hash); }
+  if (errMsg) { showToast(errMsg, false); window.history.replaceState({}, document.title, window.location.pathname + window.location.hash); }
+
 })();
 </script>
 </body>
