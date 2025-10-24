@@ -18,7 +18,7 @@ try {
   $current_role = $_SESSION['role'] ?? '';
   if ($current_role !== 'admin') { header('Location: /index/login.php?err=คุณไม่มีสิทธิ์เข้าถึงหน้านี้'); exit(); }
 } catch (Throwable $e) { header('Location: /index/login.php?err=เกิดข้อผิดพลาดของระบบ'); exit(); }
- 
+
 if (empty($_SESSION['csrf_token'])) { $_SESSION['csrf_token'] = bin2hex(random_bytes(32)); }
 
 /* ===== Helpers ===== */
@@ -47,7 +47,7 @@ try {
   $st = $pdo->query("SELECT site_name FROM settings WHERE id=1");
   if ($r = $st->fetch(PDO::FETCH_ASSOC)) $site_name = $r['site_name'] ?: $site_name;
 } catch (Throwable $e) {}
- 
+
 $stationId = 1;
 try {
   if (table_exists($pdo,'settings')) {
@@ -55,7 +55,7 @@ try {
     if ($sid !== false) $stationId = (int)$sid;
   }
 } catch (Throwable $e) {}
- 
+
 /* ===== กำหนดช่วงวันที่ "ส่วนกลางของทั้งหน้า" ===== */
 $quick = $_GET['gp_quick'] ?? ''; // today|yesterday|7d|30d|this_month|last_month|this_year|all
 $in_from = ymd($_GET['gp_from'] ?? '');
@@ -86,7 +86,7 @@ if ($from && $to) { // จำกัดช่วงสูงสุด ~1 ปี
 }
 $rangeFromStr = $from ? $from->format('Y-m-d') : null;
 $rangeToStr   = $to   ? $to->format('Y-m-d')   : null;
- 
+
 /* ===== ธงโหมด ===== */
 $has_ft  = table_exists($pdo,'financial_transactions');
 $has_gpv = table_exists($pdo,'v_sales_gross_profit');
@@ -330,7 +330,7 @@ try {
 
   if ($rangeFromStr) { $sw.=" AND DATE(s.sale_date) >= :f"; $sp[':f']=$rangeFromStr; }
   if ($rangeToStr)   { $sw.=" AND DATE(s.sale_date) <= :t"; $sp[':t']=$rangeToStr; }
-  
+
   $ss = $pdo->prepare("
     SELECT s.sale_date AS date, s.sale_code AS code, s.total_amount AS amount,
            CONCAT('ขายเชื้อเพลิง (', COALESCE(s.payment_method,''), ')') AS description,
@@ -379,7 +379,7 @@ try {
   $whereR = "WHERE 1=1";
   if ($rangeFromStr) { $whereR.=" AND DATE(fr.received_date) >= :f"; $paramsR[':f']=$rangeFromStr; }
   if ($rangeToStr)   { $whereR.=" AND DATE(fr.received_date) <= :t"; $paramsR[':t']=$rangeToStr; }
-  
+
   $qR = $pdo->prepare("
     SELECT
       'RCV' AS origin,
@@ -474,7 +474,7 @@ $labels = []; $seriesIncome = []; $seriesExpense = [];
 try {
   if ($rangeFromStr && $rangeToStr) { $start = new DateTime($rangeFromStr); $end = new DateTime($rangeToStr); }
   else { $start = (new DateTime('today'))->modify('-6 day'); $end = new DateTime('today'); }
-  $days=[]; $cursor=clone $start; 
+  $days=[]; $cursor=clone $start;
   while ($cursor <= $end) { $key=$cursor->format('Y-m-d'); $days[$key]=['income'=>0.0,'expense'=>0.0]; $cursor->modify('+1 day'); }
 
   if ($has_ft) {
@@ -623,7 +623,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     .amount-income{ color:#198754; font-weight:600; } .amount-expense{ color:#dc3545; font-weight:600; }
     .transaction-type{ padding:4px 8px; border-radius:12px; font-size:.8rem; font-weight:500; }
     .type-income{ background:#d1edff; color:#0969da; } .type-expense{ background:#ffebe9; color:#cf222e; }
-    
+
     .panel, .card {
         background:#fff;
         border:1px solid #dee2e6;
@@ -640,7 +640,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     .panel .panel-body, .card .card-body {
         padding: 1rem;
     }
-    
+
     .chart-container{position:relative;height:300px;width:100%}
     .muted{color:#6c757d}
     .filter-bar-card {
@@ -752,8 +752,8 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
         </form>
       </div>
 
-      
-       <div class="row g-3 my-4"> <div class="col-lg-4">
+
+        <div class="row g-3 my-4"> <div class="col-lg-4">
           <div class="card card-body shadow-sm text-center h-100">
             <h6 class="text-muted"><i class="bi bi-currency-dollar me-2"></i>รายได้รวม (ช่วง)</h6>
             <h3 class="text-success mb-0">฿<?= nf($total_income) ?></h3>
@@ -869,7 +869,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                       <?php if (empty($transactions_display)): ?>
                         <tr><td colspan="7" class="text-center text-muted p-4">ไม่พบข้อมูลใน่ชวงวันที่ที่เลือก</td></tr>
                       <?php endif; ?>
-                      <?php foreach($transactions_display as $tx): 
+                      <?php foreach($transactions_display as $tx):
                         $isIncome = ($tx['type']==='income');
                         $id   = (string)$tx['id'];
                         $ref  = (string)($tx['reference'] ?? '');
@@ -888,7 +888,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                           $rtype = 'transaction'; $rcode = $m[1]; $receiptUrl = 'txn_receipt.php?id=' . urlencode($rcode);
                         } elseif (preg_match('/^FT-/', $id)) {
                           $rtype = 'transaction'; $rcode = $id; $receiptUrl = 'txn_receipt.php?code=' . urlencode($rcode);
-                        }                                           
+                        }
                       ?>
                       <tr class="<?= $isIncome ? 'income-row' : 'expense-row' ?>"
                           data-id="<?= htmlspecialchars($tx['id']) ?>"
@@ -909,17 +909,23 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                         <td class="text-end"><span class="<?= $isIncome ? 'amount-income' : 'amount-expense' ?>"><?= $isIncome ? '+' : '-' ?>฿<?= nf($tx['amount']) ?></span></td>
                         <td class="d-none d-xl-table-cell"><?= htmlspecialchars($tx['created_by']) ?></td>
                         <td class="text-end pe-3">
-                          <button class="btn btn-sm btn-outline-secondary btnReceipt" title="ดูใบเสร็จ">
-                            <i class="bi bi-receipt"></i>
-                          </button>
+                          <div class="btn-group">
+                            <button class="btn btn-sm btn-outline-secondary btnReceipt" title="ดูใบเสร็จ"><i class="bi bi-receipt"></i></button>
+                            <?php /* [ลบ] ปุ่มแก้ไขและลบถูกลบออกตามคำขอ
+                            <?php if ($has_ft): ?>
+                              <button class="btn btn-sm btn-outline-primary btnEdit" title="แก้ไข"><i class="bi bi-pencil-square"></i></button>
+                              <button class="btn btn-sm btn-outline-danger btnDel" title="ลบ"><i class="bi bi-trash"></i></button>
+                            <?php endif; ?>
+                            */ ?>
+                          </div>
                         </td>
                       </tr>
                       <?php endforeach; ?>
                     </tbody>
                   </table>
                 </div>
-              </div>           
-              <?php if ($total_pages_fin > 1): 
+              </div>
+              <?php if ($total_pages_fin > 1):
                 $qs_prev = http_build_query(array_merge($base_qs, ['tab'=>'financial','page_fin'=>$page_fin-1]));
                 $qs_next = http_build_query(array_merge($base_qs, ['tab'=>'financial','page_fin'=>$page_fin+1]));
               ?>
@@ -930,7 +936,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                     <a class="btn btn-sm btn-outline-primary  <?= $page_fin>=$total_pages_fin?'disabled':'' ?>" href="?<?= htmlspecialchars($qs_next) ?>#stock-price-panel">ถัดไป</a>
                   </div>
                 </div>
-              <?php endif; ?>        
+              <?php endif; ?>
             </div>
           </div>
 
@@ -988,7 +994,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                   </table>
                 </div>
               </div>
-              <?php if ($total_pages_sales > 1): 
+              <?php if ($total_pages_sales > 1):
                 $qs_prev = http_build_query(array_merge($base_qs, ['tab'=>'sales','page_sales'=>$page_sales-1]));
                 $qs_next = http_build_query(array_merge($base_qs, ['tab'=>'sales','page_sales'=>$page_sales+1]));
               ?>
@@ -999,7 +1005,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                     <a class="btn btn-sm btn-outline-primary  <?= $page_sales>=$total_pages_sales?'disabled':'' ?>" href="?<?= htmlspecialchars($qs_next) ?>#price-panel">ถัดไป</a>
                   </div>
                 </div>
-              <?php endif; ?>  
+              <?php endif; ?>
             </div>
           </div>
 
@@ -1064,7 +1070,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                   </table>
                 </div>
               </div>
-              <?php if ($total_pages_pay > 1): 
+              <?php if ($total_pages_pay > 1):
                 $qs_prev = http_build_query(array_merge($base_qs, ['tab'=>'payments','page_pay'=>$page_pay-1]));
                 $qs_next = http_build_query(array_merge($base_qs, ['tab'=>'payments','page_pay'=>$page_pay+1]));
               ?>
@@ -1075,7 +1081,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                     <a class="btn btn-sm btn-outline-primary  <?= $page_pay>=$total_pages_pay?'disabled':'' ?>" href="?<?= htmlspecialchars($qs_next) ?>#receive-panel">ถัดไป</a>
                   </div>
                 </div>
-              <?php endif; ?> 
+              <?php endif; ?>
             </div>
           </div>
 
@@ -1098,6 +1104,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
             <input type="text" class="form-control" name="transaction_code" id="addTransactionCode"
                    value="FT-<?= date('Ymd-His') ?>" readonly <?= $has_ft?'':'disabled' ?>>
           </div>
+
           <div class="col-sm-6">
             <label class="form-label" for="addTransactionDate">วันที่และเวลา</label>
             <input type="datetime-local" class="form-control" name="transaction_date" id="addTransactionDate" value="<?= date('Y-m-d\TH:i') ?>" required <?= $has_ft?'':'disabled' ?>>
@@ -1129,6 +1136,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                 ?>
             </datalist>
           </div>
+
           <div class="col-12">
             <label class="form-label" for="addDescription">รายละเอียด</label>
             <input type="text" class="form-control" name="description" id="addDescription" required <?= $has_ft?'':'disabled' ?>>
@@ -1148,6 +1156,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   </div>
 </div>
 
+      <div class="modal fade" id="modalEditTransaction" tabindex="-1" aria-hidden="true">
         </div>
       <div class="modal fade" id="modalSummary" tabindex="-1" aria-hidden="true">
         </div>
@@ -1157,6 +1166,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   </div>
 </div>
 
+<div class="modal fade" id="modalEditTransaction" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg">
     <form class="modal-content" id="formEditTransaction" method="post" action="finance_edit.php">
       <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
@@ -1220,6 +1230,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 (function(){
+  const canEdit = <?= $has_ft ? 'true' : 'false' ?>;
 
   Chart.defaults.borderColor = '#dee2e6';
   Chart.defaults.color = '#6c757d';
@@ -1231,52 +1242,52 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 
   const pieCtx = document.getElementById('pieChart')?.getContext('2d');
   const lineCtx = document.getElementById('lineChart')?.getContext('2d');
-  
+
   if (pieCtx) {
-    new Chart(pieCtx, { 
-      type: 'doughnut', 
-      data: { 
-        labels: ['รายได้','ค่าใช้จ่าย'], 
-        datasets: [{ 
+    new Chart(pieCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['รายได้','ค่าใช้จ่าย'],
+        datasets: [{
           data: [<?= json_encode(round($total_income,2)) ?>, <?= json_encode(round($total_expense,2)) ?>],
           backgroundColor: ['#198754', '#dc3545'],
           borderColor: '#ffffff',
-          borderWidth: 2 
-        }] 
-      }, 
-      options: { responsive:true, maintainAspectRatio: false } 
+          borderWidth: 2
+        }]
+      },
+      options: { responsive:true, maintainAspectRatio: false }
     });
   }
-  
+
   if (lineCtx) {
-    new Chart(lineCtx, { 
-      type: 'line', 
-      data: { 
-        labels: <?= json_encode($labels) ?>, 
-        datasets: [ 
-          { label: 'รายได้', data: <?= json_encode($seriesIncome) ?>, tension:.3, fill:false, borderColor: '#198754', borderWidth: 2, pointBackgroundColor: '#198754' }, 
-          { label: 'ค่าใช้จ่าย', data: <?= json_encode($seriesExpense) ?>, tension:.3, fill:false, borderColor: '#dc3545', borderWidth: 2, pointBackgroundColor: '#dc3545' } 
+    new Chart(lineCtx, {
+      type: 'line',
+      data: {
+        labels: <?= json_encode($labels) ?>,
+        datasets: [
+          { label: 'รายได้', data: <?= json_encode($seriesIncome) ?>, tension:.3, fill:false, borderColor: '#198754', borderWidth: 2, pointBackgroundColor: '#198754' },
+          { label: 'ค่าใช้จ่าย', data: <?= json_encode($seriesExpense) ?>, tension:.3, fill:false, borderColor: '#dc3545', borderWidth: 2, pointBackgroundColor: '#dc3545' }
         ]
-      }, 
-      options: { responsive:true, maintainAspectRatio: false, scales:{ y:{ beginAtZero:true } } } 
+      },
+      options: { responsive:true, maintainAspectRatio: false, scales:{ y:{ beginAtZero:true } } }
     });
   }
-  
+
   const gpCanvas = document.getElementById('gpBarChart');
   if (gpCanvas) {
     const gpLabels = <?= json_encode($gp_labels, JSON_UNESCAPED_UNICODE) ?>;
     const gpSeries = <?= json_encode($gp_series) ?>;
     new Chart(gpCanvas, {
       type: 'bar',
-      data: { 
-        labels: gpLabels, 
-        datasets: [{ 
-          label: 'กำไรขั้นต้น', 
+      data: {
+        labels: gpLabels,
+        datasets: [{
+          label: 'กำไรขั้นต้น',
           data: gpSeries,
           backgroundColor: 'rgba(13, 110, 253, 0.7)',
           borderColor: 'rgba(13, 110, 253, 1)',
           borderWidth: 1
-        }] 
+        }]
       },
       options: { responsive:true, maintainAspectRatio: false, scales:{ y:{ beginAtZero:true } } }
     });
@@ -1308,19 +1319,19 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   const fType = document.getElementById('filterType');
   const fCat  = document.getElementById('filterCategory');
   const tbody = document.querySelector('#txnTable tbody');
-  
+
   function normalize(s){ return (s||'').toString().toLowerCase(); }
-  
+
   function applyFilters(){
     const text = q ? normalize(q.value) : '';
     const type = fType ? fType.value : '';
     const cat  = fCat ? fCat.value : '';
-  
+
     tbody.querySelectorAll('tr').forEach(tr=>{
       const d = tr.dataset; let ok = true;
       if (type && d.type !== type) ok = false;
       if (cat  && d.category !== cat) ok = false;
-      
+
       if (ok && text) {
         const blob = (d.id+' '+(d.category||'')+' '+(d.description||'')+' '+(d.reference||'')+' '+(d.createdBy||'')).toLowerCase();
         if (!blob.includes(text)) ok = false;
@@ -1328,16 +1339,16 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
       tr.style.display = ok? '' : 'none';
     });
   }
-  
+
   [q,fType,fCat].forEach(el=>el && el.addEventListener('input', applyFilters));
-  
+
   document.getElementById('btnTxnShowAll')?.addEventListener('click', ()=>{
     if (q) q.value = '';
     if (fType) fType.value = '';
     if (fCat) fCat.value = '';
     applyFilters();
   });
-  
+
   if (tbody) applyFilters();
 
    function wireSimpleTable({tableId, searchId, resetId}) {
@@ -1379,13 +1390,30 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 
   const toastEl = document.getElementById('liveToast'); const toastMsg = document.getElementById('toastMsg');
   const toast = toastEl ? new bootstrap.Toast(toastEl, {delay:2000}) : null;
-  function showToast(msg, isSuccess = true){ 
-    if(!toast) return alert(msg); 
+  function showToast(msg, isSuccess = true){
+    if(!toast) return alert(msg);
     toastEl.classList.toggle('text-bg-dark', isSuccess);
     toastEl.classList.toggle('text-bg-danger', !isSuccess);
-    toastMsg.textContent=msg; 
-    toast.show(); 
+    toastMsg.textContent=msg;
+    toast.show();
   }
+
+  // [แก้ไข] ลบ Event Listener ของปุ่มแก้ไขและลบออก
+  /*
+  if (canEdit) {
+    document.querySelectorAll('#txnTable .btnEdit').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        // ... โค้ดเปิด Modal แก้ไข ...
+      });
+    });
+
+    document.querySelectorAll('#txnTable .btnDel').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        // ... โค้ดเปิด Modal ลบ ...
+      });
+    });
+  }
+  */
 
   const urlParams = new URLSearchParams(window.location.search);
   const okMsg = urlParams.get('ok');
@@ -1400,6 +1428,24 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   if (tab && map[tab]) {
     const trigger = document.querySelector(`[data-bs-target="${map[tab]}"]`);
     if (trigger) bootstrap.Tab.getOrCreateInstance(trigger).show();
+  }
+
+  // [เพิ่ม] อัปเดตรหัสรายการอัตโนมัติเมื่อ Modal เปิด
+  const addModal = document.getElementById('modalAddTransaction');
+  if (addModal) {
+    addModal.addEventListener('show.bs.modal', function () {
+      const codeInput = document.getElementById('addTransactionCode');
+      if (codeInput) {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        codeInput.value = `FT-${year}${month}${day}-${hours}${minutes}${seconds}`;
+      }
+    });
   }
 
 })();
