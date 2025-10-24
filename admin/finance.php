@@ -862,7 +862,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                         <th>วันที่</th><th>รหัส</th><th>ประเภท</th><th>รายละเอียด</th>
                         <th class="text-end">จำนวนเงิน</th>
                         <th class="d-none d-xl-table-cell">ผู้บันทึก</th>
-                        <th class="text-end">จัดการ</th>
+                        <th class="text-end">ใบเสร็จ</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -909,13 +909,9 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                         <td class="text-end"><span class="<?= $isIncome ? 'amount-income' : 'amount-expense' ?>"><?= $isIncome ? '+' : '-' ?>฿<?= nf($tx['amount']) ?></span></td>
                         <td class="d-none d-xl-table-cell"><?= htmlspecialchars($tx['created_by']) ?></td>
                         <td class="text-end pe-3">
-                          <div class="btn-group">
-                            <button class="btn btn-sm btn-outline-secondary btnReceipt" title="ดูใบเสร็จ"><i class="bi bi-receipt"></i></button>
-                            <?php if ($has_ft): ?>
-                              <button class="btn btn-sm btn-outline-primary btnEdit" title="แก้ไข"><i class="bi bi-pencil-square"></i></button>
-                              <button class="btn btn-sm btn-outline-danger btnDel" title="ลบ"><i class="bi bi-trash"></i></button>
-                            <?php endif; ?>
-                          </div>
+                          <button class="btn btn-sm btn-outline-secondary btnReceipt" title="ดูใบเสร็จ">
+                            <i class="bi bi-receipt"></i>
+                          </button>
                         </td>
                       </tr>
                       <?php endforeach; ?>
@@ -1152,7 +1148,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   </div>
 </div>
 
-      <div class="modal fade" id="modalEditTransaction" tabindex="-1" aria-hidden="true">
         </div>
       <div class="modal fade" id="modalSummary" tabindex="-1" aria-hidden="true">
         </div>
@@ -1162,7 +1157,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   </div>
 </div>
 
-<div class="modal fade" id="modalEditTransaction" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg">
     <form class="modal-content" id="formEditTransaction" method="post" action="finance_edit.php">
       <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
@@ -1226,7 +1220,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 (function(){
-  const canEdit = <?= $has_ft ? 'true' : 'false' ?>;
 
   Chart.defaults.borderColor = '#dee2e6';
   Chart.defaults.color = '#6c757d';
@@ -1392,35 +1385,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     toastEl.classList.toggle('text-bg-danger', !isSuccess);
     toastMsg.textContent=msg; 
     toast.show(); 
-  }
-
-  if (canEdit) {
-    document.querySelectorAll('#txnTable .btnEdit').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const tr = btn.closest('tr'); const d = tr.dataset;
-        const dt = new Date(d.date);
-        const dtString = dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0') + 'T' + String(dt.getHours()).padStart(2,'0') + ':' + String(dt.getMinutes()).padStart(2,'0');
-        
-        document.getElementById('editTransactionCode').value = d.id;
-        document.getElementById('editDate').value = dtString;
-        document.getElementById('editType').value = d.type;
-        document.getElementById('editCategory').value = d.category || '';
-        document.getElementById('editDescription').value = d.description || '';
-        document.getElementById('editAmount').value = parseFloat(d.amount||'0').toFixed(2);
-        document.getElementById('editReference').value = d.reference || '';
-        new bootstrap.Modal(document.getElementById('modalEditTransaction')).show();
-      });
-    });
-
-    document.querySelectorAll('#txnTable .btnDel').forEach(btn=>{
-      btn.addEventListener('click', ()=>{ 
-        const tr=btn.closest('tr'); 
-        const code = tr.dataset.id;
-        document.getElementById('delTxnId').textContent = code; 
-        document.getElementById('deleteFormCode').value = code;
-        new bootstrap.Modal(document.getElementById('modalDeleteTransaction')).show(); 
-      });
-    });
   }
 
   const urlParams = new URLSearchParams(window.location.search);
