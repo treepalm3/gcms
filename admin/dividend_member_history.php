@@ -1,208 +1,103 @@
 <?php
-// dividend_member_history.php — ดูประวัติการรับปันผลของสมาชิก/ผู้บริหาร/กรรมการ
+// dividend_member_history.php
 session_start();
+header('Content-Type: application/json');
 date_default_timezone_set('Asia/Bangkok');
+require_once '../config/db.php';
 
-header('Content-Type: application/json; charset=utf-8');
+$response = ['ok' => false, 'history' => [], 'summary' => [], 'error' => 'Invalid request'];
 
-// ตรวจสอบการล็อกอิน
-if (!isset($_SESSION['user_id'])) {
-    http_response_code(401);
-    echo json_encode([
-        'ok' => false,
-        'error' => 'กรุณาเข้าสู่ระบบก่อนใช้งาน'
-    ], JSON_UNESCAPED_UNICODE);
-    exit();
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
+    $response['error'] = 'Access denied';
+    echo json_encode($response); exit;
 }
 
-// เชื่อมต่อฐานข้อมูล
-$dbFile = __DIR__ . '/../config/db.php';
-if (!file_exists($dbFile)) {
-    $dbFile = __DIR__ . '/config/db.php';
-}
-require_once $dbFile;
-
-if (!isset($pdo) || !($pdo instanceof PDO)) {
-    http_response_code(500);
-    echo json_encode([
-        'ok' => false,
-        'error' => 'ไม่สามารถเชื่อมต่อฐานข้อมูลได้'
-    ], JSON_UNESCAPED_UNICODE);
-    exit();
-}
-
-$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
-// รับพารามิเตอร์
 $member_id = (int)($_GET['member_id'] ?? 0);
 $member_type = trim($_GET['member_type'] ?? '');
 
-// Validation
-if ($member_id <= 0) {
-    http_response_code(400);
-    echo json_encode([
-        'ok' => false,
-        'error' => 'ไม่พบรหัสสมาชิก'
-    ], JSON_UNESCAPED_UNICODE);
-    exit();
-}
-
-if (!in_array($member_type, ['member', 'manager', 'committee'])) {
-    http_response_code(400);
-    echo json_encode([
-        'ok' => false,
-        'error' => 'ประเภทสมาชิกไม่ถูกต้อง'
-    ], JSON_UNESCAPED_UNICODE);
-    exit();
+if ($member_id <= 0 || empty($member_type)) {
+    $response['error'] = 'Invalid member parameters';
+    echo json_encode($response); exit;
 }
 
 try {
-    // ดึงข้อมูลสมาชิก
-    $member_info = null;
-    
-    switch ($member_type) {
-        case 'member':
-            $stmt = $pdo->prepare("
-                SELECT m.id, m.member_code AS code, u.full_name, m.shares
-                FROM members m
-                JOIN users u ON m.user_id = u.id
-                WHERE m.id = :id AND m.is_active = 1
-            ");
-            $stmt->execute([':id' => $member_id]);
-            $member_info = $stmt->fetch(PDO::FETCH_ASSOC);
-            break;
-            
-        case 'manager':
-            $stmt = $pdo->prepare("
-                SELECT 
-                    mg.id, 
-                    CONCAT('MGR-', LPAD(mg.id, 3, '0')) AS code,
-                    u.full_name,
-                    mg.shares
-                FROM managers mg
-                JOIN users u ON mg.user_id = u.id
-                WHERE mg.id = :id
-            ");
-            $stmt->execute([':id' => $member_id]);
-            $member_info = $stmt->fetch(PDO::FETCH_ASSOC);
-            break;
-            
-        case 'committee':
-            $stmt = $pdo->prepare("
-                SELECT 
-                    c.id,
-                    c.committee_code AS code,
-                    u.full_name,
-                    COALESCE(c.shares, 0) AS shares
-                FROM committees c
-                JOIN users u ON c.user_id = u.id
-                WHERE c.id = :id
-            ");
-            $stmt->execute([':id' => $member_id]);
-            $member_info = $stmt->fetch(PDO::FETCH_ASSOC);
-            break;
-    }
-    
-    if (!$member_info) {
-        throw new Exception('ไม่พบข้อมูลสมาชิก');
-    }
-
-    // ดึงประวัติการรับปันผล
-    $history_stmt = $pdo->prepare("
+    // 1. ดึงประวัติปันผล (Dividend)
+    $sql_dividend = "
         SELECT 
-            dp.id,
-            dp.shares_at_time,
-            dp.dividend_amount,
-            dp.payment_status,
-            dp.paid_at,
-            per.id AS period_id,
-            per.year,
-            per.period_name,
-            per.dividend_rate,
-            per.payment_date,
-            per.status AS period_status
+            p.year, p.period_name, p.dividend_rate, 
+            dp.shares_at_time, dp.dividend_amount, dp.payment_status, p.payment_date
         FROM dividend_payments dp
-        JOIN dividend_periods per ON dp.period_id = per.id
-        WHERE dp.member_id = :member_id
-          AND dp.member_type = :member_type
-        ORDER BY per.year DESC, per.id DESC
-    ");
+        JOIN dividend_periods p ON dp.period_id = p.id
+        WHERE dp.member_id = ? AND dp.member_type = ?
+        ORDER BY p.year DESC
+    ";
+    $stmt_div = $pdo->prepare($sql_dividend);
+    $stmt_div->execute([$member_id, $member_type]);
+    $dividend_history = $stmt_div->fetchAll(PDO::FETCH_ASSOC);
+
+    // 2. ดึงประวัติเฉลี่ยคืน (Rebate) - (ถ้ามีตาราง)
+    $rebate_history = [];
+    try {
+        $sql_rebate = "
+            SELECT 
+                p.year, p.period_name, p.rebate_per_baht, p.total_rebate_budget,
+                rp.purchase_amount_at_time, rp.rebate_amount, rp.payment_status, p.payment_date
+            FROM rebate_payments rp
+            JOIN rebate_periods p ON rp.period_id = p.id
+            WHERE rp.member_id = ? AND rp.member_type = ?
+            ORDER BY p.year DESC
+        ";
+        $stmt_reb = $pdo->prepare($sql_rebate);
+        $stmt_reb->execute([$member_id, $member_type]);
+        $rebate_history = $stmt_reb->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) { /* ตาราง rebate_payments อาจยังไม่มี */ }
+
+    // 3. เตรียมข้อมูลส่งกลับ (ในตัวอย่างนี้ ขอส่งแค่ปันผลก่อน)
+    // *** คุณต้องปรับปรุงส่วนนี้เพื่อรวม $rebate_history เข้าไปด้วย ***
     
-    $history_stmt->execute([
-        ':member_id' => $member_id,
-        ':member_type' => $member_type
-    ]);
-    
-    $history = $history_stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    // คำนวณสรุป
+    $history_list = [];
     $total_received = 0;
     $total_pending = 0;
-    $payment_count = 0;
     
-    foreach ($history as &$item) {
-        $payment_count++;
-        
+    foreach ($dividend_history as $item) {
+        $status = $item['payment_status'];
         $amount = (float)$item['dividend_amount'];
         
-        if ($item['payment_status'] === 'paid') {
+        if ($status == 'paid') {
             $total_received += $amount;
         } else {
             $total_pending += $amount;
         }
         
-        // จัดรูปแบบข้อมูล
-        $item['dividend_amount_formatted'] = '฿' . number_format($amount, 2);
-        $item['dividend_rate'] = (float)$item['dividend_rate'];
-        $item['shares_at_time'] = (int)$item['shares_at_time'];
-        
-        // จัดรูปแบบวันที่
-        if ($item['paid_at']) {
-            $date = new DateTime($item['paid_at']);
-            $item['payment_date_formatted'] = $date->format('d/m/Y H:i');
-        } elseif ($item['payment_date']) {
-            $date = new DateTime($item['payment_date']);
-            $item['payment_date_formatted'] = $date->format('d/m/Y');
-        } else {
-            $item['payment_date_formatted'] = '-';
-        }
+        $history_list[] = [
+            'year' => $item['year'],
+            'period_name' => $item['period_name'],
+            'shares_at_time' => (int)$item['shares_at_time'],
+            'dividend_rate' => (float)$item['dividend_rate'],
+            'dividend_amount' => $amount,
+            'dividend_amount_formatted' => '฿' . nf($amount),
+            'payment_status' => $status,
+            'payment_date_formatted' => ($status == 'paid' && $item['payment_date']) ? d($item['payment_date']) : '-'
+        ];
     }
     
-    // ส่งผลลัพธ์
-    echo json_encode([
-        'ok' => true,
-        'member' => [
-            'id' => $member_info['id'],
-            'code' => $member_info['code'],
-            'full_name' => $member_info['full_name'],
-            'shares' => (int)$member_info['shares'],
-            'type' => $member_type
-        ],
-        'history' => $history,
-        'summary' => [
-            'total_received' => $total_received,
-            'total_received_formatted' => '฿' . number_format($total_received, 2),
-            'total_pending' => $total_pending,
-            'total_pending_formatted' => '฿' . number_format($total_pending, 2),
-            'payment_count' => $payment_count
-        ]
-    ], JSON_UNESCAPED_UNICODE);
+    // (เพิ่ม Loop สำหรับ $rebate_history ที่นี่ และบวกยอด vào $total_received / $total_pending)
 
-} catch (Exception $e) {
-    error_log("Member history error: " . $e->getMessage());
+    $response['ok'] = true;
+    $response['history'] = $history_list;
+    $response['summary'] = [
+        'total_received' => $total_received,
+        'total_pending' => $total_pending,
+        'total_received_formatted' => '฿' . nf($total_received),
+        'total_pending_formatted' => '฿' . nf($total_pending),
+        'payment_count' => count($history_list) // (ต้องบวก count ของ rebate ด้วย)
+    ];
+    $response['error'] = '';
     
-    http_response_code(400);
-    echo json_encode([
-        'ok' => false,
-        'error' => $e->getMessage()
-    ], JSON_UNESCAPED_UNICODE);
-
 } catch (Throwable $e) {
-    error_log("Critical member history error: " . $e->getMessage());
-    
-    http_response_code(500);
-    echo json_encode([
-        'ok' => false,
-        'error' => 'เกิดข้อผิดพลาดร้ายแรง'
-    ], JSON_UNESCAPED_UNICODE);
+    error_log("Member History Error: " . $e->getMessage());
+    $response['error'] = 'Database error: ' . $e->getMessage();
 }
+
+echo json_encode($response);
+?>
