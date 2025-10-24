@@ -668,21 +668,27 @@ try {
                         <!-- Result Section -->
                         <div class="col-md-7">
                             <div class="calc-result mb-4">
-                                <div class="row text-center">
-                                    <div class="col-md-4 mb-3 mb-md-0">
+                                <div class="row text-center g-3">
+                                    <div class="col-6 col-md-3">
                                         <i class="bi bi-cash-stack fs-3 mb-2"></i>
-                                        <div class="small opacity-75">ยอดปันผลรวม</div>
-                                        <h3 class="mb-0" id="totalDividend">฿0.00</h3>
+                                    <div class="small opacity-75">ยอดปันผลรวม</div>
+                                    <h3 class="mb-0" id="totalDividend">฿0.00</h3>
                                     </div>
-                                    <div class="col-md-4 mb-3 mb-md-0">
+                                    <div class="col-6 col-md-3">
                                         <i class="bi bi-coin fs-3 mb-2"></i>
-                                        <div class="small opacity-75">ปันผลต่อหุ้น</div>
-                                        <h3 class="mb-0" id="dividendPerShare">฿0.00</h3>
+                                    <div class="small opacity-75">ปันผลต่อหุ้น</div>
+                                    <h3 class="mb-0" id="dividendPerShare">฿0.00</h3>
                                     </div>
-                                    <div class="col-md-4">
+                                    <div class="col-6 col-md-3">
                                         <i class="bi bi-pie-chart fs-3 mb-2"></i>
-                                        <div class="small opacity-75">% ของกำไร</div>
-                                        <h3 class="mb-0" id="profitPercentage">0%</h3>
+                                    <div class="small opacity-75">% ของกำไร</div>
+                                    <h3 class="mb-0" id="profitPercentage">0%</h3>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <i class="bi bi-people fs-3 mb-2"></i>
+                                    <div class="small opacity-75">เฉลี่ยต่อสมาชิก</div>
+                                    <h3 class="mb-0" id="avgPerMember">฿0.00</h3>
+                                    <div class="small opacity-75" id="avgShares">เฉลี่ยหุ้น/คน: 0</div>
                                     </div>
                                 </div>
                             </div>
@@ -1056,60 +1062,116 @@ function calculateDividend() {
     updateDividendPreview(dividendPerShare);
 }
 
-function updateDividendPreview(dividendPerShare) {
-    const preview = $('#dividendPreview');
-    if (!preview) return;
-    
-    if (dividendPerShare <= 0) {
-        preview.innerHTML = `
-            <tr>
-                <td colspan="6" class="text-center text-muted py-4">
-                    <i class="bi bi-calculator fs-1 d-block mb-2 opacity-25"></i>
-                    กรอกข้อมูลเพื่อดูตัวอย่างการคำนวณ
-                </td>
-            </tr>
-        `;
-        return;
-    }
+function calculateDividend() {
+  const profit = parseFloat($('#calcProfit')?.value || '0');
+  const shares = parseFloat($('#calcShares')?.value || '0');
+  const rate   = parseFloat($('#calcRate')?.value   || '0');
 
-    const showAll = $('#showAllMembers')?.checked;
-    const displayMembers = showAll ? membersData : membersData.slice(0, 10);
-    
-    let html = '';
-    displayMembers.forEach((member, index) => {
-        const amount = member.shares * dividendPerShare;
-        html += `
-            <tr>
-                <td>${index + 1}</td>
-                <td><strong>${member.code}</strong></td>
-                <td>${member.member_name}</td>
-                <td class="text-center">
-                    <span class="member-type-badge type-${member.type}">
-                        ${member.type_th}
-                    </span>
-                </td>
-                <td class="text-center">
-                    <span class="badge bg-primary">${member.shares.toLocaleString('th-TH')} หุ้น</span>
-                </td>
-                <td class="text-end">
-                    <strong class="text-success">฿${amount.toLocaleString('th-TH', {minimumFractionDigits: 2})}</strong>
-                </td>
-            </tr>
-        `;
-    });
-    
-    if (!showAll && membersData.length > 10) {
-        html += `
-            <tr class="table-light">
-                <td colspan="6" class="text-center text-muted small">
-                    <i class="bi bi-three-dots me-1"></i>
-                    และอีก ${membersData.length - 10} คน (เปิดสวิตช์ "แสดงทั้งหมด" เพื่อดูเพิ่ม)
-                </td>
-            </tr>
-        `;
-    }
-    
-    preview.innerHTML = html;
+  // คำนวณปันผล
+  const totalDividend    = profit * (rate / 100);
+  const dividendPerShare = shares > 0 ? totalDividend / shares : 0;
+  const profitPercentage = profit > 0 ? (totalDividend / profit) * 100 : 0;
+
+  // กองทุน
+  const reserveFund = profit * 0.10;
+  const welfareFund = profit * 0.05;
+  const netAvailable = profit * 0.85;
+
+  // ✅ ค่าเฉลี่ยต่อสมาชิก
+  const totalMembersCount   = Array.isArray(membersData) ? membersData.length : 0;
+  const avgPerMember        = totalMembersCount > 0 ? totalDividend / totalMembersCount : 0;
+  const avgSharesPerMember  = totalMembersCount > 0 ? shares / totalMembersCount : 0;
+
+  // แสดงผล
+  $('#totalDividend').textContent    = '฿' + totalDividend.toLocaleString('th-TH', {minimumFractionDigits: 2});
+  $('#dividendPerShare').textContent = '฿' + dividendPerShare.toLocaleString('th-TH', {minimumFractionDigits: 2});
+  $('#profitPercentage').textContent = profitPercentage.toFixed(1) + '%';
+
+  $('#reserveFund').textContent = '฿' + reserveFund.toLocaleString('th-TH', {minimumFractionDigits: 2});
+  $('#welfareFund').textContent = '฿' + welfareFund.toLocaleString('th-TH', {minimumFractionDigits: 2});
+  $('#netAvailable').textContent = '฿' + netAvailable.toLocaleString('th-TH', {minimumFractionDigits: 2});
+
+  // ✅ แสดงผลค่าเฉลี่ย
+  $('#avgPerMember').textContent = '฿' + avgPerMember.toLocaleString('th-TH', {minimumFractionDigits: 2});
+  $('#avgShares').textContent    = 'เฉลี่ยหุ้น/คน: ' + avgSharesPerMember.toLocaleString('th-TH', {maximumFractionDigits: 2});
+
+  // พรีวิว
+  updateDividendPreview(dividendPerShare);
+}
+
+function updateDividendPreview(dividendPerShare) {
+  const preview = $('#dividendPreview');
+  if (!preview) return;
+
+  if (dividendPerShare <= 0) {
+    preview.innerHTML = `
+      <tr>
+        <td colspan="6" class="text-center text-muted py-4">
+          <i class="bi bi-calculator fs-1 d-block mb-2 opacity-25"></i>
+          กรอกข้อมูลเพื่อดูตัวอย่างการคำนวณ
+        </td>
+      </tr>`;
+    return;
+  }
+
+  const showAll = $('#showAllMembers')?.checked;
+  const displayMembers = showAll ? membersData : membersData.slice(0, 10);
+
+  let html = '';
+  let totalSharesDisplay = 0;
+  let totalAmountDisplay = 0;
+
+  displayMembers.forEach((member, index) => {
+    const amount = member.shares * dividendPerShare;
+    totalSharesDisplay += Number(member.shares) || 0;
+    totalAmountDisplay += amount;
+
+    html += `
+      <tr>
+        <td>${index + 1}</td>
+        <td><strong>${member.code}</strong></td>
+        <td>${member.member_name}</td>
+        <td class="text-center">
+          <span class="member-type-badge type-${member.type}">${member.type_th}</span>
+        </td>
+        <td class="text-center">
+          <span class="badge bg-primary">${Number(member.shares).toLocaleString('th-TH')} หุ้น</span>
+        </td>
+        <td class="text-end">
+          <strong class="text-success">฿${amount.toLocaleString('th-TH', {minimumFractionDigits: 2})}</strong>
+        </td>
+      </tr>`;
+  });
+
+  const totalDisplayMembers = displayMembers.length || 1;
+  const avgSharesDisplay    = totalSharesDisplay / totalDisplayMembers;
+  const avgAmountDisplay    = totalAmountDisplay / totalDisplayMembers;
+
+  // ✅ แถวสรุป รวม/เฉลี่ย
+  html += `
+    <tr class="table-light">
+      <td colspan="4" class="text-end fw-bold">รวม / เฉลี่ย</td>
+      <td class="text-center">
+        <div><span class="badge bg-secondary">${totalSharesDisplay.toLocaleString('th-TH')} หุ้น</span></div>
+        <small class="text-muted">เฉลี่ย/คน: ${avgSharesDisplay.toLocaleString('th-TH', {maximumFractionDigits: 2})}</small>
+      </td>
+      <td class="text-end">
+        <div><strong>฿${totalAmountDisplay.toLocaleString('th-TH', {minimumFractionDigits: 2})}</strong></div>
+        <small class="text-muted">เฉลี่ย/คน: ฿${avgAmountDisplay.toLocaleString('th-TH', {minimumFractionDigits: 2})}</small>
+      </td>
+    </tr>`;
+
+  if (!showAll && membersData.length > 10) {
+    html += `
+      <tr class="table-light">
+        <td colspan="6" class="text-center text-muted small">
+          <i class="bi bi-three-dots me-1"></i>
+          และอีก ${membersData.length - 10} คน (เปิดสวิตช์ "แสดงทั้งหมด" เพื่อดูเพิ่ม)
+        </td>
+      </tr>`;
+  }
+
+  preview.innerHTML = html;
 }
 
 // ========== MODAL DATE RANGE ==========
