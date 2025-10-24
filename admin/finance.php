@@ -735,64 +735,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     .alert-info .bg-white {
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   }
-  .alert-info h4, .alert-info h5 {
-    font-weight: 600;
-  }
-  .text-muted.small {
-    font-size: 0.85rem;
-  }
-  .filter-bar {
-    background-color: #f8f9fa;
-    padding: 1rem;
-    border-radius: 0.5rem;
-    border: 1px solid #dee2e6;
-  }
-  /* --- CSS สำหรับปรับปรุงกรอบสรุปผลประกอบการ --- */
-
-/* 1. ปรับกรอบ .alert-info หลัก ให้ดูสะอาดตาขึ้น */
-.alert-info[role="alert"] {
-    background-color: #f8f9fa; /* เปลี่ยนสีพื้นหลังเป็นสีเทาอ่อนๆ */
-    border: 1px solid #dee2e6;  /* เปลี่ยนเป็นเส้นขอบบางๆ */
-    border-radius: 0.75rem;     /* เพิ่มความโค้งมน */
-    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075); /* เพิ่มเงานิดหน่อย */
-}
-
-/* 2. สไตล์กล่อง .bg-white 4 กล่องบน (ยอดขาย, กำไรขั้นต้น ฯลฯ) ให้เหมือนการ์ด */
-.alert-info .bg-white {
-    border: 1px solid #e9ecef;
-    border-radius: 0.5rem; /* ทำให้มุมมน */
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05); /* เพิ่มเงาเบาๆ */
-    transition: all 0.2s ease-in-out;
-}
-.alert-info .bg-white:hover {
-    transform: translateY(-2px); /* เอฟเฟกต์ลอยเล็กน้อยเมื่อเมาส์ชี้ */
-    box-shadow: 0 4px 8px rgba(0,0,0,0.07);
-}
-
-/* 3. สไตล์กล่อง .bg-light 2 กล่องล่าง (ทุนสำรอง, สวัสดิการ) */
-.alert-info .bg-light {
-    border: 1px dashed #ced4da; /* ใช้เส้นประให้ดูต่าง */
-    border-radius: 0.5rem;
-}
-
-/* 4. สไตล์กล่อง "วงเงินปันผลได้" ให้เด่นขึ้น */
-.alert-info .bg-success.bg-opacity-10 {
-    /* ใช้ border-color ที่เข้มจากคลาส .border-success อยู่แล้ว */
-    background-color: #d1e7dd !important; /* สีเขียวที่เข้มขึ้นเล็กน้อย */
-    border-radius: 0.5rem;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    transition: all 0.2s ease-in-out;
-}
-.alert-info .bg-success.bg-opacity-10:hover {
-     transform: scale(1.02); /* ขยายเล็กน้อยเมื่อเมาส์ชี้ */
-}
-
-
-/* 5. ปรับฟอนต์หัวข้อหลักในกล่อง */
-.alert-info h5 {
-    font-weight: 600;
-    color: #055160; /* สีน้ำเงินเข้ม (จาก .alert-info เดิม) */
-}
   </style>
 </head>
 <body>
