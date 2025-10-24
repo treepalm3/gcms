@@ -1098,10 +1098,10 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
         <?php if (!$has_ft): ?><div class="alert alert-warning">โหมดอ่านอย่างเดียว ไม่สามารถเพิ่มรายการได้</div><?php endif; ?>
         <div class="row g-3">
           <div class="col-sm-6">
-            <label class="form-label" for="addTransactionCode">รหัสรายการ (ไม่บังคับ)</label>
-            <input type="text" class="form-control" name="transaction_code" id="addTransactionCode" placeholder="เว้นว่างเพื่อสร้างอัตโนมัติ" <?= $has_ft?'':'disabled' ?>>
+            <label class="form-label" for="addTransactionCode">รหัสรายการ (อัตโนมัติ)</label>
+            <input type="text" class="form-control" name="transaction_code" id="addTransactionCode"
+                   value="FT-<?= date('Ymd-His') ?>" readonly <?= $has_ft?'':'disabled' ?>>
           </div>
-  
           <div class="col-sm-6">
             <label class="form-label" for="addTransactionDate">วันที่และเวลา</label>
             <input type="datetime-local" class="form-control" name="transaction_date" id="addTransactionDate" value="<?= date('Y-m-d\TH:i') ?>" required <?= $has_ft?'':'disabled' ?>>
@@ -1116,20 +1116,23 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
           </div>
           <div class="col-sm-6">
             <label class="form-label" for="addCategory">หมวดหมู่</label>
-            <input type="text" class="form-control" name="category" id="addCategory" required list="categoryList" placeholder="เช่น เงินลงทุน, เงินเดือน, ค่าไฟ" <?= $has_ft?'':'disabled' ?>>
+            <input type="text" class="form-control" name="category" id="addCategory" required list="categoryList" placeholder="เช่น เงินลงทุน, ค่าไฟ, จ่ายเงินรายวัน" <?= $has_ft?'':'disabled' ?>>
             <datalist id="categoryList">
                 <option value="เงินลงทุน">
                 <option value="รายได้อื่น">
-                <option value="เงินเดือน">
                 <option value="ค่าสาธารณูปโภค">
-                <option value="ต้นทุนซื้อน้ำมัน">
-                <?php
+                <option value="จ่ายเงินรายวัน"> <?php
+                  // ดึงหมวดหมู่ที่มีอยู่จาก PHP (คำนวณไว้แล้ว)
                   $allCatsModal = array_unique(array_merge($categories['income'],$categories['expense']));
-                  foreach($allCatsModal as $c) echo '<option value="'.htmlspecialchars($c).'">';
+                  foreach($allCatsModal as $c) {
+                    // [แก้ไข] ไม่ต้องแสดงตัวเลือกที่ลบไปแล้วอีก
+                    if ($c !== 'เงินเดือน' && $c !== 'ต้นทุนซื้อน้ำมัน') {
+                      echo '<option value="'.htmlspecialchars($c).'">';
+                    }
+                  }
                 ?>
             </datalist>
           </div>
-  
           <div class="col-12">
             <label class="form-label" for="addDescription">รายละเอียด</label>
             <input type="text" class="form-control" name="description" id="addDescription" required <?= $has_ft?'':'disabled' ?>>
@@ -1145,6 +1148,16 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
         </div>
       </div>
       <div class="modal-footer"><button class="btn btn-primary" type="submit" <?= $has_ft?'':'disabled' ?>><i class="bi bi-save2 me-1"></i> บันทึก</button><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">ยกเลิก</button></div>
+    </form>
+  </div>
+</div>
+
+      <div class="modal fade" id="modalEditTransaction" tabindex="-1" aria-hidden="true">
+        </div>
+      <div class="modal fade" id="modalSummary" tabindex="-1" aria-hidden="true">
+        </div>
+      <div class="modal fade" id="modalDeleteTransaction" tabindex="-1" aria-hidden="true">
+      </div>
     </form>
   </div>
 </div>
