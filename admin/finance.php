@@ -1124,12 +1124,13 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                 <option value="เงินลงทุน">
                 <option value="รายได้อื่น">
                 <option value="ค่าสาธารณูปโภค">
-                <option value="จ่ายเงินรายวัน"> <?php
+                <option value="จ่ายเงินรายวัน">
+                <?php
                   // ดึงหมวดหมู่ที่มีอยู่จาก PHP (คำนวณไว้แล้ว)
                   $allCatsModal = array_unique(array_merge($categories['income'],$categories['expense']));
                   foreach($allCatsModal as $c) {
-                    // [แก้ไข] ไม่ต้องแสดงตัวเลือกที่ลบไปแล้วอีก
-                    if ($c !== 'เงินเดือน' && $c !== 'ต้นทุนซื้อน้ำมัน') {
+                    // ไม่ต้องแสดงตัวเลือกซ้ำ หรือตัวเลือกที่ลบไปแล้ว
+                    if (!in_array($c, ['เงินเดือน', 'ต้นทุนซื้อน้ำมัน', 'เงินลงทุน', 'รายได้อื่น', 'ค่าสาธารณูปโภค', 'จ่ายเงินรายวัน'])) {
                       echo '<option value="'.htmlspecialchars($c).'">';
                     }
                   }
