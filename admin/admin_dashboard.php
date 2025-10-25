@@ -1,5 +1,5 @@
 <?php
-// admin_dashboard.php — [แก้ไข] แดชบอร์ดสำหรับผู้ดูแลระบบ (เพิ่มกำไร/ต้นทุนวันนี้)
+// admin_dashboard.php — [แก้ไข] แดชบอร์ดสำหรับผู้ดูแลระบบ (เพิ่มการ์ดกำไรคงเหลือ + ปุ่ม)
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 
@@ -65,12 +65,13 @@ try {
 
 $stats = [
     'today_revenue' => 0,
-    'today_cogs' => 0, // [เพิ่ม] ต้นทุนวันนี้
-    'today_profit' => 0, // [เพิ่ม] กำไรวันนี้
-    'today_bills' => 0,  // [เพิ่ม] จำนวนบิลวันนี้
+    'today_cogs' => 0,
+    'today_profit' => 0,
+    'today_bills' => 0,
     'today_liters' => 0,
     'total_members' => 0,
-    'total_shares' => 0
+    'total_shares' => 0,
+    'potential_profit' => 0 // [เพิ่ม] กำไรคงเหลือ
 ];
 $bar_labels = []; $bar_values = [];
 $pie_labels = []; $pie_values = [];
@@ -79,9 +80,7 @@ $error_message = null;
 try {
     $today_str = date('Y-m-d');
     
-    // --- 1. สถิติ 4 ช่องบน (ยอดวันนี้ + สมาชิก) ---
-    
-    // [แก้ไข] ดึงยอดขาย, ต้นทุน, กำไร, และจำนวนบิล จาก v_sales_gross_profit
+    // --- 1. สถิติวันนี้ (จาก v_sales_gross_profit) ---
     $stmt_today_profit = $pdo->prepare("
         SELECT 
             COALESCE(SUM(v.total_amount), 0) AS revenue,
@@ -100,7 +99,7 @@ try {
     $stats['today_profit'] = (float)($profit_data['profit'] ?? 0);
     $stats['today_bills'] = (int)($profit_data['bills'] ?? 0);
 
-    // ดึงยอดลิตร (แยกต่างหาก เพราะ View ไม่มีลิตร)
+    // ดึงยอดลิตร (แยกต่างหาก)
     $stmt_today_liters = $pdo->prepare("
         SELECT COALESCE(SUM(si.liters), 0) AS liters
         FROM sales s
@@ -111,7 +110,7 @@ try {
     $stats['today_liters'] = (float)$stmt_today_liters->fetchColumn();
 
 
-    // สมาชิก (รวมทุกประเภทที่มีหุ้น)
+    // --- 2. สมาชิกและหุ้น (รวมทุกประเภท) ---
     $stmt_members = $pdo->query("
         SELECT 
             SUM(total_users) as total_members,
@@ -128,7 +127,27 @@ try {
     $stats['total_members'] = (int)($member_data['total_members'] ?? 0);
     $stats['total_shares'] = (int)($member_data['total_shares'] ?? 0);
 
-    // --- 2. กราฟแท่ง (ยอดขายลิตร 6 เดือนล่าสุด) ---
+    // --- 3. [เพิ่ม] ดึงกำไรที่ยังคงเหลือในถัง (จาก v_fuel_lots_current) ---
+    try {
+        $stmt_profit_remain = $pdo->prepare("
+            SELECT
+                SUM((v.remaining_liters_calc * fp.price) - v.remaining_value) AS potential_profit
+            FROM
+                v_fuel_lots_current v
+            JOIN
+                fuel_prices fp ON v.fuel_id = fp.fuel_id AND v.station_id = fp.station_id
+            WHERE
+                v.station_id = :sid AND v.remaining_liters_calc > 0.01
+        ");
+        $stmt_profit_remain->execute([':sid' => $station_id]);
+        $stats['potential_profit'] = (float)$stmt_profit_remain->fetchColumn();
+    } catch (Throwable $e) {
+        // View v_fuel_lots_current อาจยังไม่มี
+        error_log("Could not query v_fuel_lots_current: " . $e->getMessage());
+        $stats['potential_profit'] = 0.0;
+    }
+
+    // --- 4. กราฟแท่ง (ยอดขายลิตร 6 เดือนล่าสุด) ---
     $month6_start = date('Y-m-01', strtotime('-5 months'));
     $stmt_bar = $pdo->prepare("
         SELECT 
@@ -147,7 +166,7 @@ try {
         $bar_values[] = (float)$r['liters']; 
     }
 
-    // --- 3. กราฟวงกลม (สัดส่วนน้ำมัน 30 วัน) ---
+    // --- 5. กราฟวงกลม (สัดส่วนน้ำมัน 30 วัน) ---
     $day30_start = date('Y-m-d', strtotime('-29 days'));
     $stmt_pie = $pdo->prepare("
         SELECT 
@@ -205,6 +224,9 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
             font-size: 1rem;
             color: var(--bs-secondary-color);
             margin-bottom: 0.5rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .stat-card h3 {
             font-weight: 700;
@@ -218,6 +240,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 </head>
 
 <body>
+  <!-- Navbar -->
   <nav class="navbar navbar-dark bg-primary">
     <div class="container-fluid">
       <div class="d-flex align-items-center gap-2">
@@ -236,6 +259,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     </div>
   </nav>
 
+  <!-- Offcanvas Sidebar -->
   <div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasSidebar" aria-labelledby="offcanvasLabel">
     <div class="offcanvas-header">
       <h5 class="offcanvas-title" id="offcanvasLabel"><?= htmlspecialchars($site_name) ?></h5>
@@ -261,6 +285,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 
   <div class="container-fluid">
     <div class="row">
+      <!-- Sidebar Desktop -->
       <aside class="col-lg-2 d-none d-lg-flex flex-column sidebar py-4">
         <div class="side-brand mb-3"><h3><span>Admin</span></h3></div>
         <nav class="sidebar-menu flex-grow-1">
@@ -278,6 +303,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
         <a class="logout" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
       </aside>
 
+      <!-- Content -->
       <main class="col-lg-10 p-4 fade-in">
         <div class="main-header mb-4">
             <h2><i class="fa-solid fa-border-all"></i> ภาพรวมแดชบอร์ด</h2>
@@ -287,6 +313,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
             <div class="alert alert-danger"><?= htmlspecialchars($error_message) ?></div>
         <?php endif; ?>
 
+        <!-- [แก้ไข] Stats Grid (6 ช่อง) -->
         <div class="stats-grid mb-4">
           <div class="stat-card">
             <h5><i class="bi bi-cash-coin text-success"></i> รายได้วันนี้</h5>
@@ -301,15 +328,34 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
           <div class="stat-card">
             <h5><i class="bi bi-graph-up-arrow text-primary"></i> กำไรขั้นต้น (วันนี้)</h5>
             <h3 class="text-primary">฿<?= nf($stats['today_profit'], 2) ?></h3>
-            <p class="text-muted mb-0">รายได้ หักลบ ต้นทุน</p>
+            <p class="text-muted mb-0">รายได้ - ต้นทุน</p>
           </div>
+          
+          <!-- [เพิ่ม] การ์ดกำไรคงเหลือ พร้อมปุ่ม -->
+          <div class="stat-card d-flex flex-column">
+            <h5><i class="bi bi-box-seam text-warning"></i> กำไรคงเหลือในถัง</h5>
+            <h3 class="text-warning">฿<?= nf($stats['potential_profit'], 2) ?></h3>
+            <p class="text-muted mb-0 flex-grow-1">กำไรที่คาดว่าจะได้ (ถ้าขายหมด)</p>
+            <a href="profit_report.php" class="btn btn-sm btn-outline-warning mt-3 stretched-link">
+                ดูรายละเอียด Lot <i class="bi bi-arrow-right-short"></i>
+            </a>
+          </div>
+
           <div class="stat-card">
-            <h5><i class="bi bi-fuel-pump-fill text-info"></i> ยอดขายน้ำมัน (วันนี้)</h5>
-            <h3 class="text-info"><?= nf($stats['today_liters'], 2) ?> <small>ลิตร</small></h3>
-            <p class="text-muted mb-0">รวมทุกประเภทเชื้อเพลิง</p>
+            <h5><i class="bi bi-fuel-pump-fill text-info"></i> ยอดขาย (วันนี้)</h5>
+            <h3 class="text-info mb-0"><?= nf($stats['today_liters'], 2) ?> <small>ลิตร</small></h3>
+            <p class="text-muted mb-0">รวมทุกประเภท</p>
+          </div>
+          
+          <div class="stat-card">
+            <h5><i class="bi bi-people-fill text-secondary"></i> สมาชิก/หุ้น</h5>
+            <h3 class="text-secondary mb-0"><?= nf($stats['total_members'], 0) ?> <small>คน</small></h3>
+            <p class="text-muted mb-0">รวม <?= nf($stats['total_shares'], 0) ?> หุ้น</p>
           </div>
         </div>
 
+
+        <!-- Charts (คงเดิม) -->
         <div class="row g-4 mt-4">
           <div class="col-12 col-lg-6">
             <div class="stat-card h-100">
@@ -321,7 +367,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
             </div>
           </div>
           <div class="col-12 col-lg-6">
-            <div class="stat-card h-100">
+            <div class="card shadow-sm h-100">
               <div class="card-body">
                 <h5 class="card-title mb-2">
                   <i class="bi bi-pie-chart text-info"></i>
