@@ -217,7 +217,7 @@ try {
         .nav-tabs .nav-link.active { color: var(--bs-primary); border-bottom-color: var(--bs-primary); }
         .rebate-amount { font-size: 1.5rem; font-weight: 700; color: var(--bs-info-text-emphasis); }
         .rebate-rate { font-size: 1.2rem; font-weight: 600; color: var(--bs-info); }
-        .form-label { font-weight: 500; } /* [เพิ่ม] */
+        .form-label { font-weight: 500; }
     </style>
 </head>
 <body>
@@ -622,7 +622,8 @@ try {
                     <div class="col-sm-5"><strong>ชื่อ:</strong> <span id="historyMemberName">-</span></div>
                     <div class="col-sm-3"><strong>ประเภท:</strong> <span id="historyMemberType">-</span></div>
                 </div>
-                <div class="history-summary mb-3"></div> <div class="table-responsive">
+                <div class="history-summary mb-3"></div>
+                <div class="table-responsive">
                     <table class="table table-sm table-hover">
                         <thead class="table-light">
                             <tr>
@@ -650,7 +651,7 @@ try {
     <div id="liveToast" class="toast border-0 align-items-center" role="alert" aria-live="assertive" aria-atomic="true">
         <div class="d-flex">
             <div class="toast-body"></div>
-            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
         </div>
     </div>
 </div>
@@ -826,7 +827,7 @@ function updateModalRebateType(selectedType) {
     updateModalCalc('rebate');
 }
 
-// ===== MEMBER HISTORY (คงเดิม - แต่คุณต้องไปแก้ไฟล์ dividend_member_history.php) =====
+// ===== MEMBER HISTORY =====
 async function viewMemberHistory(memberKey) {
   const [memberType, memberId] = memberKey.split('_');
   if (!memberId || !memberType) { toast('ข้อมูลสมาชิกไม่ถูกต้อง', false); return; }
@@ -846,14 +847,12 @@ async function viewMemberHistory(memberKey) {
   historyModal.show();
 
   try {
-      // [หมายเหตุ] ไฟล์นี้ต้องถูกแก้ไขให้ดึงข้อมูลทั้งปันผลและเฉลี่ยคืน
       const response = await fetch(`dividend_member_history.php?member_id=${memberId}&member_type=${memberType}`);
       if (!response.ok) throw new Error(`ไม่สามารถดึงข้อมูลได้ (HTTP ${response.status})`);
       const data = await response.json();
 
       if (data.ok && data.history.length > 0) {
           const summary = data.summary;
-          // [แก้ไข] อัปเดต Summary ให้รวมยอดเฉลี่ยคืนด้วย (ถ้าไฟล์ PHP ส่งมา)
           const summaryHtml = `
               <div class="alert alert-light border small mb-3">
                   <div class="row text-center">
@@ -866,23 +865,22 @@ async function viewMemberHistory(memberKey) {
          if (summaryDiv) summaryDiv.innerHTML = summaryHtml;
 
           let html = '';
-          // [แก้ไข] ตารางนี้ต้องปรับปรุงเพื่อแสดงทั้งปันผลและเฉลี่ยคืน
           data.history.forEach(item => {
               const statusClass = item.payment_status === 'paid' ? 'status-paid' : (item.payment_status === 'approved' ? 'status-approved' : 'status-pending');
               const statusText = item.payment_status === 'paid' ? 'จ่ายแล้ว' : (item.payment_status === 'approved' ? 'อนุมัติ' : 'รอจ่าย');
-              const isDividend = item.hasOwnProperty('shares_at_time'); // ตรวจสอบว่าเป็นปันผลหรือเฉลี่ยคืน
+              const isDividend = item.type === 'ปันผล (หุ้น)';
 
               html += `
                   <tr>
                       <td><strong>ปี ${item.year}</strong></td>
-                      <td>${isDividend ? 'ปันผล (หุ้น)' : 'เฉลี่ยคืน (ซื้อ)'}</td>
+                      <td>${item.type}</td>
                       <td class="text-end small">
                           ${isDividend ?
-                              `${item.shares_at_time.toLocaleString('th-TH')} หุ้น @ ${parseFloat(item.dividend_rate).toFixed(1)}%` :
+                              `${(item.shares_at_time || 0).toLocaleString('th-TH')} หุ้น @ ${parseFloat(item.dividend_rate || 0).toFixed(1)}%` :
                               `ซื้อ ${nf(item.purchase_amount_at_time || 0)} @ ${nf(item.rebate_per_baht || 0, 4)}/บาท`
                           }
                       </td>
-                      <td class="text-end"><strong class="${isDividend ? 'text-success' : 'text-info'}">${item.dividend_amount_formatted || item.rebate_amount_formatted}</strong></td>
+                      <td class="text-end"><strong class="${isDividend ? 'text-success' : 'text-info'}">${item.amount_formatted || '฿0.00'}</strong></td>
                       <td class="text-center">
                           <span class="${statusClass}">${statusText}</span>
                           ${item.payment_date_formatted !== '-' ? `<br><small class="text-muted">${item.payment_date_formatted}</small>` : ''}
@@ -890,9 +888,11 @@ async function viewMemberHistory(memberKey) {
                   </tr>`;
           });
           historyTable.innerHTML = html;
-      } else {
+      } else if (data.ok) {
          if (summaryDiv) summaryDiv.innerHTML = '';
           historyTable.innerHTML = `<tr><td colspan="5" class="text-center text-muted p-4"><i class="bi bi-inbox fs-3 d-block mb-2 opacity-25"></i>ยังไม่มีประวัติการรับปันผล/เฉลี่ยคืน</td></tr>`;
+      } else {
+           throw new Error(data.error || 'ไม่สามารถโหลดข้อมูลประวัติได้');
       }
   } catch (error) {
       console.error('History fetch error:', error);
@@ -941,13 +941,14 @@ async function approveDividend(periodId, csrfToken) {
 
 // ===== [เพิ่ม] REBATE ACTIONS (ต้องสร้างไฟล์ Backend) =====
 function viewRebateDetails(periodId) {
-    window.location.href = `report.php?type=rebate_period&period_id=${periodId}`; // !!! ต้องสร้างหน้านี้ !!!
+    // [แก้ไข] ต้องสร้างไฟล์ dividend_detail.php?id=... (สำหรับ Rebate) หรือ report.php?type=rebate...
+    window.location.href = `rebate_detail.php?id=${periodId}`; // !!! ต้องสร้างไฟล์ rebate_detail.php !!!
 }
 async function approveRebate(periodId, csrfToken) {
     const period = rebatePeriodsData.find(p => p.id === periodId);
     if (!confirm(`ยืนยันการอนุมัติงวดเฉลี่ยคืนปี ${period?.year || periodId}?`)) { return; }
     try {
-        const response = await fetch('rebate_approve.php', { // !!! ต้องสร้างไฟล์นี้ !!!
+        const response = await fetch('rebate_approve.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify({ period_id: periodId, csrf_token: csrfToken })
@@ -963,7 +964,7 @@ async function processRebatePayout(periodId, csrfToken) {
     const period = rebatePeriodsData.find(p => p.id === periodId);
     if (!confirm(`ยืนยันการจ่ายเงินเฉลี่ยคืนปี ${period?.year || periodId}?`)) { return; }
     try {
-        const response = await fetch('rebate_payout.php', { // !!! ต้องสร้างไฟล์นี้ !!!
+        const response = await fetch('rebate_payout.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify({ period_id: periodId, csrf_token: csrfToken })
@@ -983,14 +984,14 @@ function exportMembers() {
   $$('#membersTable tbody tr').forEach(tr => {
       if (tr.style.display === 'none') return;
       const cells = tr.querySelectorAll('td');
-      if (cells.length >= 7) { // [แก้ไข] เช็คจำนวนคอลัมน์
+      if (cells.length >= 7) {
           rows.push([
               cells[0].textContent.trim(), // Code
               cells[1].textContent.trim(), // Name
               cells[2].textContent.trim(), // Type
               tr.dataset.shares,           // Shares
               cells[4].textContent.replace(/[฿,]/g, '').trim(), // Total Dividend
-              cells[5].textContent.replace(/[฿,]/g, '').trim()  // Total Rebate
+              cells[5].textContent.replace(/[฿,]/r, '').trim()  // Total Rebate
           ]);
       }
   });
