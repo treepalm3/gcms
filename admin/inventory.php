@@ -572,11 +572,10 @@ $utilization    = $total_capacity > 0 ? ($total_stock / $total_capacity) * 100 :
 </div>
 
 
-<footer class="footer mt-auto py-3 bg-light">
-    <div class="container text-center">
-        <span class="text-muted">© <?= date('Y') ?> <?= htmlspecialchars($site_name) ?></span>
-    </div>
+<footer class="footer ">
+        <span class="text">© <?= date('Y') ?> <?= htmlspecialchars($site_name) ?></span>  
 </footer>
+
 
 <!-- Toast -->
 <div class="position-fixed bottom-0 end-0 p-3" style="z-index:1080">
