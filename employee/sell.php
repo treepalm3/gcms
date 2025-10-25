@@ -1,5 +1,5 @@
 <?php
-// employee/sell.php — ระบบ POS ปั๊มน้ำมัน (สคีมา: sales + sales_items + fuel_* ) + บันทึกรายได้ลง FT อัตโนมัติ
+// employee/sell.php — ระบบ POS ปั๊มน้ำมัน (สคีมา: sales + sales_items + fuel_* )
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 
@@ -119,12 +119,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     $sale_type      = $_POST['sale_type'] ?? 'amount';
     $quantity       = filter_var($_POST['quantity'] ?? 0, FILTER_VALIDATE_FLOAT);
     $payment_method = $_POST['payment_method'] ?? 'cash';
+    
+    // [แก้ไข] รับค่าจากช่องที่ซ่อนไว้ (ที่ JavaScript กรอกให้)
     $customer_phone = preg_replace('/\D+/', '', (string)($_POST['customer_phone'] ?? ''));
     $household_no   = trim((string)($_POST['household_no'] ?? ''));
-    $member_pk_from_js = (int)($_POST['member_pk_for_points'] ?? 0);
+    $member_pk_from_js = (int)($_POST['member_pk_for_points'] ?? 0); // [เพิ่ม] รับ PK จาก JS
+
     $discount_in    = $_POST['discount'] ?? 0;
     $discount       = is_numeric($discount_in) ? (float)$discount_in : 0.0;
     $discount       = max(0.0, min(100.0, $discount));
+
     $allowed_payments  = ['cash', 'qr', 'transfer', 'card'];
     $allowed_sale_type = ['liters','amount'];
 
@@ -151,9 +155,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       }
       $discount_amount = round($total_amount * ($discount/100.0), 2);
       $net_amount      = round($total_amount - $discount_amount, 2);
-      $POINT_RATE     = 30;
-      $has_loyalty_id = (bool)($member_pk_from_js > 0);
+
+      // [แก้ไข] แต้มสะสม: 30 บาท = 1 แต้ม
+      $POINT_RATE     = 30; 
+      $has_loyalty_id = (bool)($member_pk_from_js > 0); // [แก้ไข] เช็คจาก PK
       $points_earned  = $has_loyalty_id ? (int)floor($net_amount / $POINT_RATE) : 0;
+
       $now = date('Y-m-d H:i:s');
 
       // ===== เตรียมข้อมูลใบเสร็จสำหรับแสดงผล =====
@@ -170,14 +177,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       try {
         $pdo->beginTransaction();
 
-        // --- 1) บันทึก Sales ---
         $col_phone   = has_column($pdo, 'sales', 'customer_phone');
         $col_house   = has_column($pdo, 'sales', 'household_no');
         $col_discpct = has_column($pdo, 'sales', 'discount_pct');
         $col_discamt = has_column($pdo, 'sales', 'discount_amount');
-        $tries = 0; $sale_id = null; $receipt_no = ''; // Initialize $receipt_no
+
+        $tries = 0; $sale_id = null;
         do {
-          $receipt_no = 'R'.date('Ymd').'-'.strtoupper(bin2hex(random_bytes(3))); // Assign value here
+          $receipt_no = 'R'.date('Ymd').'-'.strtoupper(bin2hex(random_bytes(3)));
           $cols = ['station_id','sale_code','total_amount','net_amount','sale_date','payment_method','created_by'];
           $params = [
             ':station_id'     => $station_id, ':sale_code'      => $receipt_no,
@@ -207,7 +214,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
 
         if (!$sale_id) { throw new RuntimeException('ไม่สามารถสร้างเลขที่ใบเสร็จได้'); }
 
-        // --- 2) หา Tank ID ---
+        // --- หา tank ---
         $tank_id = null;
         try {
           $findTank = $pdo->prepare("
@@ -219,7 +226,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
           $tank_id = $findTank->fetchColumn() ?: null;
         } catch (Throwable $e) { $tank_id = null; }
 
-        // --- 3) บันทึก Sales Items ---
+        // 2) รายการ -> sales_items
         $stmtItem = $pdo->prepare("
           INSERT INTO sales_items (sale_id, fuel_id, tank_id, fuel_type, liters, price_per_liter)
           VALUES (:sale_id, :fuel_id, :tank_id, :fuel_type, :liters, :price_per_liter)
@@ -229,7 +236,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
           ':fuel_type' => $fuel_name, ':liters' => $liters_db, ':price_per_liter' => round($fuel_price, 2)
         ]);
 
-        // --- 4) ตัดสต็อก + บันทึก Movement + จัดสรร COGS ---
+        // 3) ตัดสต็อก + บันทึก movement
         try {
           if ($tank_id) {
             $sel = $pdo->prepare("SELECT id FROM fuel_tanks WHERE id = :tid FOR UPDATE");
@@ -251,7 +258,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                 ]);
                 $move_id = (int)$pdo->lastInsertId();
 
-                // 4.1) จัดสรร COGS
+                // 3.1) จัดสรร COGS
                 if ($move_id > 0) {
                     $liters_to_allocate = $liters_db;
                     $getLots = $pdo->prepare("SELECT id, remaining_liters, unit_cost_full FROM v_open_fuel_lots WHERE tank_id = :tid ORDER BY received_at ASC, id ASC");
@@ -276,10 +283,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
           } else { error_log("No active tank for station {$station_id} and fuel {$fuel_id} with enough stock ({$liters_db}L) for sale {$sale_id}"); }
         } catch (Throwable $invE) { error_log("Inventory update skipped: ".$invE->getMessage()); }
 
-        // --- 5) สะสมแต้ม ---
+        // [แก้ไข] 4) สะสมแต้ม -> scores (ใช้ $member_pk_from_js)
         if ($points_earned > 0 && $member_pk_from_js > 0) {
           try {
-            $member_id = $member_pk_from_js;
+            // $member_id คือ ID จากตาราง 'members' (PK)
+            $member_id = $member_pk_from_js; 
+            
             $insScore = $pdo->prepare("
                 INSERT INTO scores (member_id, score, activity, score_date)
                 VALUES (:member_id, :score, :activity, NOW())
@@ -290,46 +299,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                 ':activity'  => 'POS '.$sale_data['receipt_no']
             ]);
             error_log("Points earned: {$points_earned} for member_id: {$member_id}");
+            
           } catch (Throwable $ptsE) {
             error_log("Point earn error: ".$ptsE->getMessage());
           }
         }
 
-        // ==========================================================
-        // ✨ [NEW] 6. บันทึกยอดขายลง Financial Transactions อัตโนมัติ
-        // ==========================================================
-        try {
-            // สร้างรหัส Transaction
-            $ft_code = 'FT-' . date('Ymd-His');
-
-            $insFTSale = $pdo->prepare("
-              INSERT INTO financial_transactions
-                (station_id, transaction_code, transaction_date, type, category, description, amount, reference_id, user_id)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ");
-            $insFTSale->execute([
-                $station_id,
-                $ft_code,           // รหัส Transaction ใหม่
-                $now,               // วันที่ขาย (ใช้ $now ที่สร้างไว้ตอนแรก)
-                'income',           // ประเภท: รายได้
-                'ขายน้ำมัน',        // หมวดหมู่ << **สำคัญ:** ใช้ชื่อนี้เพื่อให้ finance.php รู้จัก
-                "ขายน้ำมัน POS ({$receipt_no})", // รายละเอียด (ใช้ $receipt_no ที่สร้างตอน insert sales)
-                $total_amount,      // ยอดเงิน (ใช้ยอดขาย *ก่อน* หักส่วนลด)
-                $receipt_no,        // อ้างอิง รหัสการขาย
-                $current_user_id    // User ที่ทำรายการ (พนักงานที่ล็อกอิน)
-            ]);
-
-        } catch (Throwable $e) {
-            // ถ้าบันทึก Financial Log ล้มเหลว ไม่ต้อง Rollback การขายหลัก
-            // แค่ Log error ไว้
-            error_log("Failed to insert into financial_transactions during POS sale ({$receipt_no}): " . $e->getMessage());
-        }
-        // ==========================================================
-        //  จบส่วน [NEW]
-        // ==========================================================
-
-
-        // --- 7. Commit Transaction ---
         $pdo->commit();
         $sale_success   = true;
         $sale_data_json = json_encode(
@@ -453,10 +428,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
           <input type="hidden" name="action" value="process_sale">
           <input type="hidden" name="fuel_type" id="selectedFuel" required>
           <input type="hidden" name="quantity" id="quantityInput" value="0" required>
+          
           <input type="hidden" name="customer_phone" id="customerPhoneHidden">
           <input type="hidden" name="household_no" id="householdNoHidden">
-          <input type="hidden" name="member_pk_for_points" id="memberPkHidden">
-          <div class="row g-4">
+          <input type="hidden" name="member_pk_for_points" id="memberPkHidden"> <div class="row g-4">
             <div class="col-lg-7">
               <div class="pos-panel">
                 <h5 class="mb-3"><i class="bi bi-fuel-pump-fill me-2"></i>1. เลือกชนิดน้ำมัน</h5>
@@ -566,7 +541,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
         </div>
         <?php
         $pay_th = [
-          'cash'     => 'เงินสด', 'qr'       => 'QR Code', 'transfer' => 'โอนเงิน', 'card'     => 'บัตรเครดิต',
+          'cash'     => 'เงินสด',
+          'qr'       => 'QR Code',
+          'transfer' => 'โอนเงิน',
+          'card'     => 'บัตรเครดิต',
         ];
         ?>
         <div class="modal-body">
@@ -577,12 +555,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
               <p class="mb-0">เลขที่: <?= htmlspecialchars($sale_data['receipt_no']) ?></p>
               <p class="mb-0">วันที่: <?= date('d/m/Y H:i', strtotime($sale_data['datetime'])) ?></p>
             </div>
+
             <?php if (!empty($sale_data['customer_phone'])): ?>
               <div class="d-flex justify-content-between"><span>เบอร์โทร:</span><span><?= htmlspecialchars($sale_data['customer_phone']) ?></span></div>
             <?php endif; ?>
             <?php if (!empty($sale_data['household_no'])): ?>
               <div class="d-flex justify-content-between"><span>บ้านเลขที่:</span><span><?= htmlspecialchars($sale_data['household_no']) ?></span></div>
             <?php endif; ?>
+
             <div class="d-flex justify-content-between"><span>รายการ:</span><span><?= htmlspecialchars($sale_data['fuel_name']) ?></span></div>
             <div class="d-flex justify-content-between"><span>ราคา/ลิตร:</span><span><?= number_format($sale_data['price_per_liter'], 2) ?></span></div>
             <div class="d-flex justify-content-between"><span>ปริมาณ:</span><span><?= number_format($sale_data['liters'], 3) ?> ลิตร</span></div>
@@ -594,6 +574,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
             <hr class="my-1 border-dark border-dashed">
             <div class="d-flex justify-content-between fw-bold fs-5"><span>ยอดสุทธิ:</span><span><?= number_format($sale_data['net_amount'], 2) ?> บาท</span></div>
             <hr class="my-1 border-dark border-dashed">
+
             <?php if (!empty($sale_data['points_earned'])): ?>
               <div class="d-flex justify-content-between"><span>แต้มที่ได้รับ:</span><span><?= number_format($sale_data['points_earned']) ?> แต้ม</span></div>
               <hr class="my-1 border-dark border-dashed">
@@ -632,10 +613,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     const saleTypeRadios  = document.querySelectorAll('input[name="sale_type"]');
     const submitBtn       = document.getElementById('submitBtn');
     const posForm         = document.getElementById('posForm');
-    const memberIdentifierInput = document.getElementById('memberIdentifierInput');
-    const customerPhoneHidden = document.getElementById('customerPhoneHidden');
-    const householdNoHidden   = document.getElementById('householdNoHidden');
-    const memberPkHidden      = document.getElementById('memberPkHidden');
+
+    // --- [แก้ไข] Member Search ---
+    const memberIdentifierInput = document.getElementById('memberIdentifierInput'); // ช่องค้นหาใหม่
+    const customerPhoneHidden = document.getElementById('customerPhoneHidden'); // ช่องซ่อนสำหรับส่งเบอร์โทร
+    const householdNoHidden   = document.getElementById('householdNoHidden');   // ช่องซ่อนสำหรับส่งบ้านเลขที่
+    const memberPkHidden      = document.getElementById('memberPkHidden');      // [เพิ่ม] ช่องซ่อนสำหรับ PK
     const memberInfoDiv       = document.getElementById('memberInfo');
     const memberNameSpan      = document.getElementById('memberName');
     let searchTimeout;
@@ -645,12 +628,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     discountInput.addEventListener('input', updateSummary);
     saleTypeRadios.forEach(radio => radio.addEventListener('change', updateSummary));
     posForm.addEventListener('submit', validateForm);
+    
     memberIdentifierInput.addEventListener('input', handleMemberSearch);
 
     document.querySelector('[data-action="clear"]').addEventListener('click', function() {
       currentInput = '0';
       selectedFuel = null;
-      fuelCards.forEach(c => c.classList.remove('selected')); // ล้างการเลือกน้ำมันด้วย
       display.textContent = currentInput;
       quantityInput.value = '0';
       summaryPanel.innerHTML = '<p class="text-center text-muted">กรุณาเลือกชนิดน้ำมันและใส่จำนวน</p>';
@@ -658,10 +641,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       memberIdentifierInput.value = '';
       customerPhoneHidden.value = '';
       householdNoHidden.value = '';
-      memberPkHidden.value = '';
+      memberPkHidden.value = ''; // [เพิ่ม]
       memberInfoDiv.style.display = 'none';
-      discountInput.value = '0'; // ล้างส่วนลด
-      document.getElementById('byAmount').checked = true; // ตั้งค่าเริ่มต้นเป็นจำนวนเงิน
     });
 
     function handleFuelSelect(e){
@@ -684,11 +665,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
         if (currentInput.length < 9) currentInput += num;
       } else if (action === 'decimal') {
         if (!currentInput.includes('.')) currentInput += '.';
+      } else if (action === 'clear') {
+        currentInput = '0';
       } else if (action === 'backspace') {
         currentInput = currentInput.slice(0, -1);
         if (currentInput === '') currentInput = '0';
       }
-      // ปุ่ม clear ถูกย้าย event listener ไปข้างนอก
       updateDisplayAndSummary();
     }
 
@@ -699,47 +681,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     }
 
     function updateSummary(){
-      if (!selectedFuel || !currentPrice || currentPrice <= 0) { // เพิ่มเช็ค currentPrice > 0
-        summaryPanel.innerHTML = '<p class="text-center text-muted">กรุณาเลือกชนิดน้ำมัน</p>';
-        validateState(); // ตรวจสอบสถานะปุ่ม
-        return;
+      if (!selectedFuel || !currentPrice) {
+        summaryPanel.innerHTML = '<p class="text-center text-muted">กรุณาเลือกชนิดน้ำมัน</p>'; return;
       }
       const qty = parseFloat(currentInput) || 0;
-      if (qty === 0) {
-          summaryPanel.innerHTML = '<p class="text-center text-muted">กรุณาใส่จำนวน</p>';
-          validateState(); // ตรวจสอบสถานะปุ่ม
-          return;
-      }
+      if (qty === 0) { summaryPanel.innerHTML = '<p class="text-center text-muted">กรุณาใส่จำนวน</p>'; return; }
 
       const saleType = document.querySelector('input[name="sale_type"]:checked').value;
       const discPct  = parseFloat(discountInput.value) || 0;
-      const fuelCardElement = document.querySelector(`.fuel-card[data-fuel="${selectedFuel}"]`);
-      const fuelName = fuelCardElement ? fuelCardElement.querySelector('h6').textContent : 'N/A';
+      const fuelName = document.querySelector(`.fuel-card[data-fuel="${selectedFuel}"] h6`).textContent;
 
-
-      let liters = 0, totalAmount = 0; // Initialize with 0
-      try {
-          if (saleType === 'liters') {
-            liters = qty;
-            totalAmount = liters * currentPrice;
-          } else {
-            totalAmount = qty;
-            // Prevent division by zero if currentPrice is somehow 0
-            liters = currentPrice > 0 ? totalAmount / currentPrice : 0;
-          }
-          // Clamp negative results due to potential floating point issues
-          liters = Math.max(0, liters);
-          totalAmount = Math.max(0, totalAmount);
-
-      } catch (e) {
-          console.error("Calculation error:", e);
-          summaryPanel.innerHTML = '<p class="text-center text-danger">คำนวณผิดพลาด</p>';
-          validateState();
-          return;
+      let liters, totalAmount;
+      if (saleType === 'liters') {
+        liters = qty;
+        totalAmount = liters * currentPrice;
+      } else {
+        totalAmount = qty;
+        liters = totalAmount / currentPrice;
       }
-
       const discAmt = totalAmount * (discPct/100);
-      const netAmt  = Math.max(0, totalAmount - discAmt); // Ensure net amount is not negative
+      const netAmt  = totalAmount - discAmt;
 
       summaryPanel.innerHTML = `
         <div class="d-flex justify-content-between"><span>น้ำมัน:</span><strong>${fuelName}</strong></div>
@@ -747,81 +708,87 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
         <hr class="my-2">
         <div class="d-flex justify-content-between"><span>ปริมาณ:</span><span>${liters.toFixed(3)} ลิตร</span></div>
         <div class="d-flex justify-content-between"><span>ยอดรวม:</span><span>${totalAmount.toFixed(2)} ฿</span></div>
-        ${discPct>0?`<div class="d-flex justify-content-between text-danger"><span>ส่วนลด (${discPct.toFixed(1)}%):</span><span>-${discAmt.toFixed(2)} ฿</span></div>`:''}
+        ${discPct>0?`<div class="d-flex justify-content-between text-danger"><span>ส่วนลด (${discPct}%):</span><span>-${discAmt.toFixed(2)} ฿</span></div>`:''}
         <hr class="my-2">
         <div class="d-flex justify-content-between fw-bold h4"><span>ยอดสุทธิ:</span><span class="text-primary">${netAmt.toFixed(2)} บาท</span></div>
       `;
-      validateState(); // Re-validate after successful update
     }
 
     function validateState(){
       const qty = parseFloat(currentInput);
-      // Enable button only if fuel is selected AND quantity is greater than 0
-      submitBtn.disabled = !(selectedFuel && qty > 0 && currentPrice > 0);
+      submitBtn.disabled = !(selectedFuel && qty > 0);
     }
-
 
     function validateForm(e){
-      if (submitBtn.disabled) {
-          e.preventDefault();
-          let msg = 'ข้อมูลยังไม่ครบถ้วน: ';
-          if (!selectedFuel) msg += 'กรุณาเลือกชนิดน้ำมัน ';
-          if (!(parseFloat(currentInput) > 0)) msg += 'กรุณาใส่จำนวน ';
-          alert(msg.trim());
-      }
-      // Allow form submission if button is enabled
+      if (submitBtn.disabled) { e.preventDefault(); alert('ข้อมูลยังไม่ครบถ้วน กรุณาเลือกชนิดน้ำมันและใส่จำนวน'); }
     }
 
+    // --- [แก้ไข] Member Search ---
     function handleMemberSearch(e) {
       clearTimeout(searchTimeout);
       const term = e.target.value.trim();
+
+      // ล้างค่าที่ซ่อนไว้ก่อน
       customerPhoneHidden.value = '';
       householdNoHidden.value = '';
-      memberPkHidden.value = '';
+      memberPkHidden.value = ''; // [เพิ่ม]
 
-      if (term === '' || term.length < 2) {
+      if (term === '') {
+        memberInfoDiv.style.display = 'none';
+        return;
+      }
+      if (term.length < 2) {
         memberInfoDiv.style.display = 'none';
         return;
       }
 
-      searchTimeout = setTimeout(() => { findMember(term); }, 500);
+      searchTimeout = setTimeout(() => {
+        findMember(term);
+      }, 500);
     }
 
     async function findMember(term) {
       const spinner = `<div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div>`;
       const alertDiv = memberInfoDiv.querySelector('.alert');
+
       memberInfoDiv.style.display = 'block';
       alertDiv.className = 'alert alert-secondary py-2 px-3 d-flex align-items-center';
       memberNameSpan.innerHTML = `กำลังค้นหา... ${spinner}`;
-      memberPkHidden.value = '';
+      memberPkHidden.value = ''; // [เพิ่ม]
 
       try {
-          // Adjust API endpoint if necessary, assuming it's relative or configured elsewhere
-          const url = `/admin/api/search_member.php?term=${encodeURIComponent(term)}`;
+          const url = `/admin/api/search_member.php?term=${encodeURIComponent(term)}`; // [แก้ไข] ใช้ /admin/api/
           const res = await fetch(url);
-          if (!res.ok) throw new Error('Network response was not ok: ' + res.statusText);
+          
+          if (!res.ok) throw new Error('bad_status_' + res.status);
+          
           const member = await res.json();
 
           if (member && !member.error) {
               alertDiv.className = 'alert alert-info py-2 px-3 d-flex align-items-center';
               alertDiv.querySelector('i').className = 'bi bi-person-check-fill me-2';
-              memberNameSpan.textContent = `สมาชิก: ${member.full_name || 'N/A'} (${member.type_th || 'N/A'})`;
+              memberNameSpan.textContent = `สมาชิก: ${member.full_name} (${member.type_th})`;
+
+              // อัปเดตข้อมูลที่พบลงในช่อง input ที่ซ่อนไว้
               customerPhoneHidden.value = member.phone || '';
               householdNoHidden.value = member.house_number || '';
-              memberPkHidden.value = member.member_pk || ''; // Primary Key from members table
-              // Optional: Update displayed input if needed, though often better to leave user input
-              // memberIdentifierInput.value = term; // Or member.identifier if API returns it
+              memberPkHidden.value = member.member_pk || ''; // [เพิ่ม]
+              
+              // อัปเดตค่าในช่องที่แสดงผล
+              memberIdentifierInput.value = term;
+
           } else {
               alertDiv.className = 'alert alert-warning py-2 px-3 d-flex align-items-center';
               alertDiv.querySelector('i').className = 'bi bi-person-exclamation me-2';
               memberNameSpan.textContent = 'ไม่พบสมาชิก';
-              // Logic to handle non-member input (phone vs house no)
+
+              // ถ้าไม่เจอ ส่งค่าที่ผู้ใช้กรอกไปตรงๆ
               const numericTerm = term.replace(/\D+/g, '');
               if (/^[0-9\s\-()+]{9,}$/.test(term) && numericTerm.length >= 9) {
-                  customerPhoneHidden.value = numericTerm; // Assume phone if looks like phone number
+                  customerPhoneHidden.value = numericTerm;
                   householdNoHidden.value = '';
               } else {
-                  householdNoHidden.value = term; // Assume house number otherwise
+                  householdNoHidden.value = term;
                   customerPhoneHidden.value = '';
               }
           }
@@ -830,109 +797,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
           alertDiv.className = 'alert alert-danger py-2 px-3 d-flex align-items-center';
           alertDiv.querySelector('i').className = 'bi bi-wifi-off me-2';
           memberNameSpan.textContent = 'การเชื่อมต่อล้มเหลว';
-          memberPkHidden.value = '';
+          memberPkHidden.value = ''; // [เพิ่ม]
       }
     }
+    // --- (จบส่วน Member Search) ---
 
     function printReceipt(){
-        // Ensure saleDataForReceipt exists and has necessary properties
-        if (typeof saleDataForReceipt === 'undefined' || !saleDataForReceipt) {
-            console.error("Receipt data is missing.");
-            alert("ไม่พบข้อมูลใบเสร็จสำหรับพิมพ์");
-            return;
-        }
-
-        const {
-            site_name = 'N/A', receipt_no = 'N/A', datetime = new Date().toISOString(),
-            fuel_name = 'N/A', price_per_liter = 0, liters = 0,
-            total_amount = 0, discount_percent = 0, discount_amount = 0, net_amount = 0,
-            payment_method = 'N/A', employee_name = 'N/A',
-            customer_phone = '', household_no = '', points_earned = 0
-        } = saleDataForReceipt;
-
-        const saleDate = new Date(datetime).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' });
-        const payMap = { cash:'เงินสด', qr:'QR Code', transfer:'โอนเงิน', card:'บัตรเครดิต' };
-        const payKey  = (payment_method || '').toString().toLowerCase();
-        const payLabel = payMap[payKey] || payment_method;
-
-        // Function to safely format numbers
-        const formatNum = (num, decimals = 2) => typeof num === 'number' ? num.toFixed(decimals) : Number(0).toFixed(decimals);
-
-        const receiptHTML = `
-            <html><head><title>ใบเสร็จ ${receipt_no}</title>
-            <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
-            <style>
-              body { font-family:'Sarabun', sans-serif; width: 300px; margin: 0 auto; padding: 10px; color: #000; font-size: 14px; line-height: 1.4; }
-              h3, h4, p { margin: 0; text-align: center; }
-              h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 2px; }
-              h4 { font-weight: normal; font-size: 0.9rem; margin-bottom: 4px; }
-              hr { border: none; border-top: 1px dashed #000; margin: 5px 0; }
-              .row { display: flex; justify-content: space-between; margin-bottom: 1px; }
-              .row span:first-child { flex-shrink: 0; padding-right: 5px; }
-              .row span:last-child { text-align: right; word-break: break-all; }
-              .total { font-weight: 700; font-size: 1.05rem; margin-top: 2px; }
-              .center { text-align: center; margin-top: 8px; font-size: 0.9rem;}
-              @media print {
-                  @page { margin: 5mm; } /* Adjust margins for printing */
-                  body { width: auto; /* Allow printer to determine width */ }
-              }
-            </style></head><body>
-              <h3>${site_name}</h3><h4>ใบเสร็จรับเงิน</h4><hr>
-              <div class="row"><span>เลขที่:</span><span>${receipt_no}</span></div>
-              <div class="row"><span>วันที่:</span><span>${saleDate}</span></div><hr>
-              ${customer_phone ? `<div class="row"><span>เบอร์โทร:</span><span>${customer_phone}</span></div>`:''}
-              ${household_no ? `<div class="row"><span>บ้านเลขที่:</span><span>${household_no}</span></div>`:''}
-              ${(customer_phone || household_no) ? '<hr>' : ''}
-              <div class="row"><span>รายการ:</span><span>${fuel_name}</span></div>
-              <div class="row"><span>${formatNum(liters, 3)} L @ ${formatNum(price_per_liter, 2)}</span><span>${formatNum(total_amount, 2)}</span></div>
-              ${parseFloat(discount_amount) > 0 ? `<div class="row"><span>ส่วนลด (${formatNum(discount_percent,1)}%):</span><span>-${formatNum(discount_amount, 2)}</span></div>` : ''}
-              <hr>
-              <div class="row total"><span>รวมทั้งสิ้น:</span><span>${formatNum(net_amount, 2)} บาท</span></div>
-              <hr>
-              ${parseInt(points_earned) > 0 ? `<div class="row"><span>แต้มที่ได้รับ:</span><span>${parseInt(points_earned)} แต้ม</span></div><hr>` : ''}
-              <div class="row"><span>ชำระโดย:</span><span>${payLabel}</span></div>
-              <div class="row"><span>พนักงาน:</span><span>${employee_name}</span></div>
-              <p class="center">** ขอบคุณที่ใช้บริการ **</p>
-            </body></html>`;
-
-        try {
-            const printWindow = window.open('', '_blank', 'width=320,height=500'); // Specify a small window size
-            if (!printWindow) {
-                alert('ไม่สามารถเปิดหน้าต่างพิมพ์ได้ กรุณาตรวจสอบการตั้งค่า Popup Blocker');
-                return;
-            }
-            printWindow.document.write(receiptHTML);
-            printWindow.document.close();
-            printWindow.focus();
-            // Delay print command slightly to ensure content is loaded
-            setTimeout(() => {
-                printWindow.print();
-                // Close window after a delay, allowing print dialog to appear
-                setTimeout(() => { printWindow.close(); }, 1000);
-            }, 500); // Increased delay
-        } catch (e) {
-            console.error("Printing error:", e);
-            alert("เกิดข้อผิดพลาดในการพิมพ์ใบเสร็จ");
-        }
+      if (typeof saleDataForReceipt === 'undefined') return;
+      const {
+        site_name, receipt_no, datetime, fuel_name, price_per_liter, liters,
+        total_amount, discount_percent, discount_amount, net_amount,
+        payment_method, employee_name, customer_phone, household_no, points_earned
+      } = saleDataForReceipt;
+      const saleDate = new Date(datetime).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' });
+      const payMap = { cash:'เงินสด', qr:'QR Code', transfer:'โอนเงิน', card:'บัตรเครดิต' };
+      const payKey  = (payment_method || '').toString().toLowerCase();
+      const payLabel = payMap[payKey] || payment_method || 'ไม่ระบุ';
+      const receiptHTML = `
+        <html><head><title>ใบเสร็จ ${receipt_no}</title>
+        <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
+        <style>
+          body { font-family:'Sarabun',sans-serif; width:300px; margin:0 auto; padding:10px; color:#000; font-size:14px; }
+          h3,h4,p{ margin:0; text-align:center; }
+          h3{ font-size:1.1rem } h4{ font-weight:normal; font-size:.9rem }
+          hr{ border:none; border-top:1px dashed #000; margin:6px 0 }
+          .row{ display:flex; justify-content:space-between; margin-bottom:2px; }
+          .total{ font-weight:700; font-size:1.05rem }
+        </style></head><body>
+          <h3>${site_name}</h3><h4>ใบเสร็จรับเงิน</h4><hr>
+          <div class="row"><span>เลขที่:</span><span>${receipt_no}</span></div>
+          <div class="row"><span>วันที่:</span><span>${saleDate}</span></div><hr>
+          ${customer_phone ? `<div class="row"><span>เบอร์โทร:</span><span>${customer_phone}</span></div>`:''}
+          ${household_no ? `<div class="row"><span>บ้านเลขที่:</span><span>${household_no}</span></div>`:''}
+          <div class="row"><span>${parseFloat(liters).toFixed(3)} L. @ ${parseFloat(price_per_liter).toFixed(2)}</span><span>${parseFloat(total_amount).toFixed(2)}</span></div><hr>
+          ${parseFloat(discount_amount)>0?`<div class="row"><span>ส่วนลด (${parseFloat(discount_percent)}%):</span><span>-${parseFloat(discount_amount).toFixed(2)}</span></div>`:''}
+          <div class="row total"><span>รวมทั้งสิ้น</span><span>${parseFloat(net_amount).toFixed(2)} บาท</span></div><hr>
+          ${parseInt(points_earned)>0?`<div class="row"><span>แต้มที่ได้รับ:</span><span>${parseInt(points_earned)} แต้ม</span></div><hr>`:''}
+          <div class="row"><span>ชำระโดย:</span><span>${payLabel}</span></div>
+          <div class="row"><span>พนักงาน:</span><span>${employee_name}</span></div>
+          <p style="margin-top:10px;">** ขอบคุณที่ใช้บริการ **</p>
+        </body></html>`;
+      const w = window.open('', '_blank');
+      w.document.write(receiptHTML); w.document.close(); w.focus();
+      setTimeout(()=>{ w.print(); w.close(); }, 250);
     }
-
 
     <?php if ($sale_success && $sale_data_json): ?>
       const saleDataForReceipt = <?= $sale_data_json; ?>;
       const receiptModalEl = document.getElementById('receiptModal');
       if (receiptModalEl) {
         const receiptModal = new bootstrap.Modal(receiptModalEl);
-        // Automatically show modal only if sale was just successful
         receiptModal.show();
       }
     <?php endif; ?>
 
-    // Initialize display and button state
-    (function(){
-        display.textContent='0';
-        validateState(); // Check initial state
-    })();
-
+    (function(){ display.textContent='0'; })();
   </script>
 </body>
 </html>
