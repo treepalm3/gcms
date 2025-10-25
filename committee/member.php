@@ -224,7 +224,6 @@ foreach ($members as $m) {
         </div>
         <div class="d-flex gap-2">
           <button class="btn btn-outline-primary" id="btnExport"><i class="bi bi-filetype-csv me-1"></i> ส่งออก CSV</button>
-          <button class="btn btn-outline-secondary" id="btnPrint"><i class="bi bi-printer me-1"></i> พิมพ์</button>
         </div>
       </div>
 
