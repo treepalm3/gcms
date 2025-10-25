@@ -1,92 +1,39 @@
 <?php
-// manager/inv_transfer.php — โอนย้ายสต๊อกระหว่างถัง (สำหรับผู้บริหาร)
+// inv_transfer.php — โอนย้ายสต๊อกระหว่างถัง (no triggers)
 session_start();
-date_default_timezone_set('Asia/Bangkok');
-
-/* ===== ตรวจสิทธิ์ + วิธีเรียก + CSRF ===== */
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-  header('Location: inventory.php?err=วิธีการเรียกไม่ถูกต้อง'); exit;
-}
-if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? '') !== 'manager')) {
-  header('Location: /index/login.php?err=สิทธิ์ไม่พอ'); exit;
-}
 if (empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'] ?? '')) {
-  header('Location: inventory.php?err=CSRF ไม่ถูกต้อง'); exit;
+  http_response_code(400); exit('Invalid CSRF');
 }
-
-/* ===== เชื่อมฐานข้อมูล ===== */
 $dbFile = __DIR__ . '/../config/db.php';
 if (!file_exists($dbFile)) { $dbFile = __DIR__ . '/config/db.php'; }
-require_once $dbFile; // ต้องมีตัวแปร $pdo (PDO)
-if (!isset($pdo) || !($pdo instanceof PDO)) {
-  header('Location: inventory.php?err=เชื่อมต่อฐานข้อมูลไม่ได้'); exit;
-}
+require_once $dbFile;
 
-/* ===== helpers ===== */
 function redirect($ok=null,$err=null){
   $q = $ok ? ('ok='.urlencode($ok)) : ('err='.urlencode($err));
   header('Location: inventory.php?'.$q); exit;
 }
-function table_exists(PDO $pdo, string $table): bool {
-  try{
-    $db = $pdo->query("SELECT DATABASE()")->fetchColumn();
-    $st = $pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=:db AND table_name=:tb");
-    $st->execute([':db'=>$db, ':tb'=>$table]);
-    return (int)$st->fetchColumn() > 0;
-  }catch(Throwable $e){ return false; }
-}
-function column_exists(PDO $pdo, string $table, string $col): bool {
-  try{
-    $db = $pdo->query("SELECT DATABASE()")->fetchColumn();
-    $st = $pdo->prepare("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=:db AND table_name=:tb AND column_name=:col");
-    $st->execute([':db'=>$db, ':tb'=>$table, ':col'=>$col]);
-    return (int)$st->fetchColumn() > 0;
-  }catch(Throwable $e){ return false; }
-}
-function get_station_id(PDO $pdo): int {
-  if (!empty($_SESSION['station_id'])) return (int)$_SESSION['station_id'];
-  try{
-    $st = $pdo->query("SELECT setting_value FROM settings WHERE setting_name='station_id' LIMIT 1");
-    $sid = $st ? $st->fetchColumn() : false;
-    return $sid !== false ? (int)$sid : 1;
-  }catch(Throwable $e){ return 1; }
-}
 
-/* ===== รับค่าจากฟอร์ม ===== */
 try {
   $from_code = trim($_POST['from_tank'] ?? '');
   $to_code   = trim($_POST['to_tank'] ?? '');
   $liters    = (float)($_POST['liters'] ?? 0);
   $ref_note  = trim($_POST['ref_note'] ?? '');
-  $user_id   = (int)($_SESSION['user_id'] ?? 0);
+  $user_id   = $_SESSION['user_id'] ?? null;
 
   if (!$from_code || !$to_code || $from_code === $to_code || $liters <= 0) {
     throw new RuntimeException('ข้อมูลโอนไม่ครบหรือไม่ถูกต้อง');
   }
 
-  $station_id = get_station_id($pdo);
-  $has_sid_tanks = column_exists($pdo,'fuel_tanks','station_id');
-
   $pdo->beginTransaction();
 
-  // ล็อกแถวถังทั้งสองใบ (กรองตามสถานีถ้ามีคอลัมน์)
-  if ($has_sid_tanks) {
-    $st = $pdo->prepare("
-      SELECT id, fuel_id, code, capacity_l, max_threshold_l, current_volume_l, station_id
-      FROM fuel_tanks
-      WHERE code IN (?, ?) AND station_id = ?
-      FOR UPDATE
-    ");
-    $st->execute([$from_code, $to_code, $station_id]);
-  } else {
-    $st = $pdo->prepare("
-      SELECT id, fuel_id, code, capacity_l, max_threshold_l, current_volume_l
-      FROM fuel_tanks
-      WHERE code IN (?, ?)
-      FOR UPDATE
-    ");
-    $st->execute([$from_code, $to_code]);
-  }
+  // ล็อกแถวถังทั้งสองใบ
+  $st = $pdo->prepare("
+    SELECT id, fuel_id, code, capacity_l, max_threshold_l, current_volume_l
+    FROM fuel_tanks
+    WHERE code IN (?, ?)
+    FOR UPDATE
+  ");
+  $st->execute([$from_code, $to_code]);
   $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
   $from = $to = null;
@@ -117,7 +64,7 @@ try {
     throw new RuntimeException('ปริมาณปลายทางเกินระดับสูงสุดที่กำหนด (Max)');
   }
 
-  // บันทึก movement ออก (transfer_out)
+  // บันทึก movement ออก
   $insOut = $pdo->prepare("
     INSERT INTO fuel_moves(occurred_at,type,tank_id,liters,unit_price,ref_doc,ref_note,user_id)
     VALUES (NOW(),'transfer_out',:tid,:liters,NULL,:doc,:note,:uid)
@@ -131,7 +78,7 @@ try {
   ]);
   $pairId = (int)$pdo->lastInsertId();
 
-  // บันทึก movement เข้า (transfer_in) อ้างอิงคู่ผ่าน ref_doc
+  // บันทึก movement เข้า (อ้างอิงคู่ไว้ใน ref_doc)
   $insIn = $pdo->prepare("
     INSERT INTO fuel_moves(occurred_at,type,tank_id,liters,unit_price,ref_doc,ref_note,user_id)
     VALUES (NOW(),'transfer_in',:tid,:liters,NULL,:doc,:note,:uid)
@@ -144,12 +91,12 @@ try {
     ':uid'    => $user_id
   ]);
 
-  // อัปเดตปริมาณในถัง (ต้นทางลบ / ปลายทางเพิ่ม)
+  // ปรับปริมาณในถัง (ต้นทางลบ / ปลายทางเพิ่ม)
   $upd = $pdo->prepare("UPDATE fuel_tanks SET current_volume_l = current_volume_l + :d, updated_at = NOW() WHERE id = :id");
   $upd->execute([':d' => -$liters, ':id' => $from['id']]);
   $upd->execute([':d' =>  $liters, ':id' => $to['id']]);
 
-  // ไม่ต้องแตะ fuel_stock — ยอดรวมตามชนิดไม่เปลี่ยนจากการโอนถัง→ถัง
+  // NOTE: ไม่ต้องแตะ fuel_stock เพราะยอดรวมตามชนิดไม่เปลี่ยนจากการโอนถัง→ถัง
 
   $pdo->commit();
   redirect('บันทึกโอนย้ายเรียบร้อย');
