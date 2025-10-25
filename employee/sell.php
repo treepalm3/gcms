@@ -35,9 +35,6 @@ function get_setting(PDO $pdo, string $name, $default = null) {
   }
 }
 
-/**
- * ตรวจว่าตารางมีคอลัมน์หรือไม่ (แคชในหน่วยความจำ)
- */
 function has_column(PDO $pdo, string $table, string $column): bool {
   static $cache = [];
   $key = $table.'.'.$column;
@@ -52,10 +49,7 @@ function has_column(PDO $pdo, string $table, string $column): bool {
     $st = $pdo->prepare($sql);
     $st->execute([':t'=>$table, ':c'=>$column]);
     $cache[$key] = (bool)$st->fetchColumn();
-  } catch (Throwable $e) {
-    // ถ้าอ่าน information_schema ไม่ได้ ให้ถือว่าไม่มีคอลัมน์
-    $cache[$key] = false;
-  }
+  } catch (Throwable $e) { $cache[$key] = false; }
   return $cache[$key];
 }
 
@@ -130,9 +124,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     $quantity       = filter_var($_POST['quantity'] ?? 0, FILTER_VALIDATE_FLOAT);
     $payment_method = $_POST['payment_method'] ?? 'cash';
 
-    // Normalize เบอร์โทร -> ตัวเลขล้วน
-    $customer_phone = preg_replace('/\D+/', '', (string)($_POST['customer_phone'] ?? ''));
-    $household_no   = trim((string)($_POST['household_no'] ?? ''));
+    // [แก้ไข] รับค่าจากช่องค้นหารวม
+    $member_identifier = trim((string)($_POST['member_identifier'] ?? ''));
+    $customer_phone = '';
+    $household_no   = '';
+
+    // ตรวจสอบว่าสิ่งที่กรอกมาเป็นเบอร์โทร (มีแต่ตัวเลข, -) หรือ บ้านเลขที่ (อาจมีตัวอักษร, /)
+    if (preg_match('/^[0-9\s\-()+]+$/', $member_identifier)) {
+        // ถ้าเหมือนเบอร์โทร
+        $customer_phone = preg_replace('/\D+/', '', $member_identifier);
+    } else {
+        // ถ้าไม่เหมือนเบอร์โทร ให้ถือเป็นบ้านเลขที่
+        $household_no = $member_identifier;
+    }
 
     $discount_in    = $_POST['discount'] ?? 0;
     $discount       = is_numeric($discount_in) ? (float)$discount_in : 0.0;
@@ -157,9 +161,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
 
       if ($sale_type === 'liters') {
         $liters_raw   = (float)$quantity;
-        $liters_disp  = round($liters_raw, 3);                  // สำหรับแสดงผล
-        $liters_db    = round($liters_raw, 2);                  // ตรงกับสคีมา sales_items.liters DECIMAL(10,2)
-        $total_amount = round($liters_db * $fuel_price, 2);     // ให้สอดคล้องกับ liters_db
+        $liters_disp  = round($liters_raw, 3);
+        $liters_db    = round($liters_raw, 2);
+        $total_amount = round($liters_db * $fuel_price, 2);
       } else {
         $total_amount = round((float)$quantity, 2);
         $liters_calc  = ($fuel_price > 0 ? $total_amount / $fuel_price : 0.0);
@@ -169,8 +173,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       $discount_amount = round($total_amount * ($discount/100.0), 2);
       $net_amount      = round($total_amount - $discount_amount, 2);
 
-      // แต้มสะสม: 1 แต้ม ต่อ 20 บาทสุทธิ (ถ้ามีข้อมูลสมาชิก)
-      $POINT_RATE     = 20;
+      // [แก้ไข] แต้มสะสม: ปรับเป็น 30 บาท = 1 แต้ม
+      $POINT_RATE     = 30; // <-- ปรับจาก 20 เป็น 30
       $has_loyalty_id = (bool)($customer_phone || $household_no);
       $points_earned  = $has_loyalty_id ? (int)floor($net_amount / $POINT_RATE) : 0;
 
@@ -184,7 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
         'fuel_type'        => $fuel_id,
         'fuel_name'        => $fuel_name,
         'price_per_liter'  => $fuel_price,
-        'liters'           => $liters_disp,      // แสดงผล 3 ตำแหน่ง
+        'liters'           => $liters_disp,
         'total_amount'     => $total_amount,
         'discount_percent' => $discount,
         'discount_amount'  => $discount_amount,
@@ -201,17 +205,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       try {
         $pdo->beginTransaction();
 
-        // ตรวจคอลัมน์เสริมใน sales (บันทึกลูกค้า/ส่วนลด ถ้ามี)
         $col_phone   = has_column($pdo, 'sales', 'customer_phone');
         $col_house   = has_column($pdo, 'sales', 'household_no');
         $col_discpct = has_column($pdo, 'sales', 'discount_pct');
         $col_discamt = has_column($pdo, 'sales', 'discount_amount');
 
-        // วน generate sale_code กันชน (ต้องตั้ง UNIQUE(sale_code) ใน DB)
         $tries = 0;
         $sale_id = null;
         do {
-          $receipt_no = 'R'.date('Ymd').'-'.strtoupper(bin2hex(random_bytes(3))); // 6 hex ~ 16,777,216 แบบ/วัน
+          $receipt_no = 'R'.date('Ymd').'-'.strtoupper(bin2hex(random_bytes(3)));
           $cols = ['station_id','sale_code','total_amount','net_amount','sale_date','payment_method','created_by'];
           $params = [
             ':station_id'     => $station_id,
@@ -222,56 +224,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
             ':payment_method' => $payment_method,
             ':created_by'     => $current_user_id,
           ];
+          // [แก้ไข] ใช้ตัวแปร $customer_phone และ $household_no ที่เรากรองไว้
           if ($col_phone)   { $cols[] = 'customer_phone';  $params[':customer_phone']  = $customer_phone ?: null; }
           if ($col_house)   { $cols[] = 'household_no';    $params[':household_no']    = $household_no ?: null; }
           if ($col_discpct) { $cols[] = 'discount_pct';    $params[':discount_pct']    = $discount; }
           if ($col_discamt) { $cols[] = 'discount_amount'; $params[':discount_amount'] = $discount_amount; }
 
           $placeholders = array_map(fn($c) => ':'.$c, $cols);
-          // ให้แน่ใจว่า key ใน $params ครบตาม $placeholders
-          foreach ($cols as $c) {
-            $k = ':'.$c;
-            if (!array_key_exists($k, $params)) {
-              $params[$k] = null;
-            }
-          }
+          foreach ($cols as $c) { $k = ':'.$c; if (!array_key_exists($k, $params)) { $params[$k] = null; } }
 
           $sql = "INSERT INTO sales (".implode(',',$cols).") VALUES (".implode(',',$placeholders).")";
           try {
             $stmtSale = $pdo->prepare($sql);
             $stmtSale->execute($params);
             $sale_id = (int)$pdo->lastInsertId();
-            $sale_data['receipt_no'] = $receipt_no; // สำหรับแสดง/พิมพ์
-            break; // สำเร็จ
+            $sale_data['receipt_no'] = $receipt_no;
+            break;
           } catch (PDOException $ex) {
-            // 23000 = Duplicate entry (ชน UNIQUE sale_code)
-            if ($ex->getCode() === '23000' && ++$tries <= 5) {
-              continue; // ลอง gen ใหม่
-            }
+            if ($ex->getCode() === '23000' && ++$tries <= 5) { continue; }
             throw $ex;
           }
         } while ($tries <= 5);
 
         if (!$sale_id) { throw new RuntimeException('ไม่สามารถสร้างเลขที่ใบเสร็จได้'); }
 
-        // --- หา tank ของสถานีนี้ + เชื้อเพลิงนี้ (ให้ได้ $tank_id ก่อนใช้จริง) ---
+        // --- หา tank ---
         $tank_id = null;
         try {
-          // ค้นหาถังที่มีน้ำมันพอ และเลือกถังที่น้ำมันเยอะสุดก่อน
           $findTank = $pdo->prepare("
-            SELECT id
-            FROM fuel_tanks
+            SELECT id FROM fuel_tanks
             WHERE station_id = :sid AND fuel_id = :fid AND is_active = 1 AND current_volume_l >= :liters
-            ORDER BY current_volume_l DESC
-            LIMIT 1
+            ORDER BY current_volume_l DESC LIMIT 1
           ");
           $findTank->execute([':sid'=>$station_id, ':fid'=>(int)$fuel_id, ':liters' => $liters_db]);
           $tank_id = $findTank->fetchColumn() ?: null;
-        } catch (Throwable $e) {
-          $tank_id = null;
-        }
+        } catch (Throwable $e) { $tank_id = null; }
 
-        // 2) รายการ -> sales_items (ผูก fuel_id + tank_id)
+        // 2) รายการ -> sales_items
         $stmtItem = $pdo->prepare("
           INSERT INTO sales_items (sale_id, fuel_id, tank_id, fuel_type, liters, price_per_liter)
           VALUES (:sale_id, :fuel_id, :tank_id, :fuel_type, :liters, :price_per_liter)
@@ -279,34 +268,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
         $stmtItem->execute([
           ':sale_id'         => $sale_id,
           ':fuel_id'         => (int)$fuel_id,
-          ':tank_id'         => $tank_id,                 // จะเป็น NULL ถ้าไม่พบถัง
-          ':fuel_type'       => $fuel_name,               // snapshot ชื่อ ณ ขณะขาย
-          ':liters'          => $liters_db,               // DECIMAL(10,2)
+          ':tank_id'         => $tank_id,
+          ':fuel_type'       => $fuel_name,
+          ':liters'          => $liters_db,
           ':price_per_liter' => round($fuel_price, 2)
         ]);
-        // หมายเหตุ: line_amount เป็น GENERATED COLUMN ฝั่ง DB
 
-        // 3) ตัดสต็อก + บันทึก movement -> fuel_moves + sync fuel_stock
+        // 3) ตัดสต็อก + บันทึก movement
         try {
           if ($tank_id) {
-            // ล็อคแถวกันชน (เข้มกว่าแบบอ่อน)
             $sel = $pdo->prepare("SELECT id, current_volume_l FROM fuel_tanks WHERE id = :tid FOR UPDATE");
             $sel->execute([':tid' => (int)$tank_id]);
             $row = $sel->fetch(PDO::FETCH_ASSOC);
 
             if ($row) {
-              $lit2 = $liters_db; // ใช้จำนวนเดียวกับที่ลงใน sales_items
+              $lit2 = $liters_db;
               $stmtUpd = $pdo->prepare("
-                  UPDATE fuel_tanks 
-                  SET current_volume_l = current_volume_l - ? 
-                  WHERE id = ? 
-                    AND current_volume_l >= ?
+                  UPDATE fuel_tanks SET current_volume_l = current_volume_l - ? WHERE id = ? AND current_volume_l >= ?
               ");
+              $stmtUpd->execute([$lit2, $tank_id, $lit2]);
 
-            $stmtUpd->execute([$lit2, $tank_id, $lit2]);
-              // ถ้าตัดสต็อกสำเร็จ (rowCount > 0) ค่อยบันทึก movement และ sync ตารางอื่น
               if ($stmtUpd->rowCount() > 0) {
-                // ลง movement ผูก sale_id (กันซ้ำด้วย UNIQUE(sale_id,is_sale_out))
+                // ลง movement
                 $stmtMove = $pdo->prepare("
                   INSERT INTO fuel_moves (occurred_at, type, tank_id, liters, unit_price, ref_doc, ref_note, user_id, sale_id)
                   VALUES (NOW(), 'sale_out', :tank_id, :liters, :unit_price, :ref_doc, :ref_note, :user_id, :sale_id)
@@ -322,61 +305,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                 ]);
                 $move_id = (int)$pdo->lastInsertId();
 
-                // 3.1) จัดสรรต้นทุนขาย (COGS) จาก Lot ที่เปิดอยู่ (FIFO)
+                // 3.1) จัดสรร COGS
                 if ($move_id > 0) {
                     $liters_to_allocate = $liters_db;
-                    // ใช้ View v_open_fuel_lots ที่คำนวณ remaining_liters มาให้แล้ว
                     $getLots = $pdo->prepare("
-                        SELECT id, remaining_liters, unit_cost_full
-                        FROM v_open_fuel_lots
-                        WHERE tank_id = :tid
-                        ORDER BY received_at ASC, id ASC
+                        SELECT id, remaining_liters, unit_cost_full FROM v_open_fuel_lots
+                        WHERE tank_id = :tid ORDER BY received_at ASC, id ASC
                     ");
                     $getLots->execute([':tid' => (int)$tank_id]);
-
                     $insAlloc = $pdo->prepare("
                         INSERT INTO fuel_lot_allocations (lot_id, move_id, allocated_liters, unit_cost_snapshot)
                         VALUES (:lot_id, :move_id, :liters, :cost)
                     ");
-
                     while ($liters_to_allocate > 1e-6 && ($lot = $getLots->fetch(PDO::FETCH_ASSOC))) {
                         $lot_id = (int)$lot['id'];
                         $available_in_lot = (float)$lot['remaining_liters'];
                         $cost_snapshot = (float)$lot['unit_cost_full'];
                         $take_from_lot = min($liters_to_allocate, $available_in_lot);
-
                         if ($take_from_lot > 0) {
                             $insAlloc->execute([':lot_id' => $lot_id, ':move_id' => $move_id, ':liters' => $take_from_lot, ':cost' => $cost_snapshot]);
                             $liters_to_allocate -= $take_from_lot;
                         }
                     }
-
-                    // ถ้าจัดสรรไม่ครบ แสดงว่าสต็อกใน tank กับ lot ไม่ตรงกัน -> ยกเลิกการขาย
                     if ($liters_to_allocate > 1e-6) {
                         throw new RuntimeException("COGS Error: สต็อกใน Lot ไม่พอสำหรับ Tank ID {$tank_id} (ขาดไป {$liters_to_allocate} ลิตร)");
                     }
                 }
 
-                // sync ตาราง fuel_stock (บางหน้ารายงานอ่านตารางนี้)
+                // sync ตาราง fuel_stock
                 $sync = $pdo->prepare("
-                  UPDATE fuel_stock
-                  SET current_stock = GREATEST(0, current_stock - :l)
+                  UPDATE fuel_stock SET current_stock = GREATEST(0, current_stock - :l)
                   WHERE station_id = :sid AND fuel_id = :fid
                 ");
-                $sync->execute([
-                  ':l'   => $liters_db,
-                  ':sid' => $station_id,
-                  ':fid' => (int)$fuel_id,
-                ]);
+                $sync->execute([':l' => $liters_db, ':sid' => $station_id, ':fid' => (int)$fuel_id]);
               } else {
-                // ถ้าสต็อกไม่พอ ให้ log แล้วไม่ fail ใบเสร็จ (หรือจะ throw เพื่อยกเลิกทั้งทรานแซกชันก็ได้)
                 error_log('Inventory not enough for tank '.$tank_id.' sale '.$sale_id);
               }
             } else {
               error_log("Tank not found (FOR UPDATE) id={$tank_id}");
             }
           } else {
-            // เพิ่มข้อมูลใน log ให้ชัดเจนขึ้น
             error_log("No active tank for station {$station_id} and fuel {$fuel_id} with enough stock ({$liters_db}L) for sale {$sale_id}");
           }
         } catch (Throwable $invE) {
@@ -387,42 +355,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
         if ($points_earned > 0 && ($customer_phone !== '' || $household_no !== '')) {
           try {
             $member_id = null;
-            
-            // สร้าง WHERE clause แบบยืดหยุ่น
             $where_conditions = [];
-            $params = [];
+            $params_pts = [];
             
             if ($customer_phone !== '') {
               $where_conditions[] = "REPLACE(REPLACE(REPLACE(REPLACE(u.phone, '-', ''), ' ', ''), '(', ''), ')', '') = :phone";
-              $params[':phone'] = $customer_phone;
+              $params_pts[':phone'] = $customer_phone;
             }
-            
             if ($household_no !== '') {
+              // [แก้ไข] แก้ไขการ Join ให้รองรับ 3 ตาราง
               $where_conditions[] = "m.house_number = :house";
-              $params[':house'] = $household_no;
+              $where_conditions[] = "mg.house_number = :house";
+              $where_conditions[] = "c.house_number = :house";
+              $params_pts[':house'] = $household_no;
             }
             
             if (!empty($where_conditions)) {
               $where_clause = implode(' OR ', $where_conditions);
               
+              // [แก้ไข] Query ให้ค้นหาจาก 3 ตาราง
               $q = $pdo->prepare("
-                SELECT m.id AS member_id
+                SELECT u.id as user_id, m.id as member_pk
                 FROM users u
-                INNER JOIN members m ON m.user_id = u.id
-                WHERE m.is_active = 1 AND ({$where_clause})
+                LEFT JOIN members m ON m.user_id = u.id AND m.is_active = 1
+                LEFT JOIN managers mg ON mg.user_id = u.id
+                LEFT JOIN committees c ON c.user_id = u.id
+                WHERE ({$where_clause})
+                  AND COALESCE(m.id, mg.id, c.id) IS NOT NULL
                 LIMIT 1
               ");
               
-              $q->execute($params);
-              $member_id = $q->fetchColumn();
+              $q->execute($params_pts);
+              $found_user = $q->fetch(PDO::FETCH_ASSOC);
               
-              // Debug log
-              if (!$member_id) {
-                error_log("Member not found - Phone: {$customer_phone}, House: {$household_no}");
+              // [แก้ไข] ต้องใช้ member_id (pk) จากตาราง members เท่านั้นสำหรับตาราง scores
+              if ($found_user && $found_user['member_pk']) {
+                 $member_id = $found_user['member_pk'];
+              } else if ($found_user) {
+                 error_log("Member found (User ID: {$found_user['user_id']}) but is not in 'members' table. Cannot add points.");
+              } else {
+                 error_log("Member not found - Phone: {$customer_phone}, House: {$household_no}");
               }
             }
             
-            // ถ้าพบสมาชิก ให้บันทึกแต้ม
+            // ถ้าพบสมาชิก (ที่เป็น members) ให้บันทึกแต้ม
             if ($member_id) {
               $insScore = $pdo->prepare("
                 INSERT INTO scores (member_id, score, activity, score_date)
@@ -433,7 +409,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                 ':score'     => (int)$points_earned,
                 ':activity'  => 'POS '.$sale_data['receipt_no']
               ]);
-              
               error_log("Points earned: {$points_earned} for member_id: {$member_id}");
             }
           } catch (Throwable $ptsE) {
@@ -464,16 +439,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ขายน้ำมัน | <?= htmlspecialchars($site_name) ?></title>
-
-  <!-- Fonts & Icons -->
   <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-
-  <!-- Global theme -->
   <link rel="stylesheet" href="../assets/css/admin_dashboard.css" />
-
   <style>
     .fuel-selector{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem}
     .fuel-card{border:2px solid var(--border);border-radius:var(--radius);padding:1rem;cursor:pointer;transition:.2s;text-align:center}
@@ -491,7 +461,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
 </head>
 
 <body>
-  <!-- App Bar -->
   <nav class="navbar navbar-dark bg-primary">
     <div class="container-fluid">
       <div class="d-flex align-items-center gap-2">
@@ -510,7 +479,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     </div>
   </nav>
 
-  <!-- Offcanvas Sidebar -->
   <div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasSidebar" aria-labelledby="offcanvasLabel">
     <div class="offcanvas-header">
       <h5 class="offcanvas-title" id="offcanvasLabel"><?= htmlspecialchars($site_name) ?></h5>
@@ -532,7 +500,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
 
   <div class="container-fluid">
     <div class="row">
-      <!-- Sidebar Desktop -->
       <aside class="col-lg-2 d-none d-lg-flex flex-column sidebar py-4">
         <div class="side-brand mb-3"><h3><span>Employee</span></h3></div>
         <nav class="sidebar-menu flex-grow-1">
@@ -546,7 +513,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
         <a class="logout" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket me-1"></i>ออกจากระบบ</a>
       </aside>
 
-      <!-- Main -->
       <main class="col-lg-10 p-4">
         <div class="main-header">
           <h2><i class="bi bi-cash-coin me-2"></i>ระบบขายน้ำมัน</h2>
@@ -574,6 +540,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
           <input type="hidden" name="action" value="process_sale">
           <input type="hidden" name="fuel_type" id="selectedFuel" required>
           <input type="hidden" name="quantity" id="quantityInput" value="0" required>
+          <input type="hidden" name="customer_phone" id="customerPhoneHidden">
+          <input type="hidden" name="household_no" id="householdNoHidden">
 
           <div class="row g-4">
             <div class="col-lg-7">
@@ -601,25 +569,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                     </select>
                   </div>
 
-                  <!-- ระบุลูกค้าสำหรับสะสมแต้ม -->
                   <div class="col-md-6">
-                    <label class="form-label">เบอร์โทร (สะสมแต้ม)</label>
-                    <input type="tel" class="form-control" name="customer_phone" placeholder="08xxxxxxxx" pattern="[0-9\s\-]{8,20}">
-                    <div class="form-text">กรอกเพื่อค้นหาและสะสมแต้ม</div>
-                  </div>
-
-                  <div class="col-md-6">
-                    <label class="form-label">บ้านเลขที่ครัวเรือน</label>
-                    <input type="text" class="form-control" name="household_no" placeholder="เช่น 123/4 หมู่บ้าน…">
-                    <div class="form-text">กรอกเพื่อค้นหาและสะสมแต้ม</div>
+                    <label class="form-label">ค้นหาสมาชิก (บ้านเลขที่ / เบอร์โทร)</label>
+                    <input type="text" class="form-control" id="memberIdentifierInput" placeholder="กรอกบ้านเลขที่ หรือ เบอร์โทร">
+                    <div class="form-text">สำหรับสะสมแต้มและเฉลี่ยคืน</div>
                   </div>
 
                   <div class="col-md-6">
                     <label class="form-label">ส่วนลด (%)</label>
                     <input type="number" class="form-control" name="discount" id="discountInput" value="0" min="0" max="100" step="0.1">
                   </div>
-
-                  <!-- Member Info Display Area -->
+                  
                   <div class="col-12">
                     <div id="memberInfo" class="mt-2" style="display: none;">
                       <div class="alert alert-info py-2 px-3 d-flex align-items-center">
@@ -766,11 +726,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     const submitBtn       = document.getElementById('submitBtn');
     const posForm         = document.getElementById('posForm');
 
-    // --- Member Search ---
-    const customerPhoneInput = document.querySelector('input[name="customer_phone"]');
-    const householdNoInput   = document.querySelector('input[name="household_no"]');
-    const memberInfoDiv      = document.getElementById('memberInfo');
-    const memberNameSpan     = document.getElementById('memberName');
+    // --- [แก้ไข] Member Search ---
+    const memberIdentifierInput = document.getElementById('memberIdentifierInput'); // ช่องค้นหาใหม่
+    const customerPhoneHidden = document.getElementById('customerPhoneHidden'); // ช่องซ่อนสำหรับส่งเบอร์โทร
+    const householdNoHidden   = document.getElementById('householdNoHidden');   // ช่องซ่อนสำหรับส่งบ้านเลขที่
+    const memberInfoDiv       = document.getElementById('memberInfo');
+    const memberNameSpan      = document.getElementById('memberName');
     let searchTimeout;
 
     fuelCards.forEach(card => card.addEventListener('click', handleFuelSelect));
@@ -778,10 +739,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     discountInput.addEventListener('input', updateSummary);
     saleTypeRadios.forEach(radio => radio.addEventListener('change', updateSummary));
     posForm.addEventListener('submit', validateForm);
-    customerPhoneInput.addEventListener('input', handleMemberSearch);
-    householdNoInput.addEventListener('input', handleMemberSearch);
+    
+    // [แก้ไข] เปลี่ยน Event Listener
+    memberIdentifierInput.addEventListener('input', handleMemberSearch);
 
-    // ปุ่มล้างค่า (C)
     document.querySelector('[data-action="clear"]').addEventListener('click', function() {
       currentInput = '0';
       selectedFuel = null;
@@ -789,6 +750,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       quantityInput.value = '0';
       summaryPanel.innerHTML = '<p class="text-center text-muted">กรุณาเลือกชนิดน้ำมันและใส่จำนวน</p>';
       submitBtn.disabled = true;
+      // [เพิ่ม] ล้างค่าสมาชิกด้วย
+      memberIdentifierInput.value = '';
+      customerPhoneHidden.value = '';
+      householdNoHidden.value = '';
+      memberInfoDiv.style.display = 'none';
     });
 
     function handleFuelSelect(e){
@@ -869,67 +835,85 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       if (submitBtn.disabled) { e.preventDefault(); alert('ข้อมูลยังไม่ครบถ้วน กรุณาเลือกชนิดน้ำมันและใส่จำนวน'); }
     }
 
-    // --- Member Search (แสดงชื่อสมาชิกเมื่อพบ) ---
+    // --- [แก้ไข] Member Search ---
     function handleMemberSearch(e) {
       clearTimeout(searchTimeout);
       const term = e.target.value.trim();
 
-      if (customerPhoneInput.value.trim() === '' && householdNoInput.value.trim() === '') {
+      // ล้างค่าที่ซ่อนไว้ก่อน
+      customerPhoneHidden.value = '';
+      householdNoHidden.value = '';
+
+      if (term === '') {
         memberInfoDiv.style.display = 'none';
         return;
       }
-      if (term.length < 3) return;
+      // อนุญาตให้ค้นหาเลขสั้นๆ (เช่น บ้านเลขที่ '12')
+      if (term.length < 2) { 
+        memberInfoDiv.style.display = 'none';
+        return;
+      }
 
       searchTimeout = setTimeout(() => {
         findMember(term);
-      }, 500);
+      }, 500); // 500ms delay
     }
 
     async function findMember(term) {
-    console.log('🔍 Searching for:', term);
-    
-    const spinner = `<div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div>`;
-    const alertDiv = memberInfoDiv.querySelector('.alert');
+      const spinner = `<div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div>`;
+      const alertDiv = memberInfoDiv.querySelector('.alert');
 
-    memberInfoDiv.style.display = 'block';
-    alertDiv.className = 'alert alert-secondary py-2 px-3 d-flex align-items-center';
-    memberNameSpan.innerHTML = `กำลังค้นหา... ${spinner}`;
+      memberInfoDiv.style.display = 'block';
+      alertDiv.className = 'alert alert-secondary py-2 px-3 d-flex align-items-center';
+      memberNameSpan.innerHTML = `กำลังค้นหา... ${spinner}`;
 
-    try {
-        const url = `/api/search_member.php?term=${encodeURIComponent(term)}`;
-        console.log('📡 API URL:', url);
-        
-        const res = await fetch(url);
-        console.log('📥 Response status:', res.status);
-        
-        if (!res.ok) throw new Error('bad_status_' + res.status);
-        
-        const member = await res.json();
-        console.log('👤 Member data:', member);
+      try {
+          const url = `api/search_member.php?term=${encodeURIComponent(term)}`; // [แก้ไข] ใช้ /api/
+          const res = await fetch(url);
+          
+          // [แก้ไข] ลบ 's ที่เป็น Syntax Error ออก
+          if (!res.ok) throw new Error('bad_status_' + res.status);
+          
+          const member = await res.json();
 
-        if (member && !member.error) {
-            alertDiv.className = 'alert alert-info py-2 px-3 d-flex align-items-center';
-            alertDiv.querySelector('i').className = 'bi bi-person-check-fill me-2';
-            memberNameSpan.textContent = `สมาชิก: ${member.full_name}`;
+          if (member && !member.error) {
+              alertDiv.className = 'alert alert-info py-2 px-3 d-flex align-items-center';
+              alertDiv.querySelector('i').className = 'bi bi-person-check-fill me-2';
+              memberNameSpan.textContent = `สมาชิก: ${member.full_name} (${member.type_th})`;
 
-            // อัปเดตข้อมูลสมาชิกที่พบ
-            customerPhoneInput.value = member.phone || '';
-            householdNoInput.value = member.house_number || '';
-            
-            console.log('✅ Member found and form updated');
-        } else {
-            alertDiv.className = 'alert alert-warning py-2 px-3 d-flex align-items-center';
-            alertDiv.querySelector('i').className = 'bi bi-person-exclamation me-2';
-            memberNameSpan.textContent = 'ไม่พบสมาชิก';
-            console.log('❌ Member not found');
-        }
-    } catch (error) {
-        console.error('💥 Fetch error:', error);
-        alertDiv.className = 'alert alert-danger py-2 px-3 d-flex align-items-center';
-        alertDiv.querySelector('i').className = 'bi bi-wifi-off me-2';
-        memberNameSpan.textContent = 'การเชื่อมต่อล้มเหลว';
+              // อัปเดตข้อมูลที่พบลงในช่อง input ที่ซ่อนไว้
+              customerPhoneHidden.value = member.phone || '';
+              householdNoHidden.value = member.house_number || '';
+              
+              // อัปเดตค่าในช่องที่แสดงผล ให้เป็นค่าที่ค้นเจอ
+              if (member.house_number === term) {
+                 memberIdentifierInput.value = member.house_number;
+              } else if (member.phone.includes(term)) {
+                 memberIdentifierInput.value = member.phone;
+              }
+
+          } else {
+              alertDiv.className = 'alert alert-warning py-2 px-3 d-flex align-items-center';
+              alertDiv.querySelector('i').className = 'bi bi-person-exclamation me-2';
+              memberNameSpan.textContent = 'ไม่พบสมาชิก';
+
+              // ถ้าไม่เจอ ต้องส่งค่าที่ผู้ใช้กรอกไปตรงๆ
+              if (/^[0-9\s\-()+]+$/.test(term)) {
+                  customerPhoneHidden.value = term.replace(/\D+/g, '');
+                  householdNoHidden.value = ''; // ล้างค่าบ้านเลขที่
+              } else {
+                  householdNoHidden.value = term;
+                  customerPhoneHidden.value = ''; // ล้างค่าเบอร์โทร
+              }
+          }
+      } catch (error) {
+          console.error('Fetch error:', error);
+          alertDiv.className = 'alert alert-danger py-2 px-3 d-flex align-items-center';
+          alertDiv.querySelector('i').className = 'bi bi-wifi-off me-2';
+          memberNameSpan.textContent = 'การเชื่อมต่อล้มเหลว';
+      }
     }
-}
+    // --- (จบส่วน Member Search) ---
 
     function printReceipt(){
       if (typeof saleDataForReceipt === 'undefined') return;
@@ -964,7 +948,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
           <div class="row"><span>${parseFloat(liters).toFixed(3)} L. @ ${parseFloat(price_per_liter).toFixed(2)}</span><span>${parseFloat(total_amount).toFixed(2)}</span></div><hr>
           ${parseFloat(discount_amount)>0?`<div class="row"><span>ส่วนลด (${parseFloat(discount_percent)}%):</span><span>-${parseFloat(discount_amount).toFixed(2)}</span></div>`:''}
           <div class="row total"><span>รวมทั้งสิ้น</span><span>${parseFloat(net_amount).toFixed(2)} บาท</span></div><hr>
-          ${parseInt(points_earned)>0?`<div class="row"><span>แต้มที่ได้รับ</span><span>${parseInt(points_earned)} แต้ม</span></div><hr>`:''}
+          ${parseInt(points_earned)>0?`<div class="row"><span>แต้มที่ได้รับ:</span><span>${parseInt(points_earned)} แต้ม</span></div><hr>`:''}
           <div class="row"><span>ชำระโดย:</span><span>${payLabel}</span></div>
           <div class="row"><span>พนักงาน:</span><span>${employee_name}</span></div>
           <p style="margin-top:10px;">** ขอบคุณที่ใช้บริการ **</p>
@@ -974,7 +958,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       setTimeout(()=>{ w.print(); w.close(); }, 250);
     }
 
-    // เปิด modal อัตโนมัติเมื่อบันทึกสำเร็จ
     <?php if ($sale_success && $sale_data_json): ?>
       const saleDataForReceipt = <?= $sale_data_json; ?>;
       const receiptModalEl = document.getElementById('receiptModal');
@@ -984,7 +967,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       }
     <?php endif; ?>
 
-    // init
     (function(){ display.textContent='0'; })();
   </script>
 </body>
