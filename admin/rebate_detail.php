@@ -123,10 +123,9 @@ if ($period_id <= 0) {
 // ดึงข้อมูลระบบ
 $site_name = 'สหกรณ์ปั๊มน้ำมันบ้านภูเขาทอง';
 try {
-    // [แก้ไข] อัปเดต Query ให้ตรงกับตาราง settings
-    $st = $pdo->query("SELECT comment FROM settings WHERE setting_name='station_id' LIMIT 1");
+    $st = $pdo->query("SELECT site_name FROM settings WHERE id=1");
     if ($r = $st->fetch(PDO::FETCH_ASSOC)) {
-        $site_name = $r['comment'] ?: $site_name;
+        $site_name = $r['site_name'] ?: $site_name;
     }
 } catch (Throwable $e) {}
 
@@ -153,8 +152,18 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
     <link rel="stylesheet" href="../assets/css/admin_dashboard.css" />
 
-    <!-- [ลบ] <style> inline ออก -->
-    
+    <style>
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+        .status-paid, .status-approved, .status-pending { padding: 0.25rem 0.6rem; border-radius: 20px; font-size: 0.8rem; font-weight: 500; display: inline-block; }
+        .status-paid { background-color: var(--bs-success-bg-subtle); color: var(--bs-success-text-emphasis); }
+        .status-approved { background-color: var(--bs-warning-bg-subtle); color: var(--bs-warning-text-emphasis); }
+        .status-pending { background-color: var(--bs-danger-bg-subtle); color: var(--bs-danger-text-emphasis); }
+        .member-type-badge { font-size:.75rem; padding:.2rem .5rem; border-radius:12px; font-weight: 500;}
+        .type-member { background-color: var(--bs-primary-bg-subtle); color: var(--bs-primary-text-emphasis); }
+        .type-manager { background-color: var(--bs-info-bg-subtle); color: var(--bs-info-text-emphasis); }
+        .type-committee { background-color: var(--bs-secondary-bg-subtle); color: var(--bs-secondary-text-emphasis); }
+        .table-hover tbody tr:hover { background-color: var(--bs-light-bg-subtle); }
+    </style>
 </head>
 <body>
 
@@ -215,13 +224,12 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
         </aside>
 
         <main class="col-lg-10 p-4">
-            <!-- [แก้ไข] ใช้ .main-header -->
-            <div class="main-header">
+            <div class="d-flex justify-content-between align-items-center mb-4">
                 <h2 class="mb-0">
                     <i class="bi bi-arrow-repeat me-2"></i>
                     รายละเอียดเฉลี่ยคืน <?= $period_details ? 'ปี ' . htmlspecialchars($period_details['year']) : '' ?>
                 </h2>
-                <a href="dividend.php?#rebate-panel" class="btn btn-outline-secondary"> <!-- [แก้ไข] เพิ่ม Hash -->
+                <a href="dividend.php?tab=rebate-panel" class="btn btn-outline-secondary">
                     <i class="bi bi-arrow-left me-1"></i>กลับไปหน้ารวม
                 </a>
             </div>
@@ -230,53 +238,52 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                 <div class="alert alert-danger"><?= htmlspecialchars($error_message) ?></div>
             <?php elseif ($period_details): ?>
                 
-                <!-- [แก้ไข] ใช้ .panel -->
-                <div class="panel mb-4">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-light">
                         <h5 class="mb-0"><?= htmlspecialchars($period_details['period_name']) ?></h5>
-                        <!-- [แก้ไข] ใช้ Badge มาตรฐาน -->
-                        <?php
-                            $status_class = $period_details['status'] === 'paid' ? 'text-bg-success' : ($period_details['status'] === 'approved' ? 'text-bg-warning' : 'text-bg-danger');
-                            $status_text = ['paid' => 'จ่ายแล้ว', 'approved' => 'อนุมัติ', 'pending' => 'รออนุมัติ'][$period_details['status']] ?? '?';
-                        ?>
-                        <span class="badge rounded-pill <?= $status_class ?>"><?= $status_text ?></span>
                     </div>
-
-                    <!-- [แก้ไข] ใช้ .stats-grid และ .stat-card -->
-                    <div class="stats-grid mb-3">
-                        <div class="stat-card text-center">
-                            <div class="fs-4 text-info mb-2"><i class="bi bi-cash-stack"></i></div>
-                            <h6>งบเฉลี่ยคืนรวม</h6>
-                            <h3 class="mb-0 text-info">฿<?= nf($period_details['total_rebate_budget'], 0) ?></h3>
+                    <div class="card-body">
+                        <div class="stats-grid mb-3">
+                            <div class="card card-body shadow-sm text-center">
+                                <div class="fs-4 text-primary mb-2"><i class="bi bi-calendar-check"></i></div>
+                                <h6 class="text-muted mb-1">สถานะ</h6>
+                                <span class="status-<?= htmlspecialchars($period_details['status']) ?>">
+                                    <?= ['paid' => 'จ่ายแล้ว', 'approved' => 'อนุมัติ', 'pending' => 'รออนุมัติ'][$period_details['status']] ?? '?' ?>
+                                </span>
+                            </div>
+                            <div class="card card-body shadow-sm text-center">
+                                <div class="fs-4 text-info mb-2"><i class="bi bi-cash-stack"></i></div>
+                                <h6 class="text-muted mb-1">งบเฉลี่ยคืนรวม</h6>
+                                <h4 class="mb-0 text-info">฿<?= nf($period_details['total_rebate_budget'], 0) ?></h4>
+                            </div>
+                            <div class="card card-body shadow-sm text-center">
+                                <div class="fs-4 text-primary mb-2"><i class="bi bi-receipt"></i></div>
+                                <h6 class="text-muted mb-1">เฉลี่ยคืนต่อบาท</h6>
+                                <h4 class="mb-0 text-primary">฿<?= nf($period_details['rebate_per_baht'] ?? 0, 6) ?></h4>
+                            </div>
+                            <div class="card card-body shadow-sm text-center">
+                                <div class="fs-4 text-secondary mb-2"><i class="bi bi-cart4"></i></div>
+                                <h6 class="text-muted mb-1">ยอดซื้อรวม (ที่เกี่ยวข้อง)</h6>
+                                <h4 class="mb-0"><?= nf($period_details['total_purchase_amount'] ?? 0, 0) ?></h4>
+                            </div>
                         </div>
-                        <div class="stat-card text-center">
-                            <div class="fs-4 text-primary mb-2"><i class="bi bi-receipt"></i></div>
-                            <h6>เฉลี่ยคืนต่อบาท</h6>
-                            <h3 class="mb-0 text-primary">฿<?= nf($period_details['rebate_per_baht'] ?? 0, 6) ?></h3>
-                        </div>
-                        <div class="stat-card text-center">
-                            <div class="fs-4 text-secondary mb-2"><i class="bi bi-cart4"></i></div>
-                            <h6>ยอดซื้อรวม (ฐาน)</h6>
-                            <h3 class="mb-0"><?= nf($period_details['total_purchase_amount'] ?? 0, 0) ?></h3>
+                        
+                        <hr>
+                        
+                        <div class="row small g-2">
+                            <div class="col-sm-6"><strong>กำไรสุทธิ (ฐาน):</strong> ฿<?= nf($period_details['total_profit_snapshot'], 2) ?></div>
+                            <div class="col-sm-6">
+                                <strong>อัตราเฉลี่ยคืน:</strong> 
+                                <?= $period_details['rebate_type'] == 'rate' ? nf($period_details['rebate_value'], 2) . '%' : 'คงที่ ' . nf($period_details['rebate_value'], 2) . ' บาท' ?>
+                                (ฐาน: <?= $period_details['rebate_base'] == 'net' ? 'คงเหลือ 85%' : 'กำไรสุทธิ' ?>)
+                            </div>
+                            <div class="col-sm-6"><strong>ช่วงเวลา:</strong> <?= d($period_details['start_date']) ?> - <?= d($period_details['end_date']) ?></div>
+                            <div class="col-sm-6"><strong>วันที่จ่าย:</strong> <?= d($period_details['payment_date']) ?></div>
+                            <div class="col-sm-6"><strong>สร้างเมื่อ:</strong> <?= d($period_details['created_at']) ?></div>
+                            <div class="col-sm-6"><strong>ผู้อนุมัติ:</strong> <?= htmlspecialchars($period_details['approved_by'] ?: '-') ?></div>
                         </div>
                     </div>
-                    
-                    <hr>
-                    
-                    <div class="row small g-2">
-                        <div class="col-sm-6"><strong>กำไรสุทธิ (ฐาน):</strong> ฿<?= nf($period_details['total_profit_snapshot'], 2) ?></div>
-                        <div class="col-sm-6">
-                            <strong>อัตราเฉลี่ยคืน:</strong> 
-                            <?= $period_details['rebate_type'] == 'rate' ? nf($period_details['rebate_value'], 2) . '%' : 'คงที่ ' . nf($period_details['rebate_value'], 2) . ' บาท' ?>
-                        </div>
-                        <div class="col-sm-6"><strong>ช่วงเวลา:</strong> <?= d($period_details['start_date']) ?> - <?= d($period_details['end_date']) ?></div>
-                        <div class="col-sm-6"><strong>วันที่จ่าย:</strong> <?= d($period_details['payment_date']) ?></div>
-                        <div class="col-sm-6"><strong>สร้างเมื่อ:</strong> <?= d($period_details['created_at']) ?></div>
-                        <div class="col-sm-6"><strong>ผู้อนุมัติ:</strong> <?= htmlspecialchars($period_details['approved_by'] ?: '-') ?></div>
-                    </div>
-                
-                    <!-- Actions -->
-                    <div class="border-top pt-3 mt-3">
+                    <div class="card-footer bg-light">
                         <div class="d-flex flex-wrap gap-2">
                             <?php if ($period_details['status'] === 'pending'): ?>
                                 <button class="btn btn-warning" onclick="approveRebate(<?= (int)$period_details['id'] ?>, '<?= $_SESSION['csrf_token'] ?>')">
@@ -300,111 +307,112 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                     </div>
                 </div>
 
-                <!-- [แก้ไข] ใช้ .panel -->
-                <div class="panel">
-                     <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
-                        <h5 class="mb-0"><i class="bi bi-list-check me-2"></i>รายการจ่ายเฉลี่ยคืน (<?= count($payments) ?> รายการ)</h5>
-                        <div class="d-flex flex-wrap gap-2">
-                            <div class="input-group input-group-sm" style="max-width:280px;">
-                                <span class="input-group-text"><i class="bi bi-search"></i></span>
-                                <input type="search" id="paymentSearch" class="form-control" placeholder="ค้นหา รหัส/ชื่อ">
+                <div class="card shadow-sm">
+                     <div class="card-header bg-light">
+                         <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-list-check me-2"></i>รายการจ่ายเฉลี่ยคืน (<?= count($payments) ?> รายการ)</h5>
+                            <div class="d-flex flex-wrap gap-2">
+                                <div class="input-group input-group-sm" style="max-width:280px;">
+                                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                                    <input type="search" id="paymentSearch" class="form-control" placeholder="ค้นหา รหัส/ชื่อ">
+                                </div>
+                                <select id="filterStatus" class="form-select form-select-sm" style="max-width:150px;">
+                                    <option value="">ทุกสถานะ</option>
+                                    <option value="paid">จ่ายแล้ว</option>
+                                    <option value="pending">รอจ่าย</option>
+                                </select>
+                                 <button class="btn btn-sm btn-outline-secondary" onclick="exportPayments(<?= $period_details['year'] ?>)">
+                                    <i class="bi bi-download me-1"></i> ส่งออก
+                                </button>
                             </div>
-                            <select id="filterStatus" class="form-select form-select-sm" style="max-width:150px;">
-                                <option value="">ทุกสถานะ</option>
-                                <option value="paid">จ่ายแล้ว</option>
-                                <option value="pending">รอจ่าย</option>
-                            </select>
-                             <button class="btn btn-sm btn-outline-secondary" onclick="exportPayments(<?= $period_details['year'] ?>)">
-                                <i class="bi bi-download me-1"></i> ส่งออก
-                            </button>
+                        </div>
+                     </div>
+                     <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0" id="paymentsTable">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>รหัส</th>
+                                        <th>ชื่อผู้รับ</th>
+                                        <th class="text-center">ประเภท</th>
+                                        <th class="text-end">ยอดซื้อ</th>
+                                        <th class="text-end">ยอดเฉลี่ยคืน</th>
+                                        <th class="text-center">สถานะ</th>
+                                        <th class="text-end">จัดการ</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if (empty($payments)): ?>
+                                        <tr><td colspan="8" class="text-center text-muted py-3">ยังไม่มีรายการจ่ายสำหรับงวดนี้</td></tr>
+                                    <?php else: ?>
+                                        <?php foreach($payments as $index => $p):
+                                            $status_class = $p['payment_status'] === 'paid' ? 'status-paid' : 'status-pending';
+                                            $status_text = $p['payment_status'] === 'paid' ? 'จ่ายแล้ว' : 'รอจ่าย';
+                                            $type_class = 'type-' . htmlspecialchars($p['member_type']);
+                                            $type_text = [
+                                                'member' => 'สมาชิก',
+                                                'manager' => 'ผู้บริหาร',
+                                                'committee' => 'กรรมการ'
+                                            ][$p['member_type']] ?? 'ไม่ทราบ';
+                                        ?>
+                                        <tr data-status="<?= htmlspecialchars($p['payment_status']) ?>"
+                                            data-name="<?= htmlspecialchars($p['member_name']) ?>"
+                                            data-code="<?= htmlspecialchars($p['member_code']) ?>">
+                                            <td><?= $index + 1 ?></td>
+                                            <td><strong><?= htmlspecialchars($p['member_code']) ?></strong></td>
+                                            <td><?= htmlspecialchars($p['member_name']) ?></td>
+                                            <td class="text-center">
+                                                <span class="member-type-badge <?= $type_class ?>"><?= $type_text ?></span>
+                                            </td>
+                                            <td class="text-end">
+                                                <span class="badge bg-secondary"><?= nf($p['purchase_amount_at_time'], 2) ?></span>
+                                            </td>
+                                            <td class="text-end">
+                                                <strong class="text-info">฿<?= nf($p['rebate_amount'], 2) ?></strong>
+                                            </td>
+                                            <td class="text-center">
+                                                <span class="<?= $status_class ?>"><?= $status_text ?></span>
+                                                <?php if ($p['paid_at']): ?>
+                                                    <br><small class="text-muted"><?= date('d/m/y H:i', strtotime($p['paid_at'])) ?></small>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td class="text-end">
+                                                <?php if ($p['payment_status'] === 'pending' && $period_details['status'] !== 'paid'): ?>
+                                                <button class="btn btn-sm btn-outline-success py-0 px-1" title="ทำเครื่องหมายว่าจ่ายแล้ว"
+                                                    onclick="markRebateAsPaid(<?= (int)$p['payment_id'] ?>, '<?= $_SESSION['csrf_token'] ?>')">
+                                                    <i class="bi bi-check-lg"></i>
+                                                </button>
+                                                <?php elseif ($p['payment_status'] === 'paid' && $period_details['status'] !== 'paid'): ?>
+                                                <button class="btn btn-sm btn-outline-warning py-0 px-1" title="ยกเลิกการจ่าย"
+                                                    onclick="markRebateAsPending(<?= (int)$p['payment_id'] ?>, '<?= $_SESSION['csrf_token'] ?>')">
+                                                    <i class="bi bi-arrow-counterclockwise"></i>
+                                                </button>
+                                                <?php endif; ?>
+                                                 <button class="btn btn-sm btn-outline-info py-0 px-1" title="ดูประวัติสมาชิก"
+                                                    onclick="viewMemberHistory('<?= htmlspecialchars($p['member_type'].'_'.$p['member_id']) ?>')">
+                                                    <i class="bi bi-clock-history"></i>
+                                                 </button>
+                                            </td>
+                                        </tr>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
-                     
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle mb-0" id="paymentsTable">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>#</th>
-                                    <th>รหัส</th>
-                                    <th>ชื่อผู้รับ</th>
-                                    <th class="text-center">ประเภท</th>
-                                    <th class="text-end">ยอดซื้อ</th>
-                                    <th class="text-end">ยอดเฉลี่ยคืน</th>
-                                    <th class="text-center">สถานะ</th>
-                                    <th class="text-end">จัดการ</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php if (empty($payments)): ?>
-                                    <tr><td colspan="8" class="text-center text-muted py-3">ยังไม่มีรายการจ่ายสำหรับงวดนี้</td></tr>
-                                <?php else: ?>
-                                    <?php foreach($payments as $index => $p):
-                                        // [แก้ไข] ใช้ Badge มาตรฐาน
-                                        $status_class_bg = $p['payment_status'] === 'paid' ? 'text-bg-success' : 'text-bg-danger';
-                                        $status_text = $p['payment_status'] === 'paid' ? 'จ่ายแล้ว' : 'รอจ่าย';
-                                        $type_class_bg = $p['member_type'] === 'member' ? 'text-bg-primary' : ($p['member_type'] === 'manager' ? 'text-bg-info' : 'text-bg-secondary');
-                                        $type_text = [
-                                            'member' => 'สมาชิก',
-                                            'manager' => 'ผู้บริหาร',
-                                            'committee' => 'กรรมการ'
-                                        ][$p['member_type']] ?? 'ไม่ทราบ';
-                                    ?>
-                                    <tr data-status="<?= htmlspecialchars($p['payment_status']) ?>"
-                                        data-name="<?= htmlspecialchars($p['member_name']) ?>"
-                                        data-code="<?= htmlspecialchars($p['member_code']) ?>">
-                                        <td><?= $index + 1 ?></td>
-                                        <td><strong><?= htmlspecialchars($p['member_code']) ?></strong></td>
-                                        <td><?= htmlspecialchars($p['member_name']) ?></td>
-                                        <td class="text-center">
-                                            <span class="badge rounded-pill <?= $type_class_bg ?>"><?= $type_text ?></span>
-                                        </td>
-                                        <td class="text-end">
-                                            <span class="badge bg-secondary rounded-pill"><?= nf($p['purchase_amount_at_time'], 2) ?></span>
-                                        </td>
-                                        <td class="text-end">
-                                            <strong class="text-info">฿<?= nf($p['rebate_amount'], 2) ?></strong>
-                                        </td>
-                                        <td class="text-center">
-                                            <span class="badge rounded-pill <?= $status_class_bg ?>"><?= $status_text ?></span>
-                                            <?php if ($p['paid_at']): ?>
-                                                <br><small class="text-muted"><?= date('d/m/y H:i', strtotime($p['paid_at'])) ?></small>
-                                            <?php endif; ?>
-                                        </td>
-                                        <td class="text-end">
-                                            <?php if ($p['payment_status'] === 'pending' && $period_details['status'] !== 'paid'): ?>
-                                            <button class="btn btn-sm btn-outline-success py-0 px-1" title="ทำเครื่องหมายว่าจ่ายแล้ว"
-                                                onclick="markRebateAsPaid(<?= (int)$p['payment_id'] ?>, '<?= $_SESSION['csrf_token'] ?>')">
-                                                <i class="bi bi-check-lg"></i>
-                                            </button>
-                                            <?php elseif ($p['payment_status'] === 'paid' && $period_details['status'] !== 'paid'): ?>
-                                            <button class="btn btn-sm btn-outline-warning py-0 px-1" title="ยกเลิกการจ่าย"
-                                                onclick="markRebateAsPending(<?= (int)$p['payment_id'] ?>, '<?= $_SESSION['csrf_token'] ?>')">
-                                                <i class="bi bi-arrow-counterclockwise"></i>
-                                            </button>
-                                            <?php endif; ?>
-                                             <button class="btn btn-sm btn-outline-info py-0 px-1" title="ดูประวัติสมาชิก"
-                                                onclick="viewMemberHistory('<?= htmlspecialchars($p['member_type'].'_'.$p['member_id']) ?>')">
-                                                <i class="bi bi-clock-history"></i>
-                                             </button>
-                                        </td>
-                                    </tr>
-                                    <?php endforeach; ?>
-                                <?php endif; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="card-footer bg-light d-flex flex-wrap gap-3 justify-content-center">
-                       <div class="text-muted">
-                           <i class="bi bi-calculator me-1"></i> สรุปยอดรอจ่าย: 
-                           <strong class="text-dark">฿<?= nf($stats['total_pending']) ?></strong> 
-                           (<?= nf($stats['count_pending'], 0) ?> คน)
-                       </div>
-                        <div class="text-success">
-                           <i class="bi bi-check-all me-1"></i> สรุปยอดจ่ายแล้ว: 
-                           <strong class="text-success">฿<?= nf($stats['total_paid']) ?></strong> 
-                           (<?= nf($stats['count_paid'], 0) ?> คน)
-                       </div>
-                    </div>
+                     <div class="card-footer bg-light d-flex flex-wrap gap-3 justify-content-center">
+                        <div class="text-muted">
+                            <i class="bi bi-calculator me-1"></i> สรุปยอดรอจ่าย: 
+                            <strong class="text-dark">฿<?= nf($stats['total_pending']) ?></strong> 
+                            (<?= nf($stats['count_pending'], 0) ?> คน)
+                        </div>
+                         <div class="text-success">
+                            <i class="bi bi-check-all me-1"></i> สรุปยอดจ่ายแล้ว: 
+                            <strong class="text-success">฿<?= nf($stats['total_paid']) ?></strong> 
+                            (<?= nf($stats['count_paid'], 0) ?> คน)
+                        </div>
+                     </div>
                 </div>
             <?php endif; ?>
         </main>
@@ -467,14 +475,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 'use strict';
 const $ = (s, p=document) => p.querySelector(s);
 const $$ = (s, p=document) => [...p.querySelectorAll(s)];
-// [เพิ่ม] nf() ของ JavaScript
-function nf(number, decimals = 2) {
-    const num = parseFloat(number) || 0;
-    return num.toLocaleString('th-TH', {
-        minimumFractionDigits: decimals,
-        maximumFractionDigits: decimals
-    });
-}
 
 const membersDataLite = <?= json_encode(array_map(function($p){
     return [
@@ -547,6 +547,7 @@ function exportPayments(year) {
 }
 
 // ========== ACTIONS (AJAX) ==========
+// [สำคัญ] ไฟล์นี้จะเรียกไปที่ 'rebate_action.php' (ไฟล์เดียว)
 async function sendAction(action, data) {
     const actionFile = 'rebate_action.php'; // <-- !!! ต้องสร้างไฟล์นี้ !!!
 
@@ -643,8 +644,7 @@ async function viewMemberHistory(memberKey) {
             }
             let html = '';
             data.history.forEach(item => {
-                // [แก้ไข] ใช้ Badge มาตรฐาน
-                const statusClass = item.payment_status === 'paid' ? 'text-bg-success' : (item.payment_status === 'approved' ? 'text-bg-warning' : 'text-bg-danger');
+                const statusClass = item.payment_status === 'paid' ? 'status-paid' : (item.payment_status === 'approved' ? 'status-approved' : 'status-pending');
                 const statusText = item.payment_status === 'paid' ? 'จ่ายแล้ว' : (item.payment_status === 'approved' ? 'อนุมัติ' : 'รอจ่าย');
                 const isDividend = item.type === 'ปันผล (หุ้น)';
                 html += `
@@ -654,7 +654,7 @@ async function viewMemberHistory(memberKey) {
                         <td class="text-end small">${item.details || (isDividend ? `${(item.shares_at_time || 0).toLocaleString('th-TH')} หุ้น @ ${parseFloat(item.dividend_rate || 0).toFixed(1)}%` : 'N/A')}</td>
                         <td class="text-end"><strong class="${isDividend ? 'text-success' : 'text-info'}">${item.amount_formatted || '฿0.00'}</strong></td>
                         <td class="text-center">
-                            <span class="badge rounded-pill ${statusClass}">${statusText}</span>
+                            <span class="${statusClass}">${statusText}</span>
                             ${item.payment_date_formatted !== '-' ? `<br><small class="text-muted">${item.payment_date_formatted}</small>` : ''}
                         </td>
                     </tr>`;
