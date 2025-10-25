@@ -1,5 +1,5 @@
 <?php
-// admin_dashboard.php — [แก้ไข] แดชบอร์ดสำหรับผู้ดูแลระบบ (เวอร์ชันเรียบง่าย)
+// admin_dashboard.php — [แก้ไข] แดชบอร์ดสำหรับผู้ดูแลระบบ (เพิ่มกำไรคงเหลือ)
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 
@@ -33,14 +33,21 @@ try {
 }
 
 // ===== Helpers =====
-function nf($n, $d = 0) { return number_format((float)$n, $d, '.', ','); }
+function nf($n, $d = 2) { return number_format((float)$n, $d, '.', ','); }
 function d($s, $fmt = 'd/m/Y') { $t = strtotime($s); return $t ? date($fmt, $t) : '-'; }
+function table_exists(PDO $pdo, string $table): bool {
+  try {
+    $db = $pdo->query("SELECT DATABASE()")->fetchColumn();
+    $st = $pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=:db AND table_name=:tb");
+    $st->execute([':db'=>$db, ':tb'=>$table]);
+    return (int)$st->fetchColumn() > 0;
+  } catch (Throwable $e) { return false; }
+}
 
 // ===== โหลด system settings =====
 $site_name = 'สหกรณ์ปั๊มน้ำมันบ้านภูเขาทอง';
 $station_id = 1;
 try {
-    // ดึงชื่อไซต์และ ID สถานีจากตาราง settings
     $st = $pdo->prepare("SELECT setting_value, comment FROM settings WHERE setting_name='station_id' LIMIT 1");
     $st->execute();
     if ($r = $st->fetch(PDO::FETCH_ASSOC)) {
@@ -58,35 +65,52 @@ try {
 
 $stats = [
     'today_revenue' => 0,
+    'today_cogs' => 0,
+    'today_profit' => 0,
+    'today_bills' => 0,
     'today_liters' => 0,
     'total_members' => 0,
-    'total_shares' => 0
+    'total_shares' => 0,
+    'potential_profit' => 0 // [เพิ่ม] กำไรคงเหลือ
 ];
 $bar_labels = []; $bar_values = [];
 $pie_labels = []; $pie_values = [];
 $error_message = null;
 
 try {
-    $params = [':sid' => $station_id];
     $today_str = date('Y-m-d');
     
-    // --- 1. สถิติ 4 ช่องบน (ยอดวันนี้ + สมาชิก) ---
-    
-    // ยอดขายวันนี้
-    $stmt_today = $pdo->prepare("
+    // --- 1. สถิติวันนี้ (จาก v_sales_gross_profit) ---
+    $stmt_today_profit = $pdo->prepare("
         SELECT 
-            COALESCE(SUM(s.total_amount), 0) AS revenue,
-            COALESCE(SUM(si.liters), 0) AS liters
+            COALESCE(SUM(v.total_amount), 0) AS revenue,
+            COALESCE(SUM(v.cogs), 0) AS cogs,
+            COALESCE(SUM(v.total_amount - v.cogs), 0) AS profit,
+            COUNT(v.sale_id) AS bills
+        FROM v_sales_gross_profit v
+        JOIN sales s ON v.sale_id = s.id
+        WHERE s.station_id = :sid AND DATE(v.sale_date) = :today
+    ");
+    $stmt_today_profit->execute([':sid' => $station_id, ':today' => $today_str]);
+    $profit_data = $stmt_today_profit->fetch(PDO::FETCH_ASSOC);
+    
+    $stats['today_revenue'] = (float)($profit_data['revenue'] ?? 0);
+    $stats['today_cogs'] = (float)($profit_data['cogs'] ?? 0);
+    $stats['today_profit'] = (float)($profit_data['profit'] ?? 0);
+    $stats['today_bills'] = (int)($profit_data['bills'] ?? 0);
+
+    // ดึงยอดลิตร (แยกต่างหาก)
+    $stmt_today_liters = $pdo->prepare("
+        SELECT COALESCE(SUM(si.liters), 0) AS liters
         FROM sales s
-        LEFT JOIN (SELECT sale_id, SUM(liters) as liters FROM sales_items GROUP BY sale_id) si ON s.id = si.sale_id
+        JOIN sales_items si ON s.id = si.sale_id
         WHERE s.station_id = :sid AND DATE(s.sale_date) = :today
     ");
-    $stmt_today->execute([':sid' => $station_id, ':today' => $today_str]);
-    $today_data = $stmt_today->fetch(PDO::FETCH_ASSOC);
-    $stats['today_revenue'] = (float)($today_data['revenue'] ?? 0);
-    $stats['today_liters'] = (float)($today_data['liters'] ?? 0);
+    $stmt_today_liters->execute([':sid' => $station_id, ':today' => $today_str]);
+    $stats['today_liters'] = (float)$stmt_today_liters->fetchColumn();
 
-    // สมาชิก (รวมทุกประเภทที่มีหุ้น)
+
+    // --- 2. สมาชิกและหุ้น (รวมทุกประเภท) ---
     $stmt_members = $pdo->query("
         SELECT 
             SUM(total_users) as total_members,
@@ -103,7 +127,26 @@ try {
     $stats['total_members'] = (int)($member_data['total_members'] ?? 0);
     $stats['total_shares'] = (int)($member_data['total_shares'] ?? 0);
 
-    // --- 2. กราฟแท่ง (ยอดขายลิตร 6 เดือนล่าสุด) ---
+    // --- 3. [เพิ่ม] ดึงกำไรที่ยังคงเหลือในถัง (จาก v_fuel_lots_current) ---
+    try {
+        $stmt_profit_remain = $pdo->prepare("
+            SELECT
+                SUM((v.remaining_liters_calc * fp.price) - v.remaining_value) AS potential_profit
+            FROM
+                v_fuel_lots_current v
+            JOIN
+                fuel_prices fp ON v.fuel_id = fp.fuel_id AND v.station_id = fp.station_id
+            WHERE
+                v.station_id = :sid AND v.remaining_liters_calc > 0.01
+        ");
+        $stmt_profit_remain->execute([':sid' => $station_id]);
+        $stats['potential_profit'] = (float)$stmt_profit_remain->fetchColumn();
+    } catch (Throwable $e) {
+        error_log("Could not query v_fuel_lots_current: " . $e->getMessage());
+        $stats['potential_profit'] = 0.0;
+    }
+
+    // --- 4. กราฟแท่ง (ยอดขายลิตร 6 เดือนล่าสุด) ---
     $month6_start = date('Y-m-01', strtotime('-5 months'));
     $stmt_bar = $pdo->prepare("
         SELECT 
@@ -122,7 +165,7 @@ try {
         $bar_values[] = (float)$r['liters']; 
     }
 
-    // --- 3. กราฟวงกลม (สัดส่วนน้ำมัน 30 วัน) ---
+    // --- 5. กราฟวงกลม (สัดส่วนน้ำมัน 30 วัน) ---
     $day30_start = date('Y-m-d', strtotime('-29 days'));
     $stmt_pie = $pdo->prepare("
         SELECT 
@@ -180,13 +223,16 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
             font-size: 1rem;
             color: var(--bs-secondary-color);
             margin-bottom: 0.5rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .stat-card h3 {
             font-weight: 700;
         }
         .chart-wrap {
             position: relative;
-            height: 350px; /* เพิ่มความสูง */
+            height: 350px;
             width: 100%;
         }
     </style>
@@ -266,35 +312,47 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
           <div class="stat-card">
             <h5><i class="bi bi-cash-coin text-success"></i> รายได้วันนี้</h5>
             <h3 class="text-success">฿<?= nf($stats['today_revenue'], 2) ?></h3>
-            <p class="text-muted mb-0">ข้อมูล ณ วันที่ <?= d(date('Y-m-d')) ?></p>
+            <p class="text-muted mb-0">ยอดขายรวมของวันนี้</p>
           </div>
           <div class="stat-card">
-            <h5><i class="bi bi-fuel-pump-fill text-primary"></i> ยอดขายน้ำมัน (วันนี้)</h5>
-            <h3 class="text-primary"><?= nf($stats['today_liters'], 2) ?> <small>ลิตร</small></h3>
-            <p class="text-muted mb-0">รวมทุกประเภทเชื้อเพลิง</p>
+            <h5><i class="bi bi-receipt text-danger"></i> ต้นทุนน้ำมัน (วันนี้)</h5>
+            <h3 class="text-danger">฿<?= nf($stats['today_cogs'], 2) ?></h3>
+            <p class="text-muted mb-0">ต้นทุนขาย (COGS)</p>
           </div>
           <div class="stat-card">
-            <h5><i class="bi bi-people-fill text-info"></i> สมาชิกทั้งหมด</h5>
-            <h3 class="text-info"><?= nf($stats['total_members']) ?> <small>คน</small></h3>
-            <p class="text-muted mb-0">ผู้ถือหุ้น (กรรมการ/ผู้บริหาร/สมาชิก)</p>
+            <h5><i class="bi bi-graph-up-arrow text-primary"></i> กำไรขั้นต้น (วันนี้)</h5>
+            <h3 class="text-primary">฿<?= nf($stats['today_profit'], 2) ?></h3>
+            <p class="text-muted mb-0">รายได้ หักลบ ต้นทุน</p>
           </div>
+          
           <div class="stat-card">
-            <h5><i class="bi bi-piggy-bank text-secondary"></i> หุ้นรวม</h5>
-            <h3 class="text-secondary"><?= nf($stats['total_shares']) ?> <small>หุ้น</small></h3>
-            <p class="text-muted mb-0">หุ้นทั้งหมดในระบบ</p>
+            <h5><i class="bi bi-box-seam text-warning"></i> กำไรคงเหลือในถัง</h5>
+            <h3 class="text-warning">฿<?= nf($stats['potential_profit'], 2) ?></h3>
+            <p class="text-muted mb-0">กำไรที่คาดว่าจะได้ (ถ้าขายหมด)</p>
+          </div>
+
+          <div class="stat-card">
+            <h5><i class="bi bi-fuel-pump-fill text-info"></i> ยอดขาย (วันนี้)</h5>
+            <h3 class="text-info mb-0"><?= nf($stats['today_liters'], 2) ?> <small>ลิตร</small></h3>
+            <p class="text-muted mb-0">จาก <?= nf($stats['today_bills'], 0) ?> บิล</p>
+          </div>
+          
+          <div class="stat-card">
+            <h5><i class="bi bi-people-fill text-secondary"></i> สมาชิก/หุ้น</h5>
+            <h3 class="text-secondary mb-0"><?= nf($stats['total_members'], 0) ?> <small>คน</small></h3>
+            <p class="text-muted mb-0">รวม <?= nf($stats['total_shares'], 0) ?> หุ้น</p>
           </div>
         </div>
 
+
         <div class="row g-4 mt-4">
           <div class="col-12 col-lg-6">
-            <div class="card shadow-sm h-100">
-              <div class="card-body">
-                <h5 class="card-title mb-2">
-                  <i class="bi bi-bar-chart text-primary"></i>
-                  ยอดขายน้ำมัน (ลิตร/เดือน) 6 เดือนล่าสุด
-                </h5>
-                <div class="chart-wrap"><canvas id="barChart"></canvas></div>
-              </div>
+            <div class="stat-card h-100">
+              <h5 class="card-title mb-2">
+                <i class="bi bi-bar-chart text-primary"></i>
+                ยอดขายน้ำมัน (ลิตร/เดือน) 6 เดือนล่าสุด
+              </h5>
+              <div class="chart-wrap"><canvas id="barChart"></canvas></div>
             </div>
           </div>
           <div class="col-12 col-lg-6">
@@ -322,7 +380,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script>
-    // [แก้ไข] สร้างฟังก์ชัน nf() เวอร์ชัน JavaScript
+    // [เพิ่ม] ฟังก์ชัน nf() เวอร์ชัน JavaScript
     function nf(number, decimals = 0) {
         const num = parseFloat(number) || 0;
         return num.toLocaleString('th-TH', {
