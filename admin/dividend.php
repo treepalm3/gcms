@@ -661,6 +661,14 @@ try {
 
 const $  = (s, p=document) => p.querySelector(s);
 const $$ = (s, p=document) => [...p.querySelectorAll(s)];
+// [เพิ่ม] สร้างฟังก์ชัน nf() เวอร์ชัน JavaScript
+function nf(number, decimals = 2) {
+    const num = parseFloat(number) || 0;
+    return num.toLocaleString('th-TH', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+    });
+}
 
 const membersData = <?= json_encode(array_values($members_dividends), JSON_UNESCAPED_UNICODE | JSON_NUMERIC_CHECK) ?>;
 const dividendPeriodsData = <?= json_encode($dividend_periods, JSON_UNESCAPED_UNICODE | JSON_NUMERIC_CHECK) ?>;
