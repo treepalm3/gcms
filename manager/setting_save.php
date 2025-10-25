@@ -1,16 +1,22 @@
 <?php
-// manager/setting_save.php — Endpoint บันทึกการตั้งค่า app_settings (สำหรับ Manager)
+// manager/setting_save.php — Endpoint บันทึกการตั้งค่า app_settings (เฉพาะ Admin)
 session_start();
 header('Content-Type: application/json; charset=utf-8');
 date_default_timezone_set('Asia/Bangkok');
 
-// ==== ตรวจสอบสิทธิ์ล็อกอิน/บทบาท ====
+// ===== ตรวจสอบเมธอด =====
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+  http_response_code(405);
+  echo json_encode(['ok'=>false,'error'=>'Method Not Allowed']); exit;
+}
+
+// ===== ตรวจสอบล็อกอิน/บทบาท =====
 if (!isset($_SESSION['user_id'])) {
   http_response_code(401);
   echo json_encode(['ok'=>false,'error'=>'โปรดเข้าสู่ระบบก่อน']); exit;
 }
 $current_role = $_SESSION['role'] ?? 'guest';
-if (!in_array($current_role, ['manager','admin'], true)) {
+if ($current_role !== 'manager') {
   http_response_code(403);
   echo json_encode(['ok'=>false,'error'=>'คุณไม่มีสิทธิ์เข้าถึง']); exit;
 }
@@ -18,17 +24,18 @@ if (empty($_SESSION['csrf_token'])) {
   $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-// ==== เชื่อมต่อฐานข้อมูล ====
+// ===== เชื่อมต่อฐานข้อมูล =====
 $dbFile = __DIR__ . '/../config/db.php';
 if (!file_exists($dbFile)) { $dbFile = __DIR__ . '/config/db.php'; }
 require_once $dbFile; // ต้องมี $pdo
+
 if (!isset($pdo) || !($pdo instanceof PDO)) {
   http_response_code(500);
   echo json_encode(['ok'=>false,'error'=>'เชื่อมต่อฐานข้อมูลไม่สำเร็จ']); exit;
 }
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-// ==== Helpers: load/save JSON settings ====
+// ===== Helpers: โหลด/บันทึก JSON settings =====
 function load_settings(PDO $pdo, string $key, array $defaults): array {
   $st = $pdo->prepare("SELECT json_value FROM app_settings WHERE `key`=:k LIMIT 1");
   $st->execute([':k'=>$key]);
@@ -47,7 +54,7 @@ function save_settings(PDO $pdo, string $key, array $data): bool {
   return $st->execute([':k'=>$key, ':v'=>$json]);
 }
 
-// ==== รับ/ตรวจสอบ payload ====
+// ===== รับ/ตรวจสอบ payload =====
 $raw = file_get_contents('php://input');
 $payload = json_decode($raw, true);
 if (!is_array($payload)) {
@@ -64,13 +71,12 @@ if (!hash_equals($_SESSION['csrf_token'], $csrf)) {
 $section = $payload['section'] ?? '';
 $data    = $payload['data'] ?? null;
 $allowed_sections = ['system_settings','notification_settings','security_settings','fuel_price_settings'];
-
 if (!in_array($section, $allowed_sections, true) || !is_array($data)) {
   http_response_code(400);
   echo json_encode(['ok'=>false,'error'=>'section หรือ data ไม่ถูกต้อง']); exit;
 }
 
-// ==== ค่าตั้งต้นใช้สำหรับ merge ====
+// ===== ค่าเริ่มต้นสำหรับ merge =====
 $defaults = [
   'system_settings' => [
     'site_name' => 'สหกรณ์ปั๊มน้ำมันบ้านภูเขาทอง',
@@ -114,7 +120,7 @@ $defaults = [
   ],
 ];
 
-// ==== ฟังก์ชัน sanitize/validate ตามกลุ่ม ====
+// ===== ฟังก์ชัน sanitize/validate =====
 function boolvalStrict($v){ return filter_var($v, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false; }
 function numberOr($v,$def){ return is_numeric($v) ? 0+$v : $def; }
 function oneOf($v, array $choices, $def){ return in_array($v,$choices,true) ? $v : $def; }
@@ -174,7 +180,7 @@ function sanitize_section(string $section, array $data, array $defaults): array 
   return $defaults[$section] ?? [];
 }
 
-// ==== รวมกับค่าปัจจุบัน + บันทึก ====
+// ===== รวมกับค่าปัจจุบัน + บันทึก =====
 try {
   $current = load_settings($pdo, $section, $defaults[$section]);
   $clean   = sanitize_section($section, $data, $defaults[$section]);
