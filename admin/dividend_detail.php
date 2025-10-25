@@ -35,11 +35,10 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-// ===== Helpers (ควรย้ายไปไฟล์กลาง) =====
+// ===== [แก้ไข] Helpers (ต้องมีฟังก์ชัน d() ที่นี่) =====
 if (!function_exists('nf')) {
     function nf($n, $d = 2) { return number_format((float)$n, $d, '.', ','); }
 }
-// [แก้ไข] ตรวจสอบค่าว่างก่อนเรียก strtotime()
 if (!function_exists('d')) {
     function d($s, $fmt = 'd/m/Y') {
         if (empty($s)) { // ตรวจสอบค่าว่างหรือ null ก่อน
@@ -49,6 +48,7 @@ if (!function_exists('d')) {
         return $t ? date($fmt, $t) : '-';
     }
 }
+// ===== [สิ้นสุด Helpers] =====
 
 // [แก้ไข] รับค่า period_id จาก URL
 $period_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
@@ -61,7 +61,6 @@ if ($period_id <= 0) {
 } else {
     try {
         // 1) ดึงข้อมูลงวดปันผล
-        // [แก้ไข] ค้นหาด้วย ID โดยตรง
         $stmt_period = $pdo->prepare("
             SELECT id, `year`, start_date, end_date, period_name, total_profit, dividend_rate,
                    total_shares_at_time, total_dividend_amount, dividend_per_share, status, payment_date,
@@ -467,6 +466,7 @@ const membersDataLite = <?= json_encode(array_map(function($p){
     ];
 }, $payments), JSON_UNESCAPED_UNICODE) ?>;
 
+
 const toast = (msg, success = true) => {
     const t = $('#liveToast');
     if (!t) return;
@@ -529,7 +529,7 @@ function exportPayments(year) {
 async function sendAction(action, data) {
     // [แก้ไข] ตรวจสอบว่ามีไฟล์ dividend_action.php หรือยัง
     // ถ้ายังไม่มี ให้ใช้ไฟล์เดิม
-    const actionFile = 'dividend_action.php'; // <--- ถ้าคุณยังไม่ได้สร้างไฟล์นี้ ให้เปลี่ยนเป็นไฟล์ที่ถูกต้อง
+    const actionFile = 'dividend_action.php'; // <--- !!! ต้องสร้างไฟล์นี้ !!!
 
     try {
         const response = await fetch(actionFile, {
@@ -558,19 +558,23 @@ function approvePeriod(periodId, csrfToken) {
     if (!confirm('ยืนยันการอนุมัติงวดปันผลนี้?')) return;
     sendAction('approve_period', { period_id: periodId, csrf_token: csrfToken });
 }
+
 function unapprovePeriod(periodId, csrfToken) {
     if (!confirm('ยืนยันยกเลิกการอนุมัติงวดปันผลนี้? (สถานะจะกลับเป็น Pending)')) return;
      sendAction('unapprove_period', { period_id: periodId, csrf_token: csrfToken });
 }
+
 function processPayout(periodId, csrfToken) { // [แก้ไข] ใช้ periodId
      const periodYear = <?= (int)($period_details['year'] ?? 0) ?>;
      if (!confirm(`ยืนยันการจ่ายปันผลปี ${periodYear} ทั้งหมด?\n\nการดำเนินการนี้จะเปลี่ยนสถานะรายการที่รอจ่ายทั้งหมดเป็น "จ่ายแล้ว"`)) return;
     sendAction('process_payout', { period_id: periodId, csrf_token: csrfToken }); // [แก้ไข] ส่ง period_id
 }
+
 function markAsPaid(paymentId, csrfToken) {
     if (!confirm('ยืนยันว่าจ่ายปันผลรายการนี้แล้ว?')) return;
     sendAction('mark_paid', { payment_id: paymentId, csrf_token: csrfToken });
 }
+
 function markAsPending(paymentId, csrfToken) {
      if (!confirm('ยกเลิกสถานะการจ่ายของรายการนี้? (จะกลับเป็น รอจ่าย)')) return;
     sendAction('mark_pending', { payment_id: paymentId, csrf_token: csrfToken });
@@ -580,16 +584,30 @@ function deletePeriod(periodId, csrfToken) {
     sendAction('delete_period', { period_id: periodId, csrf_token: csrfToken });
 }
 
+
 // ========== MEMBER HISTORY MODAL (ต้องมี dividend_member_history.php) ==========
 async function viewMemberHistory(memberKey) {
     const [memberType, memberId] = memberKey.split('_');
     if (!memberId || !memberType) return toast('ข้อมูลสมาชิกไม่ถูกต้อง', false);
-    const member = membersDataLite.find(m => m.key === memberKey);
-    if (!member) return toast('ไม่พบข้อมูลสมาชิก', false);
 
-    $('#historyMemberCode').textContent = member.code;
-    $('#historyMemberName').textContent = member.name;
-    $('#historyMemberType').textContent = member.type_th;
+    const member = membersDataLite.find(m => m.key === memberKey);
+    if (!member) {
+        // [แก้ไข] ถ้าหาไม่เจอใน $membersDataLite (เพราะอาจจะมาจากตารางอื่น)
+        // ให้ลองใช้ข้อมูลจากแถวที่กด
+        const tr = $(`tr[data-member-key="${memberKey}"]`);
+        if(tr) {
+            $('#historyMemberCode').textContent = tr.querySelector('td:nth-child(2)').textContent.trim();
+            $('#historyMemberName').textContent = tr.querySelector('td:nth-child(3)').textContent.trim();
+            $('#historyMemberType').textContent = tr.querySelector('td:nth-child(4)').textContent.trim();
+        } else {
+             return toast('ไม่พบข้อมูลสมาชิก', false);
+        }
+    } else {
+        $('#historyMemberCode').textContent = member.code;
+        $('#historyMemberName').textContent = member.name;
+        $('#historyMemberType').textContent = member.type_th;
+    }
+
 
     const historyTable = $('#memberHistoryTable');
     const summaryDiv = historyTable.closest('.modal-body').querySelector('.history-summary');
@@ -599,7 +617,6 @@ async function viewMemberHistory(memberKey) {
     new bootstrap.Modal('#modalMemberHistory').show();
 
     try {
-        // [หมายเหตุ] ไฟล์นี้ต้องถูกแก้ไขให้ดึงข้อมูลทั้งปันผลและเฉลี่ยคืน
         const response = await fetch(`dividend_member_history.php?member_id=${memberId}&member_type=${memberType}`);
         if (!response.ok) throw new Error(`ไม่สามารถดึงข้อมูลได้ (HTTP ${response.status})`);
         const data = await response.json();
@@ -619,18 +636,17 @@ async function viewMemberHistory(memberKey) {
             }
 
             let html = '';
-            // [แก้ไข] ตารางนี้ต้องปรับปรุงเพื่อแสดงทั้งปันผลและเฉลี่ยคืน
             data.history.forEach(item => {
                 const statusClass = item.payment_status === 'paid' ? 'status-paid' : (item.payment_status === 'approved' ? 'status-approved' : 'status-pending');
                 const statusText = item.payment_status === 'paid' ? 'จ่ายแล้ว' : (item.payment_status === 'approved' ? 'อนุมัติ' : 'รอจ่าย');
-                const isDividend = item.type === 'ปันผล (หุ้น)'; // สมมติว่าไฟล์ PHP ส่ง 'type' มา
+                const isDividend = item.type === 'ปันผล (หุ้น)';
 
                 html += `
                     <tr>
                         <td><strong>ปี ${item.year}</strong></td>
                         <td>${item.type || (isDividend ? 'ปันผล' : 'เฉลี่ยคืน')}</td>
-                        <td class="text-end small">${item.details || (isDividend ? `${item.shares_at_time.toLocaleString('th-TH')} หุ้น @ ${parseFloat(item.dividend_rate).toFixed(1)}%` : 'N/A')}</td>
-                        <td class="text-end"><strong class="${isDividend ? 'text-success' : 'text-info'}">${item.amount_formatted || item.dividend_amount_formatted}</strong></td>
+                        <td class="text-end small">${item.details || (isDividend ? `${(item.shares_at_time || 0).toLocaleString('th-TH')} หุ้น @ ${parseFloat(item.dividend_rate || 0).toFixed(1)}%` : 'N/A')}</td>
+                        <td class="text-end"><strong class="${isDividend ? 'text-success' : 'text-info'}">${item.amount_formatted || item.dividend_amount_formatted || '฿0.00'}</strong></td>
                         <td class="text-center">
                             <span class="${statusClass}">${statusText}</span>
                             ${item.payment_date_formatted !== '-' ? `<br><small class="text-muted">${item.payment_date_formatted}</small>` : ''}
@@ -638,9 +654,11 @@ async function viewMemberHistory(memberKey) {
                     </tr>`;
             });
             historyTable.innerHTML = html;
-        } else {
+        } else if (data.ok) {
              if(summaryDiv) summaryDiv.innerHTML = '';
             historyTable.innerHTML = `<tr><td colspan="5" class="text-center text-muted p-4"><i class="bi bi-inbox fs-3 d-block mb-2 opacity-25"></i>ยังไม่มีประวัติการรับปันผล/เฉลี่ยคืน</td></tr>`;
+        } else {
+            throw new Error(data.error || 'ไม่สามารถโหลดข้อมูลประวัติได้');
         }
     } catch (error) {
         console.error('History fetch error:', error);
