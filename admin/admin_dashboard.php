@@ -348,6 +348,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     function nf(number, decimals = 0) {
         const num = parseFloat(number) || 0;
