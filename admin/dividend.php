@@ -901,9 +901,10 @@ async function viewMemberHistory(memberKey) {
   }
 }
 
-// ===== DIVIDEND ACTIONS (คงเดิม) =====
+// ===== DIVIDEND ACTIONS =====
 function viewDividendDetails(periodId) {
-    window.location.href = `report.php?type=dividend_period&period_id=${periodId}`;
+    // [แก้ไข] เปลี่ยนลิงก์ให้ชี้ไปที่ dividend_detail.php โดยส่ง id ไป
+    window.location.href = `dividend_detail.php?id=${periodId}`;
 }
 async function processPayout(periodId, csrfToken) {
     const period = dividendPeriodsData.find(p => p.id === periodId);
