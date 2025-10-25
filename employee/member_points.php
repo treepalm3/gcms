@@ -1,5 +1,5 @@
 <?php
-// employee/member_points.php — จัดการแต้มสมาชิก (เชื่อม DB จริง + ปรับเสถียรภาพ)
+// employee/member_points.php — จัดการแต้มสมาชิก (แลกแต้ม, เชื่อม DB จริง + ปรับเสถียรภาพ)
 session_start();
 
 // ====== บังคับล็อกอิน ======
@@ -75,20 +75,27 @@ $point_history = [];        // จากตาราง scores
 $error_message = null;
 $update_message = null;
 
-// ====== จัดการฟอร์มปรับแต้ม ======
-if ($db_ok && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'adjust_points') {
+
+// ==========================================================
+// ====== [แก้ไข] จัดการฟอร์มแลกแต้ม (Redeem Points) ======
+// ==========================================================
+if ($db_ok && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'redeem_points') {
   // CSRF
   if (!hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'] ?? '')) {
     $error_message = 'Invalid CSRF token.';
   } else {
     $member_id = (int)($_POST['member_id'] ?? 0);      // ต้องเป็น members.id
-    $points = (int)($_POST['points'] ?? 0);
-    $note = trim($_POST['note'] ?? 'ปรับแต้มโดยพนักงาน');
+    // [แก้ไข] รับค่ามาเป็นบวกเสมอ แล้วแปลงเป็นลบเพื่อหักแต้ม
+    $redeem_points_positive = abs((int)($_POST['redeem_points'] ?? 0)); 
+    $note = trim($_POST['note'] ?? 'แลกแต้ม');
+    
+    // [สำคัญ] แปลงเป็นค่าติดลบสำหรับการหักแต้มและบันทึกประวัติ
+    $points_to_deduct = -$redeem_points_positive; 
 
     if ($member_id <= 0) {
       $error_message = 'ข้อมูลสมาชิกไม่ถูกต้อง';
-    } elseif ($points === 0) {
-      $error_message = 'กรุณาระบุจำนวนแต้ม (+/-) ที่ต้องการปรับ';
+    } elseif ($redeem_points_positive <= 0) {
+      $error_message = 'กรุณาระบุจำนวนแต้มที่ต้องการแลก';
     } else {
       try {
         $pdo->beginTransaction();
@@ -103,9 +110,11 @@ if ($db_ok && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') 
         }
 
         $curPoints = (int)$row['points'];
-        $newPoints = $curPoints + $points;
+        $newPoints = $curPoints + $points_to_deduct; // ใช้ค่าติดลบในการคำนวณ
+        
+        // [สำคัญ] ตรวจสอบยอดคงเหลือ (ห้ามติดลบ)
         if ($newPoints < 0) {
-          throw new RuntimeException('แต้มคงเหลือจะติดลบ — ยกเลิกการบันทึก');
+          throw new RuntimeException('แต้มคงเหลือไม่เพียงพอสำหรับการแลกแต้มนี้ (ต้องการ ' . number_format($redeem_points_positive) . ' แต้ม)');
         }
 
         // ปรับแต้ม
@@ -113,12 +122,14 @@ if ($db_ok && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') 
         $stUpd->execute([':p'=>$newPoints, ':mid'=>$member_id]);
 
         // บันทึกประวัติลง scores
-        $activity = 'Adjust: ' . ($note !== '' ? $note : 'ปรับแต้ม') . ' (by ' . $current_name . ')';
+        $activity = 'Redeem: ' . ($note !== '' ? $note : 'แลกแต้ม') . ' (by ' . $current_name . ')';
+        // Note: หากตาราง scores เป็น UNSIGNED ต้องแก้ไขโครงสร้างฐานข้อมูล
         $stIns = $pdo->prepare("INSERT INTO scores(member_id, score, activity, score_date) VALUES(:mid, :score, :act, NOW())");
-        $stIns->execute([':mid'=>$member_id, ':score'=>$points, ':act'=>$activity]);
+        $stIns->execute([':mid'=>$member_id, ':score'=>$points_to_deduct, ':act'=>$activity]);
+
 
         $pdo->commit();
-        $update_message = 'ปรับปรุงแต้มสำเร็จ';
+        $update_message = 'แลกแต้มจำนวน ' . number_format($redeem_points_positive) . ' สำเร็จ';
 
         // อัปเดตค่าในหน้าให้เห็นทันที (ถ้ากำลังแสดงสมาชิกอยู่)
         if ($member_data && (int)$member_data['member_id'] === $member_id) {
@@ -126,11 +137,19 @@ if ($db_ok && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') 
         }
       } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
-        $error_message = 'เกิดข้อผิดพลาด: ' . $e->getMessage();
+        // หากเกิด error จาก UNSIGNED (ไม่รองรับค่าติดลบ)
+        if (str_contains($e->getMessage(), 'Data truncated for column \'score\'')) {
+             $error_message = 'เกิดข้อผิดพลาด: ตารางบันทึกประวัติ (scores) ไม่รองรับค่าติดลบ โปรดแก้ไขโครงสร้างฐานข้อมูล';
+        } else {
+             $error_message = 'เกิดข้อผิดพลาด: ' . $e->getMessage();
+        }
       }
     }
   }
 }
+// ==========================================================
+// ====== [สิ้นสุดแก้ไข] จัดการฟอร์มแลกแต้ม (Redeem Points) ======
+// ==========================================================
 
 // ====== ค้นหาสมาชิก ======
 if ($db_ok && $search_term !== '') {
@@ -139,11 +158,11 @@ if ($db_ok && $search_term !== '') {
     
     // [แก้ไข] กำหนดค่า LIKE สำหรับชื่อ/รหัสสมาชิก ให้ใช้เฉพาะเมื่อไม่ใช่ตัวเลขล้วน
     if ($digits === $search_term && $digits !== '') {
-        // ถ้าค้นหาด้วยตัวเลขล้วน ให้บังคับ Name/House เป็นสตริงที่ไม่ตรง
+        // ถ้าค้นหาด้วยตัวเลขล้วน ให้บังคับ Name/Code เป็นสตริงที่ไม่ตรง
         $likeNameCode = '%$#@%'; 
         $likePhoneHouse = '%'.$digits.'%';
     } else {
-        // ถ้ามีตัวอักษรผสม ให้ใช้คำค้นหาปกติ (ค้นหาได้ทั้งชื่อ/เบอร์โทร/บ้านเลขที่)
+        // ถ้ามีตัวอักษรผสม ให้ใช้คำค้นหาปกติ 
         $likeNameCode = '%'.$search_term.'%';
         $likePhoneHouse = '%'.$search_term.'%';
     }
@@ -163,10 +182,10 @@ if ($db_ok && $search_term !== '') {
         AND u.role IN ('member', 'manager', 'committee', 'admin') 
         AND m.station_id = :st
         AND (
-             u.full_name    LIKE :term_name    -- 1. ชื่อ
-          OR m.member_code  LIKE :term_code    -- 2. รหัสสมาชิก
-          OR REPLACE(REPLACE(u.phone,'-',''),' ','') LIKE :phone_like  -- 3. เบอร์โทรศัพท์
-          OR m.house_number LIKE :term_house   -- 4. บ้านเลขที่
+             u.full_name    LIKE :term_name
+          OR m.member_code  LIKE :term_code
+          OR REPLACE(REPLACE(u.phone,'-',''),' ','') LIKE :phone_like
+          OR m.house_number LIKE :term_house
         )
       ORDER BY u.full_name
       LIMIT 1
@@ -174,12 +193,12 @@ if ($db_ok && $search_term !== '') {
 
     $st = $pdo->prepare($sql);
     
-    // [แก้ไข] ผูกค่าตามตรรกะใหม่
+    // ผูกค่าตามตรรกะใหม่
     $st->bindValue(':st',         (int)$station_id, PDO::PARAM_INT);
-    $st->bindValue(':term_name',  $likeNameCode,    PDO::PARAM_STR);  // ใช้ตัวแปร $likeNameCode
-    $st->bindValue(':term_code',  $likeNameCode,    PDO::PARAM_STR);  // ใช้ตัวแปร $likeNameCode
-    $st->bindValue(':phone_like', $likePhoneHouse,  PDO::PARAM_STR);  // ใช้ตัวแปร $likePhoneHouse
-    $st->bindValue(':term_house', $likePhoneHouse,  PDO::PARAM_STR);  // ใช้ตัวแปร $likePhoneHouse
+    $st->bindValue(':term_name',  $likeNameCode,    PDO::PARAM_STR);
+    $st->bindValue(':term_code',  $likeNameCode,    PDO::PARAM_STR);
+    $st->bindValue(':phone_like', $likePhoneHouse,  PDO::PARAM_STR);
+    $st->bindValue(':term_house', $likePhoneHouse,  PDO::PARAM_STR);
 
     $st->execute();
     $member_data = $st->fetch(PDO::FETCH_ASSOC);
@@ -313,8 +332,8 @@ if ($db_ok && $search_term !== '') {
               <p class="mb-1"><i class="bi bi-telephone-fill me-2"></i><?= htmlspecialchars($member_data['phone'] ?: '-') ?></p>
               <p class="mb-1"><i class="bi bi-house-door-fill me-2"></i><?= htmlspecialchars($member_data['house_number'] ?: '-') ?></p>
               <hr>
-              <button class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#adjustPointsModal">
-                <i class="bi bi-pencil-square me-1"></i>ปรับปรุงแต้ม
+              <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#adjustPointsModal">
+                <i class="fa-solid fa-gift me-1"></i>แลกแต้ม
               </button>
             </div>
           </div>
@@ -366,25 +385,26 @@ if ($db_ok && $search_term !== '') {
       <div class="modal-content">
         <form method="POST">
           <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
-          <input type="hidden" name="action" value="adjust_points">
-          <input type="hidden" name="member_id" value="<?= (int)$member_data['member_id'] ?>"><div class="modal-header">
-            <h5 class="modal-title">ปรับปรุงแต้ม: <?= htmlspecialchars($member_data['full_name']) ?></h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <input type="hidden" name="action" value="redeem_points">
+          <input type="hidden" name="member_id" value="<?= (int)$member_data['member_id'] ?>">
+          <div class="modal-header bg-success text-white">
+            <h5 class="modal-title">แลกแต้ม: <?= htmlspecialchars($member_data['full_name']) ?></h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">
             <div class="mb-3">
-              <label for="points" class="form-label">จำนวนแต้มที่ต้องการปรับ</label>
-              <input type="number" class="form-control" id="points" name="points" required placeholder="ใส่ค่าบวกเพื่อเพิ่ม, ค่าลบเพื่อลด">
-              <div class="form-text">ตัวอย่าง: 100 (เพิ่ม 100 แต้ม), -50 (ลด 50 แต้ม)</div>
+              <label for="redeem_points" class="form-label">จำนวนแต้มที่ต้องการแลก</label>
+              <input type="number" class="form-control" id="redeem_points" name="redeem_points" required min="1" placeholder="ใส่จำนวนแต้มที่ต้องการแลก (ค่าบวกเท่านั้น)">
+              <div class="form-text text-danger">แต้มจะถูกหักอัตโนมัติ (ไม่ต้องใส่ค่าติดลบ)</div>
             </div>
             <div class="mb-3">
-              <label for="note" class="form-label">เหตุผล/หมายเหตุ</label>
-              <textarea class="form-control" id="note" name="note" rows="3" required></textarea>
+              <label for="note" class="form-label">เหตุผล/รายการที่แลก</label>
+              <textarea class="form-control" id="note" name="note" rows="3" required placeholder="เช่น แลกรับส่วนลด 20 บาท, แลกของพรีเมียม"></textarea>
             </div>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
-            <button type="submit" class="btn btn-primary">บันทึกการเปลี่ยนแปลง</button>
+            <button type="submit" class="btn btn-success"><i class="fa-solid fa-check me-1"></i>ยืนยันการแลกแต้ม</button>
           </div>
         </form>
       </div>
