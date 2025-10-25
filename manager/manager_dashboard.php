@@ -241,7 +241,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     </div>
   </nav>
 
-  <!-- Offcanvas Sidebar -->
   <div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasSidebar" aria-labelledby="offcanvasLabel">
     <div class="offcanvas-header">
       <h5 class="offcanvas-title" id="offcanvasLabel"><?= htmlspecialchars($site_name) ?></h5>
@@ -255,10 +254,11 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
         <a href="manager_dashboard.php" class="active"><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
         <a href="inventory.php"><i class="bi bi-fuel-pump-fill"></i>จัดการน้ำมัน</a>
         <a href="committee.php"><i class="fas fa-users-cog"></i> กรรมการ</a>
-        <a href="employee.php"><i class="bi bi-person-badge-fill"></i>พนักงาน</a>
+        <a href="employee.php" ><i class="bi bi-person-badge-fill"></i>พนักงาน</a>
         <a href="member.php"><i class="bi bi-people-fill"></i> สมาชิก</a>
-        <a href="finance.php"><i class="fa-solid fa-wallet"></i> การเงินและบัญชี</a>
+        <a href="finance.php"><i class="bi bi-wallet2"></i> การเงินและบัญชี</a>
         <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
+        <a href="report.php"><i class="fa-solid fa-chart-line"></i>รายงาน</a>
         <a href="setting.php"><i class="bi bi-gear-fill"></i> ตั้งค่า</a>
       </nav>
       <a class="logout mt-auto" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
@@ -359,6 +359,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     function nf(number, decimals = 0) {
         const num = parseFloat(number) || 0;
