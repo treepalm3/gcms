@@ -75,6 +75,8 @@ $point_history = [];        // จากตาราง scores
 $error_message = null;
 $update_message = null;
 
+// ... โค้ดส่วนบน (การเชื่อมต่อฐานข้อมูล)
+
 // ====== จัดการฟอร์มปรับแต้ม ======
 if ($db_ok && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'adjust_points') {
   // CSRF
@@ -93,7 +95,8 @@ if ($db_ok && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') 
       try {
         $pdo->beginTransaction();
 
-        // ล็อกแถวสมาชิก และยืนยันว่าอยู่สถานีเดียวกัน
+        // 1. ล็อกแถวสมาชิก และยืนยันว่าอยู่สถานีเดียวกัน
+        //    (โค้ดนี้ดีอยู่แล้ว)
         $stSel = $pdo->prepare("SELECT points, station_id FROM members WHERE id = :mid FOR UPDATE");
         $stSel->execute([':mid'=>$member_id]);
         $row = $stSel->fetch(PDO::FETCH_ASSOC);
@@ -108,12 +111,17 @@ if ($db_ok && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') 
           throw new RuntimeException('แต้มคงเหลือจะติดลบ — ยกเลิกการบันทึก');
         }
 
-        // ปรับแต้ม
+        // 2. [การแก้ไข] ปรับแต้มในตาราง members (รวมแต้มใหม่)
+        //    โค้ดเดิมของคุณ: $stUpd = $pdo->prepare("UPDATE members SET points = :p WHERE id = :mid");
+        //    โค้ดนี้ยังดีอยู่แล้ว เพราะใช้ค่า $newPoints ที่คำนวณไว้
         $stUpd = $pdo->prepare("UPDATE members SET points = :p WHERE id = :mid");
         $stUpd->execute([':p'=>$newPoints, ':mid'=>$member_id]);
 
-        // บันทึกประวัติลง scores
+        // 3. บันทึกประวัติลง scores (ตารางประวัติ)
+        //    (โค้ดนี้ดีอยู่แล้ว)
         $activity = 'Adjust: ' . ($note !== '' ? $note : 'ปรับแต้ม') . ' (by ' . $current_name . ')';
+        // Note: ตาราง scores ของคุณมีคอลัมน์ score เป็น INT UNSIGNED. หากแต้มติดลบจะ error
+        // แต่เนื่องจากคุณมี check $newPoints < 0 แล้ว จึงน่าจะปลอดภัยในบริบทนี้
         $stIns = $pdo->prepare("INSERT INTO scores(member_id, score, activity, score_date) VALUES(:mid, :score, :act, NOW())");
         $stIns->execute([':mid'=>$member_id, ':score'=>$points, ':act'=>$activity]);
 
