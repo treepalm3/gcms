@@ -66,23 +66,17 @@ $totals = [
 $error_message = null;
 
 try {
-    // ใช้ View v_fuel_lots_current ที่คำนวณสต็อกคงเหลือ (remaining_liters_calc)
-    // และมูลค่าต้นทุนคงเหลือ (remaining_value) ให้อัตโนมัติ
+    // ใช้ View v_fuel_lots_current
     $stmt = $pdo->prepare("
         SELECT
             v.lot_code,
             t.name AS tank_name,
             fp.fuel_name,
             v.remaining_liters_calc AS remaining_liters,
-            v.unit_cost_full AS cost_per_liter, -- ต้นทุนเต็ม (รวมภาษี/ค่าขนส่ง ถ้ามี)
-            fp.price AS price_per_liter, -- ราคาขายปัจจุบัน
-            
-            v.remaining_value AS remaining_cost_value, -- มูลค่าต้นทุนคงเหลือ
-            
-            -- มูลค่าที่คาดว่าจะขายได้
+            v.unit_cost_full AS cost_per_liter, 
+            fp.price AS price_per_liter,
+            v.remaining_value AS remaining_cost_value,
             (v.remaining_liters_calc * fp.price) AS potential_sale_value,
-            
-            -- กำไรที่ยังไม่เกิดขึ้น
             ((v.remaining_liters_calc * fp.price) - v.remaining_value) AS potential_profit
         FROM
             v_fuel_lots_current v
@@ -91,12 +85,12 @@ try {
         JOIN
             fuel_prices fp ON v.fuel_id = fp.fuel_id AND v.station_id = fp.station_id
         WHERE
-            v.remaining_liters_calc > 0.01 -- เอาเฉพาะ Lot ที่ยังมีน้ำมันเหลือ
+            v.remaining_liters_calc > 0.01
         ORDER BY
             t.name, v.received_at
     ");
     
-    $stmt->execute();
+    $stmt->execute(); // ไม่ต้อง bind station_id เพราะ View v_fuel_lots_current ควรสรุปมาแล้ว
     $lots_data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // สรุปยอดรวม
@@ -108,8 +102,7 @@ try {
     }
 
 } catch (Throwable $e) {
-    // ตรวจสอบว่า View v_fuel_lots_current มีอยู่หรือไม่
-    if (strpos($e->getMessage(), "42S02") !== false) { // 42S02 = Base table or view not found
+    if (strpos($e->getMessage(), "42S02") !== false) {
         $error_message = "เกิดข้อผิดพลาด: ไม่พบ View 'v_fuel_lots_current' ในฐานข้อมูล กรุณาตรวจสอบว่าได้ติดตั้ง View ที่จำเป็นครบถ้วนแล้ว";
     } else {
         $error_message = "เกิดข้อผิดพลาดในการดึงข้อมูล: " . $e->getMessage();
@@ -133,19 +126,9 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
     <link rel="stylesheet" href="../assets/css/admin_dashboard.css" />
-    <style>
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; }
-        .stat-card {
-            background: #fff;
-            border-radius: var(--bs-card-border-radius);
-            padding: 1.5rem;
-            box-shadow: var(--bs-box-shadow-sm);
-            border: 1px solid var(--bs-border-color-translucent);
-        }
-        .stat-card h5 { font-size: 1rem; color: var(--bs-secondary-color); margin-bottom: 0.5rem; }
-        .stat-card h3 { font-weight: 700; }
-        .table-hover tbody tr:hover { background-color: var(--bs-light-bg-subtle); }
-    </style>
+    
+    <!-- [ลบ] <style> inline ออก -->
+
 </head>
 <body>
 
@@ -165,79 +148,56 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     </div>
 </nav>
 
-<div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasSidebar">
+<!-- Offcanvas Sidebar -->
+<div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasSidebar" aria-labelledby="offcanvasLabel">
     <div class="offcanvas-header">
-        <h5 class="offcanvas-title"><?= htmlspecialchars($site_name) ?></h5>
-        <button class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
+      <h5 class="offcanvas-title" id="offcanvasLabel"><?= htmlspecialchars($site_name) ?></h5>
+      <button class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="ปิด"></button>
     </div>
     <div class="offcanvas-body sidebar">
-         <div class="side-brand mb-2"><h3><span>Menu</span></h3></div>
-         <nav class="sidebar-menu">
-            <?php if ($current_role === 'admin'): ?>
-                <a href="admin_dashboard.php"><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
-                <a href="inventory.php"><i class="bi bi-fuel-pump-fill"></i>จัดการน้ำมัน</a>
-                <a href="manager.php"><i class="bi bi-shield-lock-fill"></i> ผู้บริหาร</a>
-                <a href="committee.php"><i class="fas fa-users-cog"></i> กรรมการ</a>
-                <a href="employee.php"><i class="bi bi-person-badge-fill"></i>พนักงาน</a>
-                <a href="member.php"><i class="bi bi-people-fill"></i> สมาชิก</a>
-                <a href="finance.php"><i class="fa-solid fa-wallet"></i> การเงินและบัญชี</a>
-                <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
-                <a href="report.php" class="active"><i class="fa-solid fa-chart-line"></i>รายงาน</a>
-                <a href="setting.php"><i class="bi bi-gear-fill"></i> ตั้งค่า</a>
-            <?php elseif ($current_role === 'manager'): ?>
-                 <a href="manager_dashboard.php"><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
-                 <a href="report.php" class="active"><i class="fa-solid fa-chart-line"></i> รายงาน</a>
-                 <a href="finance.php"><i class="fa-solid fa-wallet"></i> การเงินและบัญชี</a>
-                 <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
-            <?php elseif ($current_role === 'committee'): ?>
-                 <a href="committee_dashboard.php"><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
-                 <a href="report.php" class="active"><i class="fa-solid fa-chart-line"></i> รายงาน</a>
-                 <a href="finance.php"><i class="fa-solid fa-wallet"></i> การเงินและบัญชี</a>
-                 <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
-                 <a href="member.php"><i class="bi bi-people-fill"></i> สมาชิก</a>
-            <?php endif; ?>
-         </nav>
-        <a class="logout mt-auto" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
+      <div class="side-brand mb-2"><h3><span>Admin</span></h3></div>
+      <nav class="sidebar-menu">
+        <a href="admin_dashboard.php" class="active"><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
+        <a href="inventory.php"><i class="bi bi-fuel-pump-fill"></i>จัดการน้ำมัน</a>
+        <a href="manager.php"><i class="bi bi-shield-lock-fill"></i> ผู้บริหาร</a>
+        <a href="committee.php"><i class="fas fa-users-cog"></i> กรรมการ</a>
+        <a href="employee.php"><i class="bi bi-person-badge-fill"></i>พนักงาน</a>
+        <a href="member.php"><i class="bi bi-people-fill"></i> สมาชิก</a>
+        <a href="finance.php"><i class="bi bi-wallet2"></i> การเงินและบัญชี</a>
+        <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
+        <a href="report.php"><i class="fa-solid fa-chart-line"></i>รายงาน</a>
+        <a href="setting.php"><i class="bi bi-gear-fill"></i> ตั้งค่า</a>
+      </nav>
+      <a class="logout mt-auto" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
     </div>
-</div>
+  </div>
 
-<div class="container-fluid">
+  <div class="container-fluid">
     <div class="row">
-        <aside class="col-lg-2 d-none d-lg-flex flex-column sidebar py-4">
-             <div class="side-brand mb-3"><h3><span>Menu</span></h3></div>
-            <nav class="sidebar-menu flex-grow-1">
-            <?php if ($current_role === 'admin'): ?>
-                <a href="admin_dashboard.php"><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
-                <a href="inventory.php"><i class="bi bi-fuel-pump-fill"></i>จัดการน้ำมัน</a>
-                <a href="manager.php"><i class="bi bi-shield-lock-fill"></i> ผู้บริหาร</a>
-                <a href="committee.php"><i class="fas fa-users-cog"></i> กรรมการ</a>
-                <a href="employee.php"><i class="bi bi-person-badge-fill"></i>พนักงาน</a>
-                <a href="member.php"><i class="bi bi-people-fill"></i> สมาชิก</a>
-                <a href="finance.php"><i class="fa-solid fa-wallet"></i> การเงินและบัญชี</a>
-                <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
-                <a href="report.php" class="active"><i class="fa-solid fa-chart-line"></i>รายงาน</a>
-                <a href="setting.php"><i class="bi bi-gear-fill"></i> ตั้งค่า</a>
-            <?php elseif ($current_role === 'manager'): ?>
-                 <a href="manager_dashboard.php"><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
-                 <a href="report.php" class="active"><i class="fa-solid fa-chart-line"></i> รายงาน</a>
-                 <a href="finance.php"><i class="fa-solid fa-wallet"></i> การเงินและบัญชี</a>
-                 <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
-            <?php elseif ($current_role === 'committee'): ?>
-                 <a href="committee_dashboard.php"><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
-                 <a href="report.php" class="active"><i class="fa-solid fa-chart-line"></i> รายงาน</a>
-                 <a href="finance.php"><i class="fa-solid fa-wallet"></i> การเงินและบัญชี</a>
-                 <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
-                 <a href="member.php"><i class="bi bi-people-fill"></i> สมาชิก</a>
-            <?php endif; ?>
-            </nav>
-            <a class="logout" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
-        </aside>
+      <!-- Sidebar Desktop -->
+      <aside class="col-lg-2 d-none d-lg-flex flex-column sidebar py-4">
+        <div class="side-brand mb-3"><h3><span>Admin</span></h3></div>
+        <nav class="sidebar-menu flex-grow-1">
+          <a href="admin_dashboard.php" class="active"><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
+          <a href="inventory.php"><i class="bi bi-fuel-pump-fill"></i>จัดการน้ำมัน</a>
+          <a href="manager.php"><i class="bi bi-shield-lock-fill"></i> ผู้บริหาร</a>
+          <a href="committee.php"><i class="fas fa-users-cog"></i> กรรมการ</a>
+          <a href="employee.php"><i class="bi bi-person-badge-fill"></i> พนักงาน</a>
+          <a href="member.php"><i class="bi bi-people-fill"></i> สมาชิก</a>
+          <a href="finance.php"><i class="fa-solid fa-wallet"></i> การเงินและบัญชี</a>
+          <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
+          <a href="report.php"><i class="fa-solid fa-chart-line"></i> รายงาน</a>
+          <a href="setting.php"><i class="bi bi-gear-fill"></i> ตั้งค่า</a>
+        </nav>
+        <a class="logout" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
+      </aside>
 
         <main class="col-lg-10 p-4">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2 class="mb-0"><i class="bi bi-graph-up me-2"></i>รายงานกำไรคงเหลือในถัง</h2>
-                <a href="report.php" class="btn btn-outline-secondary">
-                    <i class="bi bi-arrow-left me-1"></i>กลับหน้ารายงานหลัก
+            <!-- [แก้ไข] ใช้ .main-header -->
+            <div class="main-header">
+                <h2><i class="fa-solid fa-chart-line me-2"></i>รายงานกำไรคงเหลือในถัง</h2>
+                <a href="admin_dashboard.php" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left me-1"></i>กลับหน้าหลัก
                 </a>
             </div>
 
@@ -245,68 +205,68 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                 <div class="alert alert-danger"><?= htmlspecialchars($error_message) ?></div>
             <?php else: ?>
                 
+                <!-- [แก้ไข] ใช้ .stats-grid และ .stat-card -->
                 <div class="stats-grid mb-4">
                     <div class="stat-card text-center">
                         <h5><i class="bi bi-cash-stack text-success"></i> กำไรขั้นต้นที่รออยู่</h5>
                         <h3 class="text-success">฿<?= nf($totals['profit'], 2) ?></h3>
-                        <small class="text-muted">ถ้าน้ำมันที่เหลือขายหมด</small>
+                        <p class="text-muted mb-0">ถ้าน้ำมันที่เหลือขายหมด</p>
                     </div>
                     <div class="stat-card text-center">
                         <h5><i class="bi bi-fuel-pump text-primary"></i> น้ำมันคงเหลือรวม</h5>
                         <h3 class="text-primary"><?= nf($totals['liters'], 2) ?> <small>ลิตร</small></h3>
-                        <small class="text-muted">จาก Lot ที่ยังขายไม่หมด</small>
+                        <p class="text-muted mb-0">จาก Lot ที่ยังขายไม่หมด</p>
                     </div>
                     <div class="stat-card text-center">
-                        <h5><i class="bi bi-box-seam text-danger"></i> มูลค่าต้นทุนคงเหลือ</h5>
-                        <h3 class="text-danger">฿<?= nf($totals['cost_value'], 2) ?></h3>
-                        <small class="text-muted">ต้นทุนของน้ำมันที่เหลือ</small>
+                        <h5><i class="bi bi-box-seam text-warning"></i> มูลค่าต้นทุนคงเหลือ</h5>
+                        <h3 class="text-warning">฿<?= nf($totals['cost_value'], 2) ?></h3> <!-- [แก้ไข] ใช้สี text-warning (amber) -->
+                        <p class="text-muted mb-0">ต้นทุนของน้ำมันที่เหลือ</p>
                     </div>
                 </div>
                 
-                <div class="card shadow-sm">
-                    <div class="card-header bg-light"><h5 class="mb-0">รายละเอียดตาม Lot น้ำมัน (FIFO)</h5></div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>Lot Code</th>
-                                        <th>ถัง</th>
-                                        <th>น้ำมัน</th>
-                                        <th class="text-end">ลิตรคงเหลือ</th>
-                                        <th class="text-end">ต้นทุน/ลิตร (บาท)</th>
-                                        <th class="text-end">ราคาขาย/ลิตร (บาท)</th>
-                                        <th class="text-end">กำไรที่รอ (บาท)</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php if (empty($lots_data)): ?>
-                                        <tr><td colspan="7" class="text-center text-muted p-4">ไม่พบข้อมูล Lot น้ำมันคงเหลือ (อาจจะขายหมดแล้ว หรือยังไม่ได้รับเข้า)</td></tr>
-                                    <?php endif; ?>
-                                    <?php foreach ($lots_data as $lot): ?>
-                                    <tr>
-                                        <td><strong><?= htmlspecialchars($lot['lot_code']) ?></strong></td>
-                                        <td><?= htmlspecialchars($lot['tank_name']) ?></td>
-                                        <td><?= htmlspecialchars($lot['fuel_name']) ?></td>
-                                        <td class="text-end"><?= nf($lot['remaining_liters'], 2) ?></td>
-                                        <td class="text-end text-danger"><?= nf($lot['cost_per_liter'], 4) ?></td>
-                                        <td class="text-end text-success"><?= nf($lot['price_per_liter'], 2) ?></td>
-                                        <td class="text-end fw-bold">฿<?= nf($lot['potential_profit'], 2) ?></td>
-                                    </tr>
-                                    <?php endforeach; ?>
-                                </tbody>
-                                <?php if (!empty($lots_data)): ?>
-                                <tfoot class="table-dark">
-                                    <tr>
-                                        <td colspan="3" class="text-end fw-bold">รวมทั้งหมด</td>
-                                        <td class="text-end fw-bold"><?= nf($totals['liters'], 2) ?> ลิตร</td>
-                                        <td colspan="2"></td>
-                                        <td class="text-end fw-bold fs-5">฿<?= nf($totals['profit'], 2) ?></td>
-                                    </tr>
-                                </tfoot>
+                <!-- [แก้ไข] ใช้ .panel -->
+                <div class="panel">
+                    <h5 class="mb-3">รายละเอียดตาม Lot น้ำมัน (FIFO)</h5>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Lot Code</th>
+                                    <th>ถัง</th>
+                                    <th>น้ำมัน</th>
+                                    <th class="text-end">ลิตรคงเหลือ</th>
+                                    <th class="text-end">ต้นทุน/ลิตร (บาท)</th>
+                                    <th class="text-end">ราคาขาย/ลิตร (บาท)</th>
+                                    <th class="text-end">กำไรที่รอ (บาท)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php if (empty($lots_data)): ?>
+                                    <tr><td colspan="7" class="text-center text-muted p-4">ไม่พบข้อมูล Lot น้ำมันคงเหลือ</td></tr>
                                 <?php endif; ?>
-                            </table>
-                        </div>
+                                <?php foreach ($lots_data as $lot): ?>
+                                <tr>
+                                    <td><strong><?= htmlspecialchars($lot['lot_code']) ?></strong></td>
+                                    <td><?= htmlspecialchars($lot['tank_name']) ?></td>
+                                    <td><?= htmlspecialchars($lot['fuel_name']) ?></td>
+                                    <td class="text-end"><?= nf($lot['remaining_liters'], 2) ?></td>
+                                    <td class="text-end text-warning"><?= nf($lot['cost_per_liter'], 4) ?></td> <!-- [แก้ไข] text-danger -> text-warning -->
+                                    <td class="text-end text-success"><?= nf($lot['price_per_liter'], 2) ?></td>
+                                    <td class="text-end fw-bold text-primary">฿<?= nf($lot['potential_profit'], 2) ?></td> <!-- [แก้ไข] ใช้ text-primary (teal) -->
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                            <?php if (!empty($lots_data)): ?>
+                            <tfoot class="table-light"> <!-- [แก้ไข] table-dark -> table-light -->
+                                <tr>
+                                    <td colspan="3" class="text-end fw-bold">รวมทั้งหมด</td>
+                                    <td class="text-end fw-bold"><?= nf($totals['liters'], 2) ?> ลิตร</td>
+                                    <td colspan="2"></td>
+                                    <td class="text-end fw-bold fs-5 text-success">฿<?= nf($totals['profit'], 2) ?></td>
+                                </tr>
+                            </tfoot>
+                            <?php endif; ?>
+                        </table>
                     </div>
                 </div>
             <?php endif; ?>
