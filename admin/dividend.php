@@ -589,11 +589,10 @@ try {
                         <div class="form-text">เปอร์เซ็นต์จากกำไรสุทธิ</div>
                     </div>
                     
-                    <input type="hidden" name="rebate_mode" value="weighted">
                     <input type="hidden" name="rebate_base" value="profit">
+                    <input type="hidden" name="rebate_mode" value="weighted">
                     <input type="hidden" name="rebate_type" value="rate">
-
-                    <div class="col-12">
+                    <input type="hidden" name="rebate_value" id="modalRebateValueHidden" value="0"> <div class="col-12">
                         <label class="form-label fw-bold"><i class="bi bi-cash-stack me-1"></i>งบประมาณเฉลี่ยคืนรวม (บาท)</label>
                         <input type="text" id="modalRebateTotal" class="form-control bg-light" value="0.00" readonly>
                         <input type="hidden" name="total_rebate_budget" id="modalRebateTotalHidden" value="0">
@@ -776,13 +775,14 @@ function updateModalCalc(prefix) {
         totalDisplay.value = '฿' + totalDividend.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         totalHidden.value = totalDividend.toFixed(2);
     } else if (prefix === 'rebate') {
-        // [แก้ไข] Logic การคำนวณเฉลี่ยคืน
+        // [แก้ไข] Logic การคำนวณเฉลี่ยคืน (แบบเรียบง่าย)
         const profitInput = $('#rebateModalProfit');
         const rateInput = $('#modalRebateRatePercent'); // <-- ใช้ Input % ใหม่
         const totalDisplay = $('#modalRebateTotal');
         const totalHidden = $('#modalRebateTotalHidden');
-        
-        if (!profitInput || !rateInput || !totalDisplay || !totalHidden) return;
+        const valueHidden = $('#modalRebateValueHidden'); // [เพิ่ม] ซ่อนค่า % ที่กรอก
+
+        if (!profitInput || !rateInput || !totalDisplay || !totalHidden || !valueHidden) return;
 
         const profit = parseFloat(profitInput.value || '0');
         const rate = parseFloat(rateInput.value || '0'); // <-- คือ %
@@ -792,10 +792,7 @@ function updateModalCalc(prefix) {
 
         totalDisplay.value = '฿' + rebateBudget.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         totalHidden.value = rebateBudget.toFixed(2); // ส่งยอดงบประมาณ
-        
-        // [ลบ] ไม่ต้องมี rebateValueHidden (หรือจะใช้เก็บ Rate% ก็ได้)
-        // const rebateValueHidden = $('#modalRebateValueHidden');
-        // if (rebateValueHidden) rebateValueHidden.value = rate.toFixed(4);
+        valueHidden.value = rate.toFixed(4); // [เพิ่ม] ส่งค่า % ที่กรอก
     }
 }
 
@@ -862,9 +859,11 @@ async function viewMemberHistory(memberKey) {
                   </tr>`;
           });
           historyTable.innerHTML = html;
-      } else {
+      } else if (data.ok) {
          if (summaryDiv) summaryDiv.innerHTML = '';
           historyTable.innerHTML = `<tr><td colspan="5" class="text-center text-muted p-4"><i class="bi bi-inbox fs-3 d-block mb-2 opacity-25"></i>ยังไม่มีประวัติการรับปันผล/เฉลี่ยคืน</td></tr>`;
+      } else {
+           throw new Error(data.error || 'ไม่สามารถโหลดข้อมูลประวัติได้');
       }
   } catch (error) {
       console.error('History fetch error:', error);
@@ -918,7 +917,7 @@ async function approveRebate(periodId, csrfToken) {
     const period = rebatePeriodsData.find(p => p.id === periodId);
     if (!confirm(`ยืนยันการอนุมัติงวดเฉลี่ยคืนปี ${period?.year || periodId}?`)) { return; }
     try {
-        const response = await fetch('rebate_approve.php', { // !!! ต้องสร้างไฟล์นี้ !!!
+        const response = await fetch('rebate_approve.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify({ period_id: periodId, csrf_token: csrfToken })
@@ -934,7 +933,7 @@ async function processRebatePayout(periodId, csrfToken) {
     const period = rebatePeriodsData.find(p => p.id === periodId);
     if (!confirm(`ยืนยันการจ่ายเงินเฉลี่ยคืนปี ${period?.year || periodId}?`)) { return; }
     try {
-        const response = await fetch('rebate_payout.php', { // !!! ต้องสร้างไฟล์นี้ !!!
+        const response = await fetch('rebate_payout.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify({ period_id: periodId, csrf_token: csrfToken })
@@ -989,10 +988,8 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#rebateEndDate')?.addEventListener('change', () => calculateDateRange('rebate'));
     calculateDateRange('rebate');
     $('#rebateModalProfit')?.addEventListener('input', () => updateModalCalc('rebate'));
-    // [แก้ไข] ลบ Listener ที่ไม่ใช้ออก
-    // $('#modalRebateBase')?.addEventListener('change', () => updateModalCalc('rebate'));
-    $('#modalRebateRatePercent')?.addEventListener('input', () => updateModalCalc('rebate')); // <-- ใช้ Listener ใหม่
-    // [ลบ] updateModalRebateType()
+    $('#modalRebateRatePercent')?.addEventListener('input', () => updateModalCalc('rebate')); // [แก้ไข]
+    // [ลบ] Listener ที่ไม่ใช้แล้ว
 
     // Activate tab based on URL hash
     const hash = window.location.hash || '#periods-panel';
