@@ -75,8 +75,6 @@ $point_history = [];        // จากตาราง scores
 $error_message = null;
 $update_message = null;
 
-// ... โค้ดส่วนบน (การเชื่อมต่อฐานข้อมูล)
-
 // ====== จัดการฟอร์มปรับแต้ม ======
 if ($db_ok && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'adjust_points') {
   // CSRF
@@ -95,8 +93,7 @@ if ($db_ok && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') 
       try {
         $pdo->beginTransaction();
 
-        // 1. ล็อกแถวสมาชิก และยืนยันว่าอยู่สถานีเดียวกัน
-        //    (โค้ดนี้ดีอยู่แล้ว)
+        // ล็อกแถวสมาชิก และยืนยันว่าอยู่สถานีเดียวกัน
         $stSel = $pdo->prepare("SELECT points, station_id FROM members WHERE id = :mid FOR UPDATE");
         $stSel->execute([':mid'=>$member_id]);
         $row = $stSel->fetch(PDO::FETCH_ASSOC);
@@ -111,17 +108,12 @@ if ($db_ok && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') 
           throw new RuntimeException('แต้มคงเหลือจะติดลบ — ยกเลิกการบันทึก');
         }
 
-        // 2. [การแก้ไข] ปรับแต้มในตาราง members (รวมแต้มใหม่)
-        //    โค้ดเดิมของคุณ: $stUpd = $pdo->prepare("UPDATE members SET points = :p WHERE id = :mid");
-        //    โค้ดนี้ยังดีอยู่แล้ว เพราะใช้ค่า $newPoints ที่คำนวณไว้
+        // ปรับแต้ม
         $stUpd = $pdo->prepare("UPDATE members SET points = :p WHERE id = :mid");
         $stUpd->execute([':p'=>$newPoints, ':mid'=>$member_id]);
 
-        // 3. บันทึกประวัติลง scores (ตารางประวัติ)
-        //    (โค้ดนี้ดีอยู่แล้ว)
+        // บันทึกประวัติลง scores
         $activity = 'Adjust: ' . ($note !== '' ? $note : 'ปรับแต้ม') . ' (by ' . $current_name . ')';
-        // Note: ตาราง scores ของคุณมีคอลัมน์ score เป็น INT UNSIGNED. หากแต้มติดลบจะ error
-        // แต่เนื่องจากคุณมี check $newPoints < 0 แล้ว จึงน่าจะปลอดภัยในบริบทนี้
         $stIns = $pdo->prepare("INSERT INTO scores(member_id, score, activity, score_date) VALUES(:mid, :score, :act, NOW())");
         $stIns->execute([':mid'=>$member_id, ':score'=>$points, ':act'=>$activity]);
 
@@ -144,6 +136,20 @@ if ($db_ok && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') 
 if ($db_ok && $search_term !== '') {
   try {
     $digits = preg_replace('/\D+/', '', $search_term);
+    
+    // [แก้ไข] กำหนดค่า LIKE สำหรับชื่อ/บ้านเลขที่ ให้ใช้เฉพาะเมื่อไม่ใช่ตัวเลขล้วน
+    if ($digits === $search_term) {
+        // ถ้าค้นหาด้วยตัวเลขล้วน (digits เท่ากับ search_term) ให้ตั้งค่า LIKE เป็น "NO MATCH" ชั่วคราว
+        // เพื่อบังคับให้ไปค้นหาที่เบอร์โทรหรือบ้านเลขที่แทน
+        $likeNameHouse = '%$#@%'; // ใช้สตริงที่ไม่น่าจะเจอในชื่อ/บ้านเลขที่
+    } else {
+        // ถ้ามีตัวอักษรผสม ให้ค้นหาแบบเดิม (ชื่อ, บ้านเลขที่)
+        $likeNameHouse = '%'.$search_term.'%';
+    }
+    
+    $likeAll   = '%'.$search_term.'%';
+    $likePhone = $digits ? '%'.$digits.'%' : $likeAll;
+
     $sql = "
       SELECT
         u.id            AS user_id,
@@ -156,26 +162,26 @@ if ($db_ok && $search_term !== '') {
       FROM users u
       JOIN members m ON m.user_id = u.id
       WHERE u.is_active = 1
-        -- [แก้ไข] ขยายเงื่อนไข WHERE เพื่อรวมบทบาทผู้บริหาร กรรมการ และ Admin ที่มี Record ใน members
         AND u.role IN ('member', 'manager', 'committee', 'admin') 
         AND m.station_id = :st
         AND (
              u.full_name    LIKE :term_name
           OR REPLACE(REPLACE(u.phone,'-',''),' ','') LIKE :phone_like
           OR m.house_number LIKE :term_house
+          OR m.member_code  LIKE :term_code -- เพิ่มการค้นหาด้วยรหัสสมาชิก
         )
       ORDER BY u.full_name
       LIMIT 1
     ";
 
     $st = $pdo->prepare($sql);
-    $likeAll   = '%'.$search_term.'%';
-    $likePhone = $digits ? '%'.$digits.'%' : $likeAll;
-
+    
+    // [แก้ไข] ผูกค่าใหม่ตามเงื่อนไข
     $st->bindValue(':st',         (int)$station_id, PDO::PARAM_INT);
-    $st->bindValue(':term_name',  $likeAll,         PDO::PARAM_STR);
-    $st->bindValue(':term_house', $likeAll,         PDO::PARAM_STR);
+    $st->bindValue(':term_name',  $likeNameHouse,   PDO::PARAM_STR); // ใช้ตัวแปรใหม่
+    $st->bindValue(':term_house', $likeNameHouse,   PDO::PARAM_STR); // ใช้ตัวแปรใหม่
     $st->bindValue(':phone_like', $likePhone,       PDO::PARAM_STR);
+    $st->bindValue(':term_code',  $likeAll,         PDO::PARAM_STR); // ผูกรหัสสมาชิก
 
     $st->execute();
     $member_data = $st->fetch(PDO::FETCH_ASSOC);
