@@ -273,11 +273,9 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     </div>
 </div>
 
-<footer class="footer mt-auto py-3 bg-light">
-    <div class="container text-center">
-        <span class="text-muted">© <?= date('Y') ?> <?= htmlspecialchars($site_name) ?></span>
-    </div>
-</footer>
+<footer class="footer ">
+        <span class="text">© <?= date('Y') ?> <?= htmlspecialchars($site_name) ?></span>  
+  </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
