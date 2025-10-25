@@ -137,18 +137,16 @@ if ($db_ok && $search_term !== '') {
   try {
     $digits = preg_replace('/\D+/', '', $search_term);
     
-    // [แก้ไข] กำหนดค่า LIKE สำหรับชื่อ/บ้านเลขที่ ให้ใช้เฉพาะเมื่อไม่ใช่ตัวเลขล้วน
-    if ($digits === $search_term) {
-        // ถ้าค้นหาด้วยตัวเลขล้วน (digits เท่ากับ search_term) ให้ตั้งค่า LIKE เป็น "NO MATCH" ชั่วคราว
-        // เพื่อบังคับให้ไปค้นหาที่เบอร์โทรหรือบ้านเลขที่แทน
-        $likeNameHouse = '%$#@%'; // ใช้สตริงที่ไม่น่าจะเจอในชื่อ/บ้านเลขที่
+    // [แก้ไข] กำหนดค่า LIKE สำหรับชื่อ/รหัสสมาชิก ให้ใช้เฉพาะเมื่อไม่ใช่ตัวเลขล้วน
+    if ($digits === $search_term && $digits !== '') {
+        // ถ้าค้นหาด้วยตัวเลขล้วน ให้บังคับ Name/House เป็นสตริงที่ไม่ตรง
+        $likeNameCode = '%$#@%'; 
+        $likePhoneHouse = '%'.$digits.'%';
     } else {
-        // ถ้ามีตัวอักษรผสม ให้ค้นหาแบบเดิม (ชื่อ, บ้านเลขที่)
-        $likeNameHouse = '%'.$search_term.'%';
+        // ถ้ามีตัวอักษรผสม ให้ใช้คำค้นหาปกติ (ค้นหาได้ทั้งชื่อ/เบอร์โทร/บ้านเลขที่)
+        $likeNameCode = '%'.$search_term.'%';
+        $likePhoneHouse = '%'.$search_term.'%';
     }
-    
-    $likeAll   = '%'.$search_term.'%';
-    $likePhone = $digits ? '%'.$digits.'%' : $likeAll;
 
     $sql = "
       SELECT
@@ -165,10 +163,10 @@ if ($db_ok && $search_term !== '') {
         AND u.role IN ('member', 'manager', 'committee', 'admin') 
         AND m.station_id = :st
         AND (
-             u.full_name    LIKE :term_name
-          OR REPLACE(REPLACE(u.phone,'-',''),' ','') LIKE :phone_like
-          OR m.house_number LIKE :term_house
-          OR m.member_code  LIKE :term_code -- เพิ่มการค้นหาด้วยรหัสสมาชิก
+             u.full_name    LIKE :term_name    -- 1. ชื่อ
+          OR m.member_code  LIKE :term_code    -- 2. รหัสสมาชิก
+          OR REPLACE(REPLACE(u.phone,'-',''),' ','') LIKE :phone_like  -- 3. เบอร์โทรศัพท์
+          OR m.house_number LIKE :term_house   -- 4. บ้านเลขที่
         )
       ORDER BY u.full_name
       LIMIT 1
@@ -176,12 +174,12 @@ if ($db_ok && $search_term !== '') {
 
     $st = $pdo->prepare($sql);
     
-    // [แก้ไข] ผูกค่าใหม่ตามเงื่อนไข
+    // [แก้ไข] ผูกค่าตามตรรกะใหม่
     $st->bindValue(':st',         (int)$station_id, PDO::PARAM_INT);
-    $st->bindValue(':term_name',  $likeNameHouse,   PDO::PARAM_STR); // ใช้ตัวแปรใหม่
-    $st->bindValue(':term_house', $likeNameHouse,   PDO::PARAM_STR); // ใช้ตัวแปรใหม่
-    $st->bindValue(':phone_like', $likePhone,       PDO::PARAM_STR);
-    $st->bindValue(':term_code',  $likeAll,         PDO::PARAM_STR); // ผูกรหัสสมาชิก
+    $st->bindValue(':term_name',  $likeNameCode,    PDO::PARAM_STR);  // ใช้ตัวแปร $likeNameCode
+    $st->bindValue(':term_code',  $likeNameCode,    PDO::PARAM_STR);  // ใช้ตัวแปร $likeNameCode
+    $st->bindValue(':phone_like', $likePhoneHouse,  PDO::PARAM_STR);  // ใช้ตัวแปร $likePhoneHouse
+    $st->bindValue(':term_house', $likePhoneHouse,  PDO::PARAM_STR);  // ใช้ตัวแปร $likePhoneHouse
 
     $st->execute();
     $member_data = $st->fetch(PDO::FETCH_ASSOC);
