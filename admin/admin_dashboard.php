@@ -1,5 +1,5 @@
 <?php
-// admin_dashboard.php — [แก้ไข] แดชบอร์ดสำหรับผู้ดูแลระบบ (เพิ่มการ์ดกำไรคงเหลือ + ปุ่ม)
+// admin_dashboard.php — [แก้ไข] แดชบอร์ดสำหรับผู้ดูแลระบบ (เพิ่ม try-catch เพื่อให้กราฟแสดงผลได้)
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 
@@ -81,24 +81,29 @@ try {
     $today_str = date('Y-m-d');
     
     // --- 1. สถิติวันนี้ (จาก v_sales_gross_profit) ---
-    // Note: ตาราง v_sales_gross_profit ต้องมีอยู่จริง
-    $stmt_today_profit = $pdo->prepare("
-        SELECT 
-            COALESCE(SUM(v.total_amount), 0) AS revenue,
-            COALESCE(SUM(v.cogs), 0) AS cogs,
-            COALESCE(SUM(v.total_amount - v.cogs), 0) AS profit,
-            COUNT(v.sale_id) AS bills
-        FROM v_sales_gross_profit v
-        JOIN sales s ON v.sale_id = s.id
-        WHERE s.station_id = :sid AND DATE(v.sale_date) = :today
-    ");
-    $stmt_today_profit->execute([':sid' => $station_id, ':today' => $today_str]);
-    $profit_data = $stmt_today_profit->fetch(PDO::FETCH_ASSOC);
-    
-    $stats['today_revenue'] = (float)($profit_data['revenue'] ?? 0);
-    $stats['today_cogs'] = (float)($profit_data['cogs'] ?? 0);
-    $stats['today_profit'] = (float)($profit_data['profit'] ?? 0);
-    $stats['today_bills'] = (int)($profit_data['bills'] ?? 0);
+    try { // [แก้ไข: เพิ่ม try-catch]
+        $stmt_today_profit = $pdo->prepare("
+            SELECT 
+                COALESCE(SUM(v.total_amount), 0) AS revenue,
+                COALESCE(SUM(v.cogs), 0) AS cogs,
+                COALESCE(SUM(v.total_amount - v.cogs), 0) AS profit,
+                COUNT(v.sale_id) AS bills
+            FROM v_sales_gross_profit v
+            JOIN sales s ON v.sale_id = s.id
+            WHERE s.station_id = :sid AND DATE(v.sale_date) = :today
+        ");
+        $stmt_today_profit->execute([':sid' => $station_id, ':today' => $today_str]);
+        $profit_data = $stmt_today_profit->fetch(PDO::FETCH_ASSOC);
+        
+        $stats['today_revenue'] = (float)($profit_data['revenue'] ?? 0);
+        $stats['today_cogs'] = (float)($profit_data['cogs'] ?? 0);
+        $stats['today_profit'] = (float)($profit_data['profit'] ?? 0);
+        $stats['today_bills'] = (int)($profit_data['bills'] ?? 0);
+    } catch (Throwable $e) {
+        error_log("v_sales_gross_profit failed: " . $e->getMessage());
+        // ตั้งค่าเริ่มต้นเมื่อ View ล้มเหลว
+    }
+
 
     // ดึงยอดลิตร (แยกต่างหาก)
     $stmt_today_liters = $pdo->prepare("
@@ -112,8 +117,6 @@ try {
 
 
     // --- 2. สมาชิกและหุ้น (รวมทุกประเภท) ---
-    // [แก้ไข] Query นี้ถูกแก้ไขในรอบก่อนหน้าให้ดึงจาก members เท่านั้น แต่ในโค้ดต้นฉบับยังเป็น UNION ALL
-    // ใช้ Query เดิมเพื่อความเข้ากันได้กับโค้ดที่รันอยู่ในปัจจุบัน
     $stmt_members = $pdo->query("
         SELECT 
             SUM(total_users) as total_members,
@@ -127,12 +130,11 @@ try {
         ) as all_shareholders
     ");
     $member_data = $stmt_members->fetch(PDO::FETCH_ASSOC);
-    // Note: หากมีปัญหาการนับซ้ำในตารางสมาชิก ต้องแก้ที่ Query นี้ใน dividend.php
     $stats['total_members'] = (int)($member_data['total_members'] ?? 0);
     $stats['total_shares'] = (int)($member_data['total_shares'] ?? 0);
 
     // --- 3. [เพิ่ม] ดึงกำไรที่ยังคงเหลือในถัง (จาก v_fuel_lots_current) ---
-    try {
+    try { // [แก้ไข: เพิ่ม try-catch]
         $stmt_profit_remain = $pdo->prepare("
             SELECT
                 SUM((v.remaining_liters_calc * fp.price) - v.remaining_value) AS potential_profit
@@ -146,8 +148,10 @@ try {
         $stmt_profit_remain->execute([':sid' => $station_id]);
         $stats['potential_profit'] = (float)$stmt_profit_remain->fetchColumn();
     } catch (Throwable $e) {
-        error_log("Could not query v_fuel_lots_current: " . $e->getMessage());
+        error_log("v_fuel_lots_current failed: " . $e->getMessage());
         $stats['potential_profit'] = 0.0;
+        // แสดงข้อความ error ชั่วคราวเพื่อแจ้งผู้ใช้ หากเกิดซ้ำ
+        $error_message = ($error_message ? $error_message . ' / ' : '') . "View กำไรคงเหลือล้มเหลว";
     }
 
     // --- 4. กราฟแท่ง (ยอดขายลิตร 6 เดือนล่าสุด) ---
@@ -170,7 +174,6 @@ try {
     }
 
     // --- 5. กราฟวงกลม (สัดส่วนน้ำมัน 30 วัน) ---
-    // [แก้ไข Query] ใช้ LEFT JOIN และ COALESCE เพื่อให้กราฟขึ้นได้ แม้ว่า fuel_id ใน sales_items จะเป็น NULL
     $day30_start = date('Y-m-d', strtotime('-29 days'));
     $stmt_pie = $pdo->prepare("
         SELECT 
@@ -192,8 +195,9 @@ try {
     }
 
 } catch (Throwable $e) {
+    // Catch-all สำหรับ Error ใหญ่ที่ไม่สามารถคาดเดาได้
     $error_message = "เกิดข้อผิดพลาดในการดึงข้อมูล: " . $e->getMessage();
-    error_log("Dashboard Error: " . $e->getMessage());
+    error_log("Dashboard Fatal Error: " . $e->getMessage());
 }
 
 $role_th_map = ['admin'=>'ผู้ดูแลระบบ','manager'=>'ผู้บริหาร','employee'=>'พนักงาน','member'=>'สมาชิกสหกรณ์','committee'=>'กรรมการ'];
@@ -339,13 +343,10 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     </div>
   </div>
 
-  <footer class="footer mt-auto py-3 bg-light">
-    <div class="container text-center">
-        <span class="text-muted">© <?= date('Y') ?> <?= htmlspecialchars($site_name) ?></span>
-    </div>
+  <footer class="footer ">
+        <span class="text">© <?= date('Y') ?> <?= htmlspecialchars($site_name) ?></span>  
   </footer>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script>
     function nf(number, decimals = 0) {
@@ -361,6 +362,52 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     const pieLabels = <?= json_encode($pie_labels, JSON_UNESCAPED_UNICODE) ?>;
     const pieValues = <?= json_encode($pie_values, JSON_UNESCAPED_UNICODE) ?>;
 
+    // Bar
+    new Chart(document.getElementById('barChart').getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: barLabels,
+        datasets: [{
+          label: 'จำนวน',
+          data: barValues,
+          backgroundColor: '#20A39E',
+          borderColor: '#36535E',
+          borderWidth: 2,
+          borderRadius: 6,
+          maxBarThickness: 34
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#36535E' } } },
+        scales: {
+          x: { ticks: { color: '#68727A' }, grid: { color: '#E9E1D3' } },
+          y: { ticks: { color: '#68727A' }, grid: { color: '#E9E1D3' }, beginAtZero: true }
+        }
+      }
+    });
+
+    // Pie/Doughnut
+    new Chart(document.getElementById('pieChart').getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: pieLabels,
+        datasets: [{
+          data: pieValues,
+          backgroundColor: ['#CCA43B','#20A39E','#B66D0D','#513F32','#212845','#A1C181','#E56B6F','#6D597A'],
+          borderColor: '#ffffff',
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '62%',
+        plugins: { legend: { position: 'bottom', labels: { color: '#36535E' } } }
+      }
+    });
+
     // Global Chart Config (จาก CSS)
     Chart.defaults.font.family = "var(--font-body)";
     Chart.defaults.color = "var(--steel)";
@@ -372,74 +419,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     Chart.defaults.plugins.tooltip.bodyFont.family = "var(--font-body)";
     Chart.defaults.plugins.tooltip.bodyFont.weight = '500';
 
-    // Bar
-    const barCtx = document.getElementById('barChart')?.getContext('2d');
-    if (barCtx && barValues.length > 0) {
-        new Chart(barCtx, {
-          type: 'bar',
-          data: {
-            labels: barLabels,
-            datasets: [{
-              label: 'ลิตร',
-              data: barValues,
-              backgroundColor: 'rgba(32, 163, 158, 0.7)', // var(--mint)
-              borderColor: 'rgba(32, 163, 158, 1)',
-              borderWidth: 1,
-              borderRadius: 5,
-              maxBarThickness: 50
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { 
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: (context) => `${nf(context.raw)} ลิตร`
-                    }
-                }
-            },
-            scales: {
-              x: { ticks: { color: 'var(--steel)' }, grid: { display: false } },
-              y: { ticks: { color: 'var(--steel)', callback: (v) => nf(v) }, grid: { color: 'rgba(0,0,0,0.05)' }, beginAtZero: true }
-            }
-          }
-        });
-    } else if (barCtx) {
-        barCtx.canvas.parentNode.innerHTML = '<div class="alert alert-light text-center h-100 d-flex align-items-center justify-content-center">ไม่มีข้อมูลยอดขายรายเดือน</div>';
-    }
-
-    // Pie/Doughnut
-    const pieCtx = document.getElementById('pieChart')?.getContext('2d');
-    if (pieCtx && pieValues.length > 0) {
-        new Chart(pieCtx, {
-          type: 'doughnut',
-          data: {
-            labels: pieLabels,
-            datasets: [{
-              data: pieValues,
-              backgroundColor: ['#20A39E', '#CCA43B', '#B66D0D', '#36535E', '#6f42c1', '#fd7e14'], // [mint, gold, amber, teal, ...]
-              borderColor: '#ffffff',
-              borderWidth: 2
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            cutout: '60%',
-            plugins: {
-                tooltip: {
-                    callbacks: {
-                        label: (context) => ` ${context.label}: ${nf(context.raw, 2)} ลิตร`
-                    }
-                }
-            }
-          }
-        });
-    } else if (pieCtx) {
-        pieCtx.canvas.parentNode.innerHTML = '<div class="alert alert-light text-center h-100 d-flex align-items-center justify-content-center">ไม่มีข้อมูลสัดส่วนน้ำมัน</div>';
-    }
+   
   </script>
 </body>
 </html>
