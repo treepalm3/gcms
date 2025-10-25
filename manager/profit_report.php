@@ -1,5 +1,5 @@
 <?php
-// manager/manager_dashboard.php 
+// manager/profit_report.php
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 
@@ -195,7 +195,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
             <!-- [แก้ไข] ใช้ .main-header -->
             <div class="main-header">
                 <h2><i class="fa-solid fa-chart-line me-2"></i>รายงานกำไรคงเหลือในถัง</h2>
-                <a href="admin_dashboard.php" class="btn btn-outline-secondary">
+                <a href="manager_dashboard.php " class="btn btn-outline-secondary">
                     <i class="bi bi-arrow-left me-1"></i>กลับหน้าหลัก
                 </a>
             </div>
