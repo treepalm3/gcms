@@ -1,5 +1,5 @@
 <?php
-// dividend_create_period.php
+// dividend_create_period.php — สร้างงวดปันผลและรายการจ่าย (แก้ไขการดึงข้อมูลผู้ถือหุ้น)
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 require_once '../config/db.php';
@@ -30,7 +30,6 @@ $dividend_rate = (float)$_POST['dividend_rate'];
 $total_shares_at_time = (int)$_POST['total_shares_at_time'];
 $total_dividend_amount = (float)$_POST['total_dividend_amount'];
 $dividend_per_share = ($total_shares_at_time > 0) ? ($total_dividend_amount / $total_shares_at_time) : 0;
-// $notes = trim($_POST['notes'] ?? ''); // [ลบ] ไม่ต้องรับค่า notes แล้ว
 
 if ($year <= 2020 || empty($start_date) || empty($end_date) || $total_profit <= 0 || $dividend_rate <= 0 || $total_shares_at_time <= 0) {
     redirect_back('ข้อมูลไม่ถูกต้อง กรุณากรอกข้อมูลสำคัญให้ครบ', true);
@@ -43,11 +42,17 @@ try {
     $check = $pdo->prepare("SELECT COUNT(*) FROM dividend_periods WHERE year = ?");
     $check->execute([$year]);
     if ($check->fetchColumn() > 0) {
+        // ก่อนจะแจ้ง error ให้ล้างรายการซ้ำซ้อนใน dividend_payments ที่อาจถูกสร้างไว้แล้ว
+        // (เผื่อมีการรันโค้ดซ้ำก่อนหน้านี้)
+        // Note: ใน production ควรมี unique constraint เพื่อป้องกันการสร้างงวดซ้ำ
+        $pdo->rollBack(); // Rollback transaction ที่เริ่มไว้ก่อนหน้านี้
         redirect_back("งวดปันผลสำหรับปี $year ได้ถูกสร้างไปแล้ว", true);
     }
+    
+    // หากผ่านการตรวจสอบ ให้เริ่ม Transaction ใหม่
+    // (หรือจะลบ Transaction เก่าแล้วใช้ตัวนี้ก็ได้ แต่เนื่องจาก check ถูกทำนอก transaction หลัก จึงไม่จำเป็น)
 
     // 2. สร้างงวดปันผลหลัก
-    // [แก้ไข] ลบ 'notes' ออกจาก SQL
     $ins_period = $pdo->prepare("
         INSERT INTO dividend_periods
             (year, period_name, start_date, end_date, total_profit, dividend_rate,
@@ -55,20 +60,21 @@ try {
         VALUES
             (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW(), ?)
     ");
-    // [แก้ไข] ลบ $notes ออกจาก execute
     $ins_period->execute([
         $year, $period_name, $start_date, $end_date, $total_profit, $dividend_rate,
         $total_shares_at_time, $total_dividend_amount, $dividend_per_share, $_SESSION['full_name']
     ]);
     $period_id = $pdo->lastInsertId();
 
-    // 3. ดึงสมาชิกทั้งหมดที่มีหุ้น
+    // 3. [แก้ไข] ดึงสมาชิกทั้งหมดที่มีหุ้น (ใช้ตาราง members เป็นแหล่งข้อมูลเดียวเท่านั้น)
     $members_sql = "
-        (SELECT id, 'member' as type, shares FROM members WHERE is_active = 1 AND shares > 0)
-        UNION ALL
-        (SELECT id, 'manager' as type, shares FROM managers WHERE shares > 0)
-        UNION ALL
-        (SELECT id, 'committee' as type, shares FROM committees WHERE shares > 0)
+        SELECT 
+            m.id AS member_id, 
+            u.role AS member_type, -- ใช้ role จาก users 
+            m.shares 
+        FROM members m
+        JOIN users u ON m.user_id = u.id
+        WHERE m.is_active = 1 AND m.shares > 0
     ";
     $stmt_members = $pdo->query($members_sql);
     $all_members = $stmt_members->fetchAll(PDO::FETCH_ASSOC);
@@ -83,8 +89,8 @@ try {
 
     $payment_count = 0;
     foreach ($all_members as $member) {
-        $member_id = $member['id'];
-        $member_type = $member['type'];
+        $member_id = $member['member_id']; // ใช้ member_id จากตาราง members
+        $member_type = $member['member_type']; // ใช้ role จากตาราง users
         $shares = (int)$member['shares'];
         $dividend_amount = $shares * $dividend_per_share;
 
