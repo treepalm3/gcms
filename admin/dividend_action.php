@@ -3,7 +3,7 @@
 session_start();
 header('Content-Type: application/json');
 date_default_timezone_set('Asia/Bangkok');
-require_once '../config/db.php';
+require_once '../config/db.php'; // ตรวจสอบว่า path ถูกต้อง
 
 $response = ['ok' => false, 'error' => 'Invalid request'];
 
@@ -65,14 +65,14 @@ try {
         case 'delete_period':
             $period_id = (int)($data->period_id ?? 0);
             if ($period_id <= 0) throw new Exception('Invalid Period ID');
-            // ตาราง dividend_payments ควรมี ON DELETE CASCADE
+            // ตาราง dividend_payments ควรมี ON DELETE CASCADE (ตาม SQL ที่ให้ไปก่อนหน้า)
             $stmt = $pdo->prepare("DELETE FROM dividend_periods WHERE id = ?");
             $stmt->execute([$period_id]);
             if ($stmt->rowCount() == 0) throw new Exception('ไม่พบงวดปันผลที่ต้องการลบ');
             $response['message'] = 'ลบงวดปันผลสำเร็จ';
             break;
 
-        // --- ACTIONS FOR dividend_payments (individual) ---
+        // --- ACTIONS FOR dividend_payments (รายบุคคล) ---
         case 'mark_paid':
             $payment_id = (int)($data->payment_id ?? 0);
             if ($payment_id <= 0) throw new Exception('Invalid Payment ID');
