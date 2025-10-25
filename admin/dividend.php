@@ -521,10 +521,8 @@ try {
     </div>
 </div>
 
-<footer class="footer mt-auto py-3 bg-light">
-    <div class="container text-center">
-        <span class="text-muted">© <?= date('Y') ?> <?= htmlspecialchars($site_name) ?></span>
-    </div>
+<footer class="footer ">
+        <span class="text">© <?= date('Y') ?> <?= htmlspecialchars($site_name) ?></span>  
 </footer>
 
 <div class="modal fade" id="modalCreateDividend" tabindex="-1">
