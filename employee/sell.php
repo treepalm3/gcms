@@ -1,6 +1,5 @@
 <?php
-// employee/sell.php — ระบบ POS ปั๊มน้ำมัน (สคีมา: sales + sales_items + fuel_* )
-// ข้อสำคัญ: ต้องมีไฟล์ /api/search_member.php สำหรับค้นสมาชิก (ดูตัวอย่างที่ส่งให้ก่อนหน้า)
+// employee/sell.php — ระบบ POS ปั๊มน้ำมัน
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 
@@ -85,7 +84,7 @@ try {
     ");
     $stmt_fuel->execute([':sid' => $station_id]);
   } catch (Throwable $e) {
-    // fallback กรณีไม่มีคอลัมน์ display_order
+    // fallback
     $stmt_fuel = $pdo->prepare("
       SELECT fuel_id, fuel_name, price
       FROM fuel_prices
@@ -124,19 +123,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     $quantity       = filter_var($_POST['quantity'] ?? 0, FILTER_VALIDATE_FLOAT);
     $payment_method = $_POST['payment_method'] ?? 'cash';
 
-    // [แก้ไข] รับค่าจากช่องค้นหารวม
-    $member_identifier = trim((string)($_POST['member_identifier'] ?? ''));
-    $customer_phone = '';
-    $household_no   = '';
-
-    // ตรวจสอบว่าสิ่งที่กรอกมาเป็นเบอร์โทร (มีแต่ตัวเลข, -) หรือ บ้านเลขที่ (อาจมีตัวอักษร, /)
-    if (preg_match('/^[0-9\s\-()+]+$/', $member_identifier)) {
-        // ถ้าเหมือนเบอร์โทร
-        $customer_phone = preg_replace('/\D+/', '', $member_identifier);
-    } else {
-        // ถ้าไม่เหมือนเบอร์โทร ให้ถือเป็นบ้านเลขที่
-        $household_no = $member_identifier;
-    }
+    // [แก้ไข] รับค่าจากช่องที่ซ่อนไว้ (ที่ JavaScript กรอกให้)
+    $customer_phone = preg_replace('/\D+/', '', (string)($_POST['customer_phone'] ?? ''));
+    $household_no   = trim((string)($_POST['household_no'] ?? ''));
 
     $discount_in    = $_POST['discount'] ?? 0;
     $discount       = is_numeric($discount_in) ? (float)$discount_in : 0.0;
@@ -183,7 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       // ===== เตรียมข้อมูลใบเสร็จสำหรับแสดงผล =====
       $sale_data = [
         'site_name'        => $site_name,
-        'receipt_no'       => '', // จะถูกกำหนดตอน insert sales สำเร็จ
+        'receipt_no'       => '',
         'datetime'         => $now,
         'fuel_type'        => $fuel_id,
         'fuel_name'        => $fuel_name,
@@ -224,7 +213,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
             ':payment_method' => $payment_method,
             ':created_by'     => $current_user_id,
           ];
-          // [แก้ไข] ใช้ตัวแปร $customer_phone และ $household_no ที่เรากรองไว้
           if ($col_phone)   { $cols[] = 'customer_phone';  $params[':customer_phone']  = $customer_phone ?: null; }
           if ($col_house)   { $cols[] = 'household_no';    $params[':household_no']    = $household_no ?: null; }
           if ($col_discpct) { $cols[] = 'discount_pct';    $params[':discount_pct']    = $discount; }
@@ -358,22 +346,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
             $where_conditions = [];
             $params_pts = [];
             
+            // สร้างเงื่อนไข WHERE แบบไดนามิก
             if ($customer_phone !== '') {
-              $where_conditions[] = "REPLACE(REPLACE(REPLACE(REPLACE(u.phone, '-', ''), ' ', ''), '(', ''), ')', '') = :phone";
+              $where_conditions[] = "REPLACE(u.phone, '-', '') = :phone";
               $params_pts[':phone'] = $customer_phone;
             }
             if ($household_no !== '') {
-              // [แก้ไข] แก้ไขการ Join ให้รองรับ 3 ตาราง
-              $where_conditions[] = "m.house_number = :house";
-              $where_conditions[] = "mg.house_number = :house";
-              $where_conditions[] = "c.house_number = :house";
-              $params_pts[':house'] = $household_no;
+              $where_conditions[] = "m.house_number = :house_m";
+              $where_conditions[] = "mg.house_number = :house_mg";
+              $where_conditions[] = "c.house_number = :house_c";
+              $params_pts[':house_m'] = $household_no;
+              $params_pts[':house_mg'] = $household_no;
+              $params_pts[':house_c'] = $household_no;
             }
             
             if (!empty($where_conditions)) {
+              // เชื่อมเงื่อนไขด้วย OR
               $where_clause = implode(' OR ', $where_conditions);
               
-              // [แก้ไข] Query ให้ค้นหาจาก 3 ตาราง
+              // Query ค้นหาจาก 3 ตาราง
               $q = $pdo->prepare("
                 SELECT u.id as user_id, m.id as member_pk
                 FROM users u
@@ -388,7 +379,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
               $q->execute($params_pts);
               $found_user = $q->fetch(PDO::FETCH_ASSOC);
               
-              // [แก้ไข] ต้องใช้ member_id (pk) จากตาราง members เท่านั้นสำหรับตาราง scores
+              // ต้องใช้ member_id (pk) จากตาราง members เท่านั้นสำหรับตาราง scores
               if ($found_user && $found_user['member_pk']) {
                  $member_id = $found_user['member_pk'];
               } else if ($found_user) {
@@ -540,6 +531,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
           <input type="hidden" name="action" value="process_sale">
           <input type="hidden" name="fuel_type" id="selectedFuel" required>
           <input type="hidden" name="quantity" id="quantityInput" value="0" required>
+          
           <input type="hidden" name="customer_phone" id="customerPhoneHidden">
           <input type="hidden" name="household_no" id="householdNoHidden">
 
@@ -571,7 +563,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
 
                   <div class="col-md-6">
                     <label class="form-label">ค้นหาสมาชิก (บ้านเลขที่ / เบอร์โทร)</label>
-                    <input type="text" class="form-control" id="memberIdentifierInput" placeholder="กรอกบ้านเลขที่ หรือ เบอร์โทร">
+                    <input type="text" class="form-control" name="member_identifier" id="memberIdentifierInput" placeholder="กรอกบ้านเลขที่ หรือ เบอร์โทร">
                     <div class="form-text">สำหรับสะสมแต้มและเฉลี่ยคืน</div>
                   </div>
 
@@ -848,8 +840,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
         memberInfoDiv.style.display = 'none';
         return;
       }
-      // อนุญาตให้ค้นหาเลขสั้นๆ (เช่น บ้านเลขที่ '12')
-      if (term.length < 2) { 
+      if (term.length < 2) { // อนุญาตให้ค้นหาเลขสั้นๆ (เช่น บ้านเลขที่ '12')
         memberInfoDiv.style.display = 'none';
         return;
       }
@@ -868,10 +859,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       memberNameSpan.innerHTML = `กำลังค้นหา... ${spinner}`;
 
       try {
-          const url = `../api/search_member.php?term=${encodeURIComponent(term)}`; // [แก้ไข] ใช้ /api/
+          const url = `/api/search_member.php?term=${encodeURIComponent(term)}`; // [แก้ไข] ใช้ /admin/api/
           const res = await fetch(url);
           
-          // [แก้ไข] ลบ 's ที่เป็น Syntax Error ออก
           if (!res.ok) throw new Error('bad_status_' + res.status);
           
           const member = await res.json();
@@ -886,9 +876,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
               householdNoHidden.value = member.house_number || '';
               
               // อัปเดตค่าในช่องที่แสดงผล ให้เป็นค่าที่ค้นเจอ
-              if (member.house_number === term) {
+              // (เลือกค่าที่ตรงกับที่ค้นหา หรือใช้บ้านเลขที่ถ้ามี)
+              if (member.house_number && (term === member.house_number || term === member.phone)) {
+                 memberIdentifierInput.value = term; 
+              } else if (member.house_number) {
                  memberIdentifierInput.value = member.house_number;
-              } else if (member.phone.includes(term)) {
+              } else {
                  memberIdentifierInput.value = member.phone;
               }
 
@@ -898,10 +891,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
               memberNameSpan.textContent = 'ไม่พบสมาชิก';
 
               // ถ้าไม่เจอ ต้องส่งค่าที่ผู้ใช้กรอกไปตรงๆ
-              if (/^[0-9\s\-()+]+$/.test(term)) {
-                  customerPhoneHidden.value = term.replace(/\D+/g, '');
+              // [แก้ไข] Logic การแยกแยะ
+              const numericTerm = term.replace(/\D+/g, '');
+              if (/^[0-9\s\-()+]{9,}$/.test(term) && numericTerm.length >= 9) { // ถ้าดูเหมือนเบอร์โทร
+                  customerPhoneHidden.value = numericTerm;
                   householdNoHidden.value = ''; // ล้างค่าบ้านเลขที่
-              } else {
+              } else { // ถ้าดูเหมือนบ้านเลขที่ (หรืออื่นๆ)
                   householdNoHidden.value = term;
                   customerPhoneHidden.value = ''; // ล้างค่าเบอร์โทร
               }
