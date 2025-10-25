@@ -143,11 +143,17 @@ try {
                 'total_rebate_received' => 0.0
             ];
         }
-        $total_members = count($members_dividends);
-        $total_shares = array_sum(array_column($members_dividends, 'shares'));
-    } else {
-         $error_message = ($error_message ? $error_message . ' | ' : '') . "ไม่พบตารางสมาชิก (members, managers, committees) หรือตาราง users";
-    }
+        $total_members = 0;
+        $total_shares = 0;
+        foreach ($members_dividends as $member) {
+            if ($member['type'] === 'member') {
+                $total_members++;
+                $total_shares += $member['shares'];
+            }
+        }
+          } else {
+              $error_message = ($error_message ? $error_message . ' | ' : '') . "ไม่พบตารางสมาชิก (members, managers, committees) หรือตาราง users";
+          }
 
     // 4) จ่ายปันผลรายสมาชิก/งวด (Dividend Payments)
     if (table_exists($pdo, 'dividend_payments')) {
@@ -509,7 +515,8 @@ try {
                 <?php if (empty($members_dividends)): ?>
                     <tr><td colspan="7" class="text-center text-muted p-4">ไม่พบข้อมูลสมาชิก</td></tr>
                 <?php else: ?>
-                    <?php foreach($members_dividends as $key => $member): ?>
+                  <?php foreach($members_dividends as $key => $member): ?>
+                  <?php if ($member['type'] !== 'member') continue; // *** เพิ่มบรรทัดนี้เพื่อข้ามถ้าไม่ใช่ member *** ?>
                       <tr class="member-row"
                           data-member-key="<?= htmlspecialchars($key) ?>"
                           data-member-name="<?= htmlspecialchars($member['member_name']) ?>"
