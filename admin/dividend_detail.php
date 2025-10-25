@@ -169,12 +169,46 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 </nav>
 
 <div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasSidebar">
+    <div class="offcanvas-header">
+        <h5 class="offcanvas-title"><?= htmlspecialchars($site_name) ?></h5>
+        <button class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
     </div>
+    <div class="offcanvas-body sidebar">
+        <div class="side-brand mb-2"><h3><span>Admin</span></h3></div>
+        <nav class="sidebar-menu">
+            <a href="admin_dashboard.php"><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
+            <a href="inventory.php"><i class="bi bi-fuel-pump-fill"></i>จัดการน้ำมัน</a>
+            <a href="manager.php"><i class="bi bi-shield-lock-fill"></i> ผู้บริหาร</a>
+            <a href="committee.php"><i class="fas fa-users-cog"></i> กรรมการ</a>
+            <a href="employee.php"><i class="bi bi-person-badge-fill"></i>พนักงาน</a>
+            <a href="member.php"><i class="bi bi-people-fill"></i> สมาชิก</a>
+            <a href="finance.php"><i class="bi bi-wallet2"></i> การเงินและบัญชี</a>
+            <a class="active" href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
+            <a href="report.php"><i class="fa-solid fa-chart-line"></i>รายงาน</a>
+            <a href="setting.php"><i class="bi bi-gear-fill"></i> ตั้งค่าระบบ</a>
+        </nav>
+        <a class="logout mt-auto" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
+    </div>
+</div>
 
 <div class="container-fluid">
     <div class="row">
         <aside class="col-lg-2 d-none d-lg-flex flex-column sidebar py-4">
-            </aside>
+            <div class="side-brand mb-3"><h3><span>Admin</span></h3></div>
+            <nav class="sidebar-menu flex-grow-1">
+                <a href="admin_dashboard.php"><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
+                <a href="inventory.php"><i class="bi bi-fuel-pump-fill"></i>จัดการน้ำมัน</a>
+                <a href="manager.php"><i class="bi bi-shield-lock-fill"></i> ผู้บริหาร</a>
+                <a href="committee.php"><i class="fas fa-users-cog"></i> กรรมการ</a>
+                <a href="employee.php"><i class="bi bi-person-badge-fill"></i> พนักงาน</a>
+                <a href="member.php"><i class="bi bi-people-fill"></i> สมาชิก</a>
+                <a href="finance.php"><i class="fa-solid fa-wallet"></i> การเงินและบัญชี</a>
+                <a class="active" href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
+                <a href="report.php"><i class="fa-solid fa-chart-line"></i> รายงาน</a>
+                <a href="setting.php"><i class="bi bi-gear-fill"></i> ตั้งค่า</a>
+            </nav>
+            <a class="logout" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
+        </aside>
 
         <main class="col-lg-10 p-4">
             <div class="d-flex justify-content-between align-items-center mb-4">
