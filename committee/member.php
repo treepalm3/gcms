@@ -155,10 +155,8 @@ foreach ($members as $m) {
     <div class="side-brand mb-2"><h3><span>Committee</span></h3></div>
     <nav class="sidebar-menu">
       <a href="committee_dashboard.php"><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
-      <a href="report.php"><i class="fa-solid fa-chart-line"></i>รายงาน</a>
       <a href="finance.php"><i class="fa-solid fa-wallet"></i> การเงินและบัญชี</a>
       <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
-      <a href="points.php"><i class="fa-solid fa-star"></i> คะแนนสะสม</a>
       <a href="member.php" class="active"><i class="bi bi-people-fill"></i> สมาชิก</a>
       <a href="profile.php"><i class="fa-solid fa-user-gear"></i> โปรไฟล์</a>
     </nav>
@@ -173,10 +171,8 @@ foreach ($members as $m) {
       <div class="side-brand mb-3"><h3><span>Committee</span></h3></div>
       <nav class="sidebar-menu flex-grow-1">
         <a href="committee_dashboard.php"><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
-        <a href="report.php"><i class="fa-solid fa-chart-line"></i>รายงาน</a>
         <a href="finance.php"><i class="fa-solid fa-wallet"></i> การเงินและบัญชี</a>
         <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
-        <a href="points.php"><i class="fa-solid fa-star"></i> คะแนนสะสม</a>
         <a href="member.php" class="active"><i class="bi bi-people-fill"></i> สมาชิก</a>
         <a href="profile.php"><i class="fa-solid fa-user-gear"></i> โปรไฟล์</a>
       </nav>
