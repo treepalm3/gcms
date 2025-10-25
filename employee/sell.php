@@ -868,7 +868,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       memberNameSpan.innerHTML = `กำลังค้นหา... ${spinner}`;
 
       try {
-          const url = `/api/search_member.php?term=${encodeURIComponent(term)}`; // [แก้ไข] ใช้ /api/
+          const url = `api/search_member.php?term=${encodeURIComponent(term)}`; // [แก้ไข] ใช้ /api/
           const res = await fetch(url);
           
           // [แก้ไข] ลบ 's ที่เป็น Syntax Error ออก
