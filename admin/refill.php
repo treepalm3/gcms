@@ -96,7 +96,7 @@ try {
       (station_id, fuel_id, tank_id, receive_id, supplier_id, lot_code, received_at,
        observed_liters, corrected_liters, unit_cost, tax_per_liter, other_costs,
        notes, created_by, invoice_no)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) 
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) 
   ");
   // [แก้ไข] ลบ density_kg_per_l, temp_c (ไม่มีใน SQL ของคุณ)
   
@@ -200,3 +200,4 @@ try {
   header('Location: inventory.php?err=' . urlencode($msg));
 }
 ?>
+
