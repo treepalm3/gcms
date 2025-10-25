@@ -81,6 +81,7 @@ try {
     $today_str = date('Y-m-d');
     
     // --- 1. สถิติวันนี้ (จาก v_sales_gross_profit) ---
+    // Note: ตาราง v_sales_gross_profit ต้องมีอยู่จริง
     $stmt_today_profit = $pdo->prepare("
         SELECT 
             COALESCE(SUM(v.total_amount), 0) AS revenue,
@@ -111,6 +112,8 @@ try {
 
 
     // --- 2. สมาชิกและหุ้น (รวมทุกประเภท) ---
+    // [แก้ไข] Query นี้ถูกแก้ไขในรอบก่อนหน้าให้ดึงจาก members เท่านั้น แต่ในโค้ดต้นฉบับยังเป็น UNION ALL
+    // ใช้ Query เดิมเพื่อความเข้ากันได้กับโค้ดที่รันอยู่ในปัจจุบัน
     $stmt_members = $pdo->query("
         SELECT 
             SUM(total_users) as total_members,
@@ -124,6 +127,7 @@ try {
         ) as all_shareholders
     ");
     $member_data = $stmt_members->fetch(PDO::FETCH_ASSOC);
+    // Note: หากมีปัญหาการนับซ้ำในตารางสมาชิก ต้องแก้ที่ Query นี้ใน dividend.php
     $stats['total_members'] = (int)($member_data['total_members'] ?? 0);
     $stats['total_shares'] = (int)($member_data['total_shares'] ?? 0);
 
@@ -166,23 +170,24 @@ try {
     }
 
     // --- 5. กราฟวงกลม (สัดส่วนน้ำมัน 30 วัน) ---
+    // [แก้ไข Query] ใช้ LEFT JOIN และ COALESCE เพื่อให้กราฟขึ้นได้ แม้ว่า fuel_id ใน sales_items จะเป็น NULL
     $day30_start = date('Y-m-d', strtotime('-29 days'));
     $stmt_pie = $pdo->prepare("
         SELECT 
-            fp.fuel_name, 
+            COALESCE(fp.fuel_name, si.fuel_type, 'ไม่ระบุประเภท') AS fuel_display_name, 
             COALESCE(SUM(si.liters), 0) AS total_liters
         FROM sales_items si
         JOIN sales s ON si.sale_id = s.id
-        JOIN fuel_prices fp ON si.fuel_id = fp.fuel_id AND s.station_id = fp.station_id
+        LEFT JOIN fuel_prices fp ON si.fuel_id = fp.fuel_id AND s.station_id = fp.station_id
         WHERE s.station_id = :sid
           AND s.sale_date >= :start_date
-        GROUP BY fp.fuel_name
+        GROUP BY fuel_display_name
         HAVING total_liters > 0
         ORDER BY total_liters DESC
     ");
     $stmt_pie->execute([':sid' => $station_id, ':start_date' => $day30_start]);
      foreach ($stmt_pie->fetchAll(PDO::FETCH_ASSOC) as $r) { 
-        $pie_labels[] = $r['fuel_name']; 
+        $pie_labels[] = $r['fuel_display_name']; 
         $pie_values[] = (float)$r['total_liters']; 
     }
 
@@ -205,15 +210,11 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    <!-- [แก้ไข] ใช้ไฟล์ CSS ภายนอก -->
     <link rel="stylesheet" href="../assets/css/admin_dashboard.css" />
     
-    <!-- [ลบ] ลบ <style> inline ทั้งหมดออก -->
-
 </head>
 
 <body>
-  <!-- Navbar -->
   <nav class="navbar navbar-dark bg-primary">
     <div class="container-fluid">
       <div class="d-flex align-items-center gap-2">
@@ -232,7 +233,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     </div>
   </nav>
 
-  <!-- Offcanvas Sidebar -->
   <div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasSidebar" aria-labelledby="offcanvasLabel">
     <div class="offcanvas-header">
       <h5 class="offcanvas-title" id="offcanvasLabel"><?= htmlspecialchars($site_name) ?></h5>
@@ -257,7 +257,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 
   <div class="container-fluid">
     <div class="row">
-      <!-- Sidebar Desktop -->
       <aside class="col-lg-2 d-none d-lg-flex flex-column sidebar py-4">
         <div class="side-brand mb-3"><h3><span>Admin</span></h3></div>
         <nav class="sidebar-menu flex-grow-1">
@@ -274,9 +273,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
         <a class="logout" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
       </aside>
 
-      <!-- Content -->
       <main class="col-lg-10 p-4 fade-in">
-        <!-- [แก้ไข] ใช้ .main-header จาก CSS หลัก -->
         <div class="main-header">
             <h2><i class="fa-solid fa-border-all"></i> ภาพรวม</h2>
         </div>
@@ -285,7 +282,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
             <div class="alert alert-danger"><?= htmlspecialchars($error_message) ?></div>
         <?php endif; ?>
 
-        <!-- [แก้ไข] ใช้ .stats-grid (4 ช่อง) จาก CSS หลัก -->
         <div class="stats-grid mb-4">
           <div class="stat-card">
             <h5><i class="bi bi-cash-coin text-success"></i> สรุปยอดขายวันนี้</h5>
@@ -305,7 +301,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
           <div class="stat-card d-flex flex-column">
             <h5><i class="bi bi-box-seam text-warning"></i> กำไรคงเหลือในถัง</h5>
             <h3 class="text-warning">฿<?= nf($stats['potential_profit'], 2) ?></h3>
-            <!-- [แก้ไข] ปรับปุ่มให้เข้ากับ CSS หลัก -->
             <a href="profit_report.php" class="btn btn-sm btn-outline-warning mt-2 stretched-link" style="max-width: 140px;">
                 ดูรายละเอียด Lot <i class="bi bi-arrow-right-short"></i>
             </a>
@@ -320,7 +315,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
           </div>
         </div>
 
-        <!-- Charts (ใช้ .stat-card) -->
         <div class="row g-4 mt-4 row-charts">
           <div class="col-12 col-lg-6">
             <div class="stat-card h-100">
@@ -449,4 +443,3 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   </script>
 </body>
 </html>
-
