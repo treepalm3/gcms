@@ -22,7 +22,7 @@ if (!isset($pdo)) {
 
 // --- รับค่าค้นหา ---
 $term = trim($_GET['term'] ?? '');
-if (empty($term)) { // [แก้ไข] ไม่ต้องเช็คความยาวขั้นต่ำ ให้ค้นหาได้เลย
+if (empty($term)) {
     $response['error'] = 'Search term is empty';
     echo json_encode($response);
     exit;
@@ -33,17 +33,17 @@ $phone_term = preg_replace('/\D+/', '', $term); // เบอร์โทร (ต
 $house_term = $term; // บ้านเลขที่ (ค้นหาตรงๆ)
 
 try {
-    // [แก้ไข] เพิ่ม TRIM() รอบคอลัมน์ house_number และ REGEXP_REPLACE รอบ phone
-    $phone_compare_sql = "REGEXP_REPLACE(u.phone, '[^0-9]', '') = :phone_term";
-    $house_compare_sql = "TRIM(m.house_number) = :house_term";
+    // [แก้ไข] ใช้ชื่อ Placeholder ที่ไม่ซ้ำกันสำหรับ UNION
     
+    $phone_compare_sql = "REGEXP_REPLACE(u.phone, '[^0-9]', '')";
+
     // 1. ค้นหาใน Members
     $sql_member = "
         SELECT u.full_name, u.phone, m.house_number, m.member_code, 'สมาชิก' as type_th
         FROM members m
         JOIN users u ON m.user_id = u.id
         WHERE m.is_active = 1 
-          AND ({$house_compare_sql} OR {$phone_compare_sql})
+          AND (TRIM(m.house_number) = :house_term_1 OR {$phone_compare_sql} = :phone_term_1)
     ";
     
     // 2. ค้นหาใน Managers
@@ -51,7 +51,7 @@ try {
         SELECT u.full_name, u.phone, mg.house_number, CONCAT('MGR-', mg.id) as member_code, 'ผู้บริหาร' as type_th
         FROM managers mg
         JOIN users u ON mg.user_id = u.id
-        WHERE (TRIM(mg.house_number) = :house_term OR {$phone_compare_sql})
+        WHERE (TRIM(mg.house_number) = :house_term_2 OR {$phone_compare_sql} = :phone_term_2)
     ";
     
     // 3. ค้นหาใน Committees
@@ -59,7 +59,7 @@ try {
         SELECT u.full_name, u.phone, c.house_number, c.committee_code as member_code, 'กรรมการ' as type_th
         FROM committees c
         JOIN users u ON c.user_id = u.id
-        WHERE (TRIM(c.house_number) = :house_term OR {$phone_compare_sql})
+        WHERE (TRIM(c.house_number) = :house_term_3 OR {$phone_compare_sql} = :phone_term_3)
     ";
 
     // รวม Query
@@ -73,9 +73,15 @@ try {
     ";
     
     $stmt = $pdo->prepare($sql_union);
+    
+    // [แก้ไข] ส่งค่า Parameter ให้ครบทุกตัว (แม้ว่าจะเป็นค่าเดียวกัน)
     $stmt->execute([
-        ':house_term' => $house_term,
-        ':phone_term' => $phone_term
+        ':house_term_1' => $house_term,
+        ':phone_term_1' => $phone_term,
+        ':house_term_2' => $house_term,
+        ':phone_term_2' => $phone_term,
+        ':house_term_3' => $house_term,
+        ':phone_term_3' => $phone_term
     ]);
     
     $member = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -85,7 +91,7 @@ try {
         echo json_encode([
             'full_name'    => $member['full_name'],
             'phone'        => $member['phone'],
-            'house_number' => $member['house_number'], // ส่งค่าเดิมที่มีช่องว่างกลับไป (ถ้ามี)
+            'house_number' => $member['house_number'],
             'member_code'  => $member['member_code'],
             'type_th'      => $member['type_th']
         ]);
