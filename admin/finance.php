@@ -814,11 +814,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
               <i class="bi bi-receipt-cutoff me-2"></i>รายการขาย (<?= (int)$total_sales_all ?>)
             </button>
           </li>
-          <li class="nav-item" role="presentation">
-            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#receive-panel" type="button" role="tab">
-              <i class="bi bi-cart-dash-fill me-2"></i>รายการจ่าย (<?= (int)$total_pay_all ?>)
-            </button>
-          </li>
         </ul>
 
         <div class="tab-content" id="inventoryTabContent">
@@ -1020,82 +1015,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                   <div class="btn-group">
                     <a class="btn btn-sm btn-outline-secondary <?= $page_sales<=1?'disabled':'' ?>" href="?<?= htmlspecialchars($qs_prev) ?>#price-panel">ก่อนหน้า</a>
                     <a class="btn btn-sm btn-outline-primary  <?= $page_sales>=$total_pages_sales?'disabled':'' ?>" href="?<?= htmlspecialchars($qs_next) ?>#price-panel">ถัดไป</a>
-                  </div>
-                </div>
-              <?php endif; ?>
-            </div>
-          </div>
-
-          <div class="tab-pane fade" id="receive-panel" role="tabpanel">
-            <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
-              <div class="d-flex flex-wrap gap-2">
-                <div class="input-group" style="max-width:320px;">
-                  <span class="input-group-text"><i class="bi bi-search"></i></span>
-                  <input type="search" id="paySearch" class="form-control" placeholder="ค้นหา: รหัส/รายละเอียด/ผู้บันทึก">
-                </div>
-                <button id="payShowAll" class="btn btn-outline-secondary me-1" title="ล้างตัวกรอง">
-                  <i class="bi bi-arrow-clockwise"></i>
-                </button>
-              </div>
-            </div>
-            <div class="card shadow-sm">
-              <div class="card-header bg-light border-bottom-0">
-                <div class="d-flex justify-content-between align-items-center">
-                  <h6 class="mb-0"><i class="bi bi-credit-card-2-back me-1"></i> รายการจ่าย: รับเข้าคลัง/เข้าถัง (แสดง 7 รายการล่าสุด)</h6>
-                  <span class="muted">รวม <?= (int)$pay_count ?> รายการ | ยอดจ่าย ฿<?= nf($pay_total) ?></span>
-                </div>
-              </div>
-              <div class="card-body p-0">
-                <div class="table-responsive">
-                  <table class="table table-hover align-middle mb-0" id="payTable">
-                    <thead class="table-light"><tr><th>วันที่</th><th>ประเภท</th><th>รหัส</th><th>รายละเอียด</th><th class="text-end">จำนวนเงิน</th><th class="d-none d-lg-table-cell">ผู้บันทึก</th><th class="text-end">ใบเสร็จ</th></tr></thead>
-                    <tbody>
-                      <?php if (empty($pay_rows_display)): ?>
-                        <tr><td colspan="7" class="text-center text-muted p-4">ไม่พบข้อมูลใน่ชวงวันที่ที่เลือก</td></tr>
-                      <?php endif; ?>
-                      <?php foreach($pay_rows_display as $r):
-                        $rtype = ($r['origin']==='LOT' ? 'lot' : 'receive');
-                        $rurl  = $rtype==='lot'
-                          ? ('lot_view.php?code='.urlencode($r['code']))
-                          : ('receive_view.php?id='.urlencode($r['code']));
-                      ?>
-                        <tr
-                          data-receipt-type="<?= $rtype ?>"
-                          data-receipt-code="<?= htmlspecialchars($r['code']) ?>"
-                          data-receipt-url="<?= htmlspecialchars($rurl) ?>"
-                          data-origin="<?= $r['origin']==='LOT' ? 'เข้าถัง' : 'เข้าคลัง' ?>"
-                          data-code="<?= htmlspecialchars($r['code']) ?>"
-                          data-description="<?= htmlspecialchars($r['description']) ?>"
-                          data-amount="<?= htmlspecialchars($r['amount']) ?>"
-                          data-created-by="<?= htmlspecialchars($r['created_by']) ?>"
-                          data-date="<?= htmlspecialchars(date('Y-m-d', strtotime($r['date']))) ?>"
-                        >
-                          <td class="ps-3"><?= htmlspecialchars(date('d/m/Y H:i', strtotime($r['date']))) ?></td>
-                          <td><?= $r['origin']==='LOT' ? 'เข้าถัง' : 'เข้าคลัง' ?></td>
-                          <td><b><?= htmlspecialchars($r['code']) ?></b></td>
-                          <td><?= htmlspecialchars($r['description']) ?></td>
-                          <td class="text-end"><span class="amount-expense">-฿<?= nf($r['amount']) ?></span></td>
-                          <td class="d-none d-lg-table-cell"><?= htmlspecialchars($r['created_by']) ?></td>
-                          <td class="text-end pe-3">
-                            <button class="btn btn-sm btn-outline-secondary btnReceipt" title="ดูใบเสร็จ">
-                              <i class="bi bi-receipt"></i>
-                            </button>
-                          </td>
-                        </tr>
-                      <?php endforeach; ?>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <?php if ($total_pages_pay > 1):
-                $qs_prev = http_build_query(array_merge($base_qs, ['tab'=>'payments','page_pay'=>$page_pay-1]));
-                $qs_next = http_build_query(array_merge($base_qs, ['tab'=>'payments','page_pay'=>$page_pay+1]));
-              ?>
-                <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
-                  <small class="text-muted">แสดง <?= $pay_from_i ?>–<?= $pay_to_i ?> จาก <?= (int)$total_pay_all ?> รายการ</small>
-                  <div class="btn-group">
-                    <a class="btn btn-sm btn-outline-secondary <?= $page_pay<=1?'disabled':'' ?>" href="?<?= htmlspecialchars($qs_prev) ?>#receive-panel">ก่อนหน้า</a>
-                    <a class="btn btn-sm btn-outline-primary  <?= $page_pay>=$total_pages_pay?'disabled':'' ?>" href="?<?= htmlspecialchars($qs_next) ?>#receive-panel">ถัดไป</a>
                   </div>
                 </div>
               <?php endif; ?>
