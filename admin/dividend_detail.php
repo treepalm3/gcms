@@ -1,5 +1,5 @@
 <?php
-// admin/dividend_detail.php — แสดงรายละเอียดงวดปันผล
+// admin/dividend_detail.php — แสดงรายละเอียดงวดปันผล (แก้ไขการ Join เพื่อลดความซ้ำซ้อน)
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 
@@ -35,13 +35,13 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-// ===== [แก้ไข] Helpers (ต้องมีฟังก์ชัน d() ที่นี่) =====
+// ===== Helpers =====
 if (!function_exists('nf')) {
     function nf($n, $d = 2) { return number_format((float)$n, $d, '.', ','); }
 }
 if (!function_exists('d')) {
     function d($s, $fmt = 'd/m/Y') {
-        if (empty($s)) { // ตรวจสอบค่าว่างหรือ null ก่อน
+        if (empty($s)) {
             return '-';
         }
         $t = strtotime($s);
@@ -50,7 +50,6 @@ if (!function_exists('d')) {
 }
 // ===== [สิ้นสุด Helpers] =====
 
-// [แก้ไข] รับค่า period_id จาก URL
 $period_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $period_details = null;
 $payments = [];
@@ -76,6 +75,7 @@ if ($period_id <= 0) {
             $error_message = "ไม่พบข้อมูลงวดปันผล ID #" . $period_id;
         } else {
             // 2) ดึงรายการจ่ายปันผลสำหรับงวดนี้ (รวมข้อมูลสมาชิก)
+            // [แก้ไข] ปรับปรุง Query เพื่อ Join ข้อมูลสมาชิกทุกคนที่ปรากฏในตาราง payments ผ่าน user_id
             $stmt_payments = $pdo->prepare("
                 SELECT
                     dp.id as payment_id,
@@ -85,20 +85,17 @@ if ($period_id <= 0) {
                     dp.dividend_amount,
                     dp.payment_status,
                     dp.paid_at,
-                    COALESCE(u.full_name, CONCAT('Unknown ', dp.member_type, ' #', dp.member_id)) AS member_name,
-                    CASE dp.member_type
-                        WHEN 'member' THEN m.member_code
-                        WHEN 'manager' THEN CONCAT('MGR-', LPAD(mg.id, 3, '0'))
-                        WHEN 'committee' THEN c.committee_code
-                        ELSE CONCAT('UNK-', dp.member_id)
-                    END AS member_code
+                    u.full_name AS member_name,
+                    -- ใช้ COALESCE เพื่อหา user_id ที่ถูกต้องจากทุกตารางโปรไฟล์
+                    COALESCE(m.member_code, c.committee_code, CONCAT('MGR-', LPAD(mg.id, 3, '0')), CONCAT('UNK-', dp.member_id)) AS member_code,
+                    COALESCE(m.user_id, mg.user_id, c.user_id) AS primary_user_id
                 FROM dividend_payments dp
+                -- Join กับตารางโปรไฟล์ทั้งหมดเพื่อหา user_id
                 LEFT JOIN members m ON dp.member_type = 'member' AND dp.member_id = m.id
                 LEFT JOIN managers mg ON dp.member_type = 'manager' AND dp.member_id = mg.id
                 LEFT JOIN committees c ON dp.member_type = 'committee' AND dp.member_id = c.id
-                LEFT JOIN users u ON (dp.member_type = 'member' AND m.user_id = u.id)
-                                  OR (dp.member_type = 'manager' AND mg.user_id = u.id)
-                                  OR (dp.member_type = 'committee' AND c.user_id = u.id)
+                -- Join users ครั้งเดียวด้วย user_id ที่ได้จากตารางโปรไฟล์
+                LEFT JOIN users u ON COALESCE(m.user_id, mg.user_id, c.user_id) = u.id
                 WHERE dp.period_id = :period_id
                 ORDER BY member_code ASC
             ");
@@ -265,7 +262,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                             <div class="col-sm-6"><strong>กำไรสุทธิ (ฐาน):</strong> ฿<?= nf($period_details['total_profit'], 2) ?></div>
                             <div class="col-sm-6"><strong>อัตราปันผล:</strong> <?= nf($period_details['dividend_rate'], 1) ?>%</div>
                             <div class="col-sm-6"><strong>ช่วงเวลา:</strong> <?= d($period_details['start_date']) ?> - <?= d($period_details['end_date']) ?></div>
-                            <div class="col-sm-6"><strong>วันที่จ่าย:</strong> <?= d($period_details['payment_date']) // <-- บรรทัดนี้ที่เคยมีปัญหา ?></div>
+                            <div class="col-sm-6"><strong>วันที่จ่าย:</strong> <?= d($period_details['payment_date']) ?></div>
                             <div class="col-sm-6"><strong>สร้างเมื่อ:</strong> <?= d($period_details['created_at']) ?></div>
                             <div class="col-sm-6"><strong>ผู้อนุมัติ:</strong> <?= htmlspecialchars($period_details['approved_by'] ?: '-') ?></div>
                         </div>
@@ -525,8 +522,6 @@ function exportPayments(year) {
 // ========== ACTIONS (AJAX) ==========
 // [สำคัญ] ไฟล์นี้จะเรียกไปที่ 'dividend_action.php' (ไฟล์เดียว)
 async function sendAction(action, data) {
-    // [แก้ไข] ตรวจสอบว่ามีไฟล์ dividend_action.php หรือยัง
-    // ถ้ายังไม่มี ให้ใช้ไฟล์เดิม
     const actionFile = 'dividend_action.php'; // <--- !!! ต้องสร้างไฟล์นี้ !!!
 
     try {
