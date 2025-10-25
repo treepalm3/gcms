@@ -28,11 +28,14 @@ if (empty($term)) {
     exit;
 }
 
-$phone_term = preg_replace('/\D+/', '', $term); 
-$house_term = $term;
+// เตรียมค่าสำหรับค้นหา
+$phone_term = preg_replace('/\D+/', '', $term); // เบอร์โทร (ตัวเลขล้วน)
+$house_term = $term; // บ้านเลขที่ (ค้นหาตรงๆ)
 
 try {
-    $phone_compare_sql = "REGEXP_REPLACE(u.phone, '[^0-9]', '') = :phone_term";
+    // [แก้ไข] ใช้ชื่อ Placeholder ที่ไม่ซ้ำกันสำหรับ UNION
+    
+    $phone_compare_sql = "REGEXP_REPLACE(u.phone, '[^0-9]', '')";
 
     // 1. ค้นหาใน Members
     $sql_member = "
@@ -75,10 +78,15 @@ try {
     ";
     
     $stmt = $pdo->prepare($sql_union);
+    
+    // [แก้ไข] ส่งค่า Parameter ให้ครบทุกตัว (แม้ว่าจะเป็นค่าเดียวกัน)
     $stmt->execute([
-        ':house_term_1' => $house_term, ':phone_term_1' => $phone_term,
-        ':house_term_2' => $house_term, ':phone_term_2' => $phone_term,
-        ':house_term_3' => $house_term, ':phone_term_3' => $phone_term
+        ':house_term_1' => $house_term,
+        ':phone_term_1' => $phone_term,
+        ':house_term_2' => $house_term,
+        ':phone_term_2' => $phone_term,
+        ':house_term_3' => $house_term,
+        ':phone_term_3' => $phone_term
     ]);
     
     $member = $stmt->fetch(PDO::FETCH_ASSOC);
