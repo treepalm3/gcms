@@ -185,7 +185,6 @@ $avg_salary   = ($has_salary && $total>0) ? $total_salary / $total : 0.0;
         <a href="member.php"><i class="bi bi-people-fill"></i> สมาชิก</a>
         <a href="finance.php"><i class="bi bi-wallet2"></i> การเงินและบัญชี</a>
         <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
-        <a href="report.php"><i class="fa-solid fa-chart-line"></i>รายงาน</a>
         <a href="setting.php"><i class="bi bi-gear-fill"></i> ตั้งค่า</a>
       </nav>
       <a class="logout mt-auto" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
@@ -205,7 +204,6 @@ $avg_salary   = ($has_salary && $total>0) ? $total_salary / $total : 0.0;
           <a href="member.php"><i class="bi bi-people-fill"></i> สมาชิก</a>
           <a href="finance.php"><i class="fa-solid fa-wallet"></i> การเงินและบัญชี</a>
           <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
-          <a href="report.php"><i class="fa-solid fa-chart-line"></i> รายงาน</a>
           <a href="setting.php"><i class="bi bi-gear-fill"></i> ตั้งค่า</a>
         </nav>
         <a class="logout" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket me-1"></i>ออกจากระบบ</a>
