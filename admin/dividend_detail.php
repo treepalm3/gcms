@@ -1,5 +1,5 @@
 <?php
-// admin/dividend_detail.php — แสดงรายละเอียดงวดปันผล (แก้ไขการ Join เพื่อลดความซ้ำซ้อน)
+// admin/dividend_detail.php — แสดงรายละเอียดงวดปันผล (แก้ไขการ Join เพื่อลดความซ้ำซ้อนและแก้ Deprecated Error)
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 
@@ -75,7 +75,7 @@ if ($period_id <= 0) {
             $error_message = "ไม่พบข้อมูลงวดปันผล ID #" . $period_id;
         } else {
             // 2) ดึงรายการจ่ายปันผลสำหรับงวดนี้ (รวมข้อมูลสมาชิก)
-            // [แก้ไข] ปรับปรุง Query เพื่อ Join ข้อมูลสมาชิกทุกคนที่ปรากฏในตาราง payments ผ่าน user_id
+            // ใช้ COALESCE ในการ Join users ครั้งเดียว เพื่อป้องกันการนับซ้ำ
             $stmt_payments = $pdo->prepare("
                 SELECT
                     dp.id as payment_id,
@@ -333,32 +333,33 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                                         <?php foreach($payments as $index => $p):
                                             $status_class = $p['payment_status'] === 'paid' ? 'status-paid' : 'status-pending';
                                             $status_text = $p['payment_status'] === 'paid' ? 'จ่ายแล้ว' : 'รอจ่าย';
-                                            $type_class = 'type-' . htmlspecialchars($p['member_type']);
+                                            $type_class = 'type-' . htmlspecialchars($p['member_type'] ?? 'unknown');
                                             $type_text = [
                                                 'member' => 'สมาชิก',
                                                 'manager' => 'ผู้บริหาร',
-                                                'committee' => 'กรรมการ'
-                                            ][$p['member_type']] ?? 'ไม่ทราบ';
+                                                'committee' => 'กรรมการ',
+                                                'unknown' => 'ไม่ทราบ'
+                                            ][$p['member_type'] ?? 'unknown'] ?? 'ไม่ทราบ';
                                         ?>
-                                        <tr data-status="<?= htmlspecialchars($p['payment_status']) ?>"
-                                            data-name="<?= htmlspecialchars($p['member_name']) ?>"
-                                            data-code="<?= htmlspecialchars($p['member_code']) ?>">
+                                        <tr data-status="<?= htmlspecialchars($p['payment_status'] ?? 'pending') ?>"
+                                            data-name="<?= htmlspecialchars($p['member_name'] ?? 'ไม่ระบุ') ?>"
+                                            data-code="<?= htmlspecialchars($p['member_code'] ?? 'UNK-'.($p['member_id'] ?? '')) ?>">
                                             <td><?= $index + 1 ?></td>
-                                            <td><strong><?= htmlspecialchars($p['member_code']) ?></strong></td>
-                                            <td><?= htmlspecialchars($p['member_name']) ?></td>
+                                            <td><strong><?= htmlspecialchars($p['member_code'] ?? 'UNK-'.($p['member_id'] ?? '')) ?></strong></td>
+                                            <td><?= htmlspecialchars($p['member_name'] ?? 'ไม่ระบุ') ?></td>
                                             <td class="text-center">
                                                 <span class="member-type-badge <?= $type_class ?>"><?= $type_text ?></span>
                                             </td>
                                             <td class="text-center">
-                                                <span class="badge bg-secondary rounded-pill"><?= number_format($p['shares_at_time']) ?></span>
+                                                <span class="badge bg-secondary rounded-pill"><?= number_format($p['shares_at_time'] ?? 0) ?></span>
                                             </td>
                                             <td class="text-end">
-                                                <strong class="text-success">฿<?= nf($p['dividend_amount'], 2) ?></strong>
+                                                <strong class="text-success">฿<?= nf($p['dividend_amount'] ?? 0, 2) ?></strong>
                                             </td>
                                             <td class="text-center">
                                                 <span class="<?= $status_class ?>"><?= $status_text ?></span>
                                                 <?php if ($p['paid_at']): ?>
-                                                    <br><small class="text-muted"><?= date('d/m/y H:i', strtotime($p['paid_at'])) ?></small>
+                                                    <br><small class="text-muted"><?= d($p['paid_at'], 'd/m/y H:i') ?></small>
                                                 <?php endif; ?>
                                             </td>
                                             <td class="text-end">
@@ -374,7 +375,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                                                 </button>
                                                 <?php endif; ?>
                                                  <button class="btn btn-sm btn-outline-info py-0 px-1" title="ดูประวัติสมาชิก"
-                                                    onclick="viewMemberHistory('<?= htmlspecialchars($p['member_type'].'_'.$p['member_id']) ?>')">
+                                                    onclick="viewMemberHistory('<?= htmlspecialchars($p['member_type'] ?? 'unknown').'_'.(int)$p['member_id'] ?>')">
                                                     <i class="bi bi-clock-history"></i>
                                                  </button>
                                             </td>
@@ -449,15 +450,17 @@ const $ = (s, p=document) => p.querySelector(s);
 const $$ = (s, p=document) => [...p.querySelectorAll(s)];
 
 const membersDataLite = <?= json_encode(array_map(function($p){
+    // ใช้เทคนิค ?? เพื่อป้องกัน Deprecated
+    $memberType = $p['member_type'] ?? 'unknown';
     return [
-        'key' => $p['member_type'].'_'.$p['member_id'],
-        'code' => $p['member_code'],
-        'name' => $p['member_name'],
+        'key' => $memberType.'_'.($p['member_id'] ?? ''),
+        'code' => $p['member_code'] ?? 'UNK-'.($p['member_id'] ?? ''),
+        'name' => $p['member_name'] ?? 'ไม่ระบุ',
         'type_th' => [
             'member' => 'สมาชิก',
             'manager' => 'ผู้บริหาร',
             'committee' => 'กรรมการ'
-        ][$p['member_type']] ?? 'ไม่ทราบ'
+        ][$memberType] ?? 'ไม่ทราบ'
     ];
 }, $payments), JSON_UNESCAPED_UNICODE) ?>;
 
