@@ -240,6 +240,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 </head>
 
 <body>
+  <!-- Navbar -->
   <nav class="navbar navbar-dark bg-primary">
     <div class="container-fluid">
       <div class="d-flex align-items-center gap-2">
@@ -258,6 +259,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     </div>
   </nav>
 
+  <!-- Offcanvas Sidebar -->
   <div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasSidebar" aria-labelledby="offcanvasLabel">
     <div class="offcanvas-header">
       <h5 class="offcanvas-title" id="offcanvasLabel"><?= htmlspecialchars($site_name) ?></h5>
@@ -283,6 +285,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 
   <div class="container-fluid">
     <div class="row">
+      <!-- Sidebar Desktop -->
       <aside class="col-lg-2 d-none d-lg-flex flex-column sidebar py-4">
         <div class="side-brand mb-3"><h3><span>Admin</span></h3></div>
         <nav class="sidebar-menu flex-grow-1">
@@ -300,6 +303,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
         <a class="logout" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
       </aside>
 
+      <!-- Content -->
       <main class="col-lg-10 p-4 fade-in">
         <div class="main-header mb-4">
             <h2><i class="fa-solid fa-border-all"></i> ภาพรวมแดชบอร์ด</h2>
@@ -309,6 +313,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
             <div class="alert alert-danger"><?= htmlspecialchars($error_message) ?></div>
         <?php endif; ?>
 
+        <!-- [แก้ไข] Stats Grid (4 ช่อง) -->
         <div class="stats-grid mb-4">
           <div class="stat-card">
             <h5><i class="bi bi-cash-coin text-success"></i> สรุปยอดขายวันนี้</h5>
@@ -324,6 +329,8 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                 ต้นทุน: ฿<?= nf($stats['today_cogs'], 2) ?>
             </p>
           </div>
+          
+          <!-- [เพิ่ม] การ์ดกำไรคงเหลือ พร้อมปุ่ม -->
           <div class="stat-card d-flex flex-column">
             <h5><i class="bi bi-box-seam text-warning"></i> กำไรคงเหลือในถัง</h5>
             <h3 class="text-warning">฿<?= nf($stats['potential_profit'], 2) ?></h3>
@@ -331,6 +338,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                 ดูรายละเอียด <i class="bi bi-arrow-right-short"></i>
             </a>
           </div>
+          
           <div class="stat-card">
             <h5><i class="bi bi-people-fill text-secondary"></i> สมาชิก/หุ้น</h5>
             <h3 class="text-secondary mb-0"><?= nf($stats['total_members'], 0) ?> <small>คน</small></h3>
@@ -341,6 +349,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
         </div>
 
 
+        <!-- Charts (คงเดิม) -->
         <div class="row g-4 mt-4">
           <div class="col-12 col-lg-6">
             <div class="stat-card h-100">
@@ -376,6 +385,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script>
+    // [เพิ่ม] ฟังก์ชัน nf() เวอร์ชัน JavaScript
     function nf(number, decimals = 0) {
         const num = parseFloat(number) || 0;
         return num.toLocaleString('th-TH', {
@@ -389,6 +399,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     const pieLabels = <?= json_encode($pie_labels, JSON_UNESCAPED_UNICODE) ?>;
     const pieValues = <?= json_encode($pie_values, JSON_UNESCAPED_UNICODE) ?>;
 
+    // Global Chart Config
     Chart.defaults.font.family = "'Prompt', sans-serif";
     Chart.defaults.plugins.legend.position = 'bottom';
     Chart.defaults.plugins.tooltip.backgroundColor = '#212529';
