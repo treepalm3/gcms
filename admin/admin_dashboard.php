@@ -142,7 +142,6 @@ try {
         $stmt_profit_remain->execute([':sid' => $station_id]);
         $stats['potential_profit'] = (float)$stmt_profit_remain->fetchColumn();
     } catch (Throwable $e) {
-        // View v_fuel_lots_current อาจยังไม่มี
         error_log("Could not query v_fuel_lots_current: " . $e->getMessage());
         $stats['potential_profit'] = 0.0;
     }
@@ -208,9 +207,10 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
     <link rel="stylesheet" href="../assets/css/admin_dashboard.css" />
     <style>
+        /* [แก้ไข] ปรับ Grid ให้รองรับ 4 ช่อง */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); /* ปรับ minmax */
             gap: 1.5rem;
         }
         .stat-card {
@@ -240,7 +240,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 </head>
 
 <body>
-  <!-- Navbar -->
   <nav class="navbar navbar-dark bg-primary">
     <div class="container-fluid">
       <div class="d-flex align-items-center gap-2">
@@ -259,7 +258,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     </div>
   </nav>
 
-  <!-- Offcanvas Sidebar -->
   <div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasSidebar" aria-labelledby="offcanvasLabel">
     <div class="offcanvas-header">
       <h5 class="offcanvas-title" id="offcanvasLabel"><?= htmlspecialchars($site_name) ?></h5>
@@ -285,7 +283,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 
   <div class="container-fluid">
     <div class="row">
-      <!-- Sidebar Desktop -->
       <aside class="col-lg-2 d-none d-lg-flex flex-column sidebar py-4">
         <div class="side-brand mb-3"><h3><span>Admin</span></h3></div>
         <nav class="sidebar-menu flex-grow-1">
@@ -303,7 +300,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
         <a class="logout" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
       </aside>
 
-      <!-- Content -->
       <main class="col-lg-10 p-4 fade-in">
         <div class="main-header mb-4">
             <h2><i class="fa-solid fa-border-all"></i> ภาพรวมแดชบอร์ด</h2>
@@ -313,49 +309,38 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
             <div class="alert alert-danger"><?= htmlspecialchars($error_message) ?></div>
         <?php endif; ?>
 
-        <!-- [แก้ไข] Stats Grid (6 ช่อง) -->
         <div class="stats-grid mb-4">
           <div class="stat-card">
-            <h5><i class="bi bi-cash-coin text-success"></i> รายได้วันนี้</h5>
+            <h5><i class="bi bi-cash-coin text-success"></i> สรุปยอดขายวันนี้</h5>
             <h3 class="text-success">฿<?= nf($stats['today_revenue'], 2) ?></h3>
-            <p class="text-muted mb-0"><?= nf($stats['today_bills'], 0) ?> บิล</p>
+            <p class="text-muted mb-0">
+                <?= nf($stats['today_liters'], 2) ?> ลิตร (<?= nf($stats['today_bills'], 0) ?> บิล)
+            </p>
           </div>
           <div class="stat-card">
-            <h5><i class="bi bi-receipt text-danger"></i> ต้นทุนน้ำมัน (วันนี้)</h5>
-            <h3 class="text-danger">฿<?= nf($stats['today_cogs'], 2) ?></h3>
-            <p class="text-muted mb-0">ต้นทุนขาย (COGS)</p>
-          </div>
-          <div class="stat-card">
-            <h5><i class="bi bi-graph-up-arrow text-primary"></i> กำไรขั้นต้น (วันนี้)</h5>
+            <h5><i class="bi bi-graph-up-arrow text-primary"></i> สรุปกำไรวันนี้</h5>
             <h3 class="text-primary">฿<?= nf($stats['today_profit'], 2) ?></h3>
-            <p class="text-muted mb-0">รายได้ - ต้นทุน</p>
+            <p class="text-muted mb-0">
+                ต้นทุน: ฿<?= nf($stats['today_cogs'], 2) ?>
+            </p>
           </div>
-          
-          <!-- [เพิ่ม] การ์ดกำไรคงเหลือ พร้อมปุ่ม -->
           <div class="stat-card d-flex flex-column">
             <h5><i class="bi bi-box-seam text-warning"></i> กำไรคงเหลือในถัง</h5>
             <h3 class="text-warning">฿<?= nf($stats['potential_profit'], 2) ?></h3>
-            <p class="text-muted mb-0 flex-grow-1">กำไรที่คาดว่าจะได้ (ถ้าขายหมด)</p>
-            <a href="profit_report.php" class="btn btn-sm btn-outline-warning mt-3 stretched-link">
-                ดูรายละเอียด Lot <i class="bi bi-arrow-right-short"></i>
+            <a href="profit_report.php" class="btn btn-sm btn-outline-warning mt-2 stretched-link p-0" style="max-width: 120px;">
+                ดูรายละเอียด <i class="bi bi-arrow-right-short"></i>
             </a>
           </div>
-
-          <div class="stat-card">
-            <h5><i class="bi bi-fuel-pump-fill text-info"></i> ยอดขาย (วันนี้)</h5>
-            <h3 class="text-info mb-0"><?= nf($stats['today_liters'], 2) ?> <small>ลิตร</small></h3>
-            <p class="text-muted mb-0">รวมทุกประเภท</p>
-          </div>
-          
           <div class="stat-card">
             <h5><i class="bi bi-people-fill text-secondary"></i> สมาชิก/หุ้น</h5>
             <h3 class="text-secondary mb-0"><?= nf($stats['total_members'], 0) ?> <small>คน</small></h3>
-            <p class="text-muted mb-0">รวม <?= nf($stats['total_shares'], 0) ?> หุ้น</p>
+            <p class="text-muted mb-0">
+                รวม <?= nf($stats['total_shares'], 0) ?> หุ้น
+            </p>
           </div>
         </div>
 
 
-        <!-- Charts (คงเดิม) -->
         <div class="row g-4 mt-4">
           <div class="col-12 col-lg-6">
             <div class="stat-card h-100">
@@ -391,7 +376,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script>
-    // [เพิ่ม] ฟังก์ชัน nf() เวอร์ชัน JavaScript
     function nf(number, decimals = 0) {
         const num = parseFloat(number) || 0;
         return num.toLocaleString('th-TH', {
@@ -405,7 +389,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     const pieLabels = <?= json_encode($pie_labels, JSON_UNESCAPED_UNICODE) ?>;
     const pieValues = <?= json_encode($pie_values, JSON_UNESCAPED_UNICODE) ?>;
 
-    // Global Chart Config
     Chart.defaults.font.family = "'Prompt', sans-serif";
     Chart.defaults.plugins.legend.position = 'bottom';
     Chart.defaults.plugins.tooltip.backgroundColor = '#212529';
@@ -450,7 +433,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
         barCtx.canvas.parentNode.innerHTML = '<div class="alert alert-light text-center h-100 d-flex align-items-center justify-content-center">ไม่มีข้อมูลยอดขายรายเดือน</div>';
     }
 
-
     // Pie/Doughnut
     const pieCtx = document.getElementById('pieChart')?.getContext('2d');
     if (pieCtx && pieValues.length > 0) {
@@ -481,7 +463,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     } else if (pieCtx) {
         pieCtx.canvas.parentNode.innerHTML = '<div class="alert alert-light text-center h-100 d-flex align-items-center justify-content-center">ไม่มีข้อมูลสัดส่วนน้ำมัน</div>';
     }
-    
   </script>
 </body>
 </html>
