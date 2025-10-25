@@ -1,5 +1,5 @@
 <?php
-// admin/rebate_detail.php — แสดงรายละเอียดงวดเฉลี่ยคืน
+// admin/rebate_detail.php — 
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 
