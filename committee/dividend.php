@@ -3,7 +3,7 @@
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 
-// ===== Guard & DB =====
+/* ===== Guard & DB ===== */
 if (!isset($_SESSION['user_id'])) {
   header('Location: /index/login.php?err=โปรดเข้าสู่ระบบก่อน'); exit();
 }
@@ -13,7 +13,7 @@ require_once $dbFile; // ต้องมี $pdo
 if (!isset($pdo) || !($pdo instanceof PDO)) { die('เชื่อมต่อฐานข้อมูลไม่สำเร็จ: ไม่พบตัวแปร $pdo'); }
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-// ===== Role check =====
+/* ===== Role check ===== */
 try {
   $current_name = $_SESSION['full_name'] ?? 'กรรมการ';
   $current_role = $_SESSION['role'] ?? 'guest';
@@ -23,21 +23,22 @@ try {
 } catch (Throwable $e) {
   header('Location: /index/login.php?err=เกิดข้อผิดพลาดของระบบ'); exit();
 }
-// CSRF token not strictly needed for read-only, but kept for consistency
+
+// อ่านอย่างเดียว แต่คง CSRF ไว้สำหรับ endpoint ย่อยบางอย่าง
 if (empty($_SESSION['csrf_token'])) { $_SESSION['csrf_token'] = bin2hex(random_bytes(32)); }
 
-// ===== Helpers =====
+/* ===== Helpers ===== */
 if (!function_exists('nf')) {
     function nf($n, $d = 2) { return number_format((float)$n, $d, '.', ','); }
 }
 if (!function_exists('d')) {
     function d($s, $fmt = 'd/m/Y') {
-        if (empty($s) || $s === '0000-00-00' || $s === '0000-00-00 00:00:00') return '-'; // [ปรับปรุง] Handle zero dates
+        if (empty($s) || strpos($s, '0000-00-00') === 0) return '-';
         $t = strtotime($s);
         return $t ? date($fmt, $t) : '-';
     }
 }
-if (!function_exists('table_exists')) { // [เพิ่ม] Check function exists before declaring
+if (!function_exists('table_exists')) {
     function table_exists(PDO $pdo, string $table): bool {
       try {
         $db = $pdo->query("SELECT DATABASE()")->fetchColumn();
@@ -48,17 +49,15 @@ if (!function_exists('table_exists')) { // [เพิ่ม] Check function exis
     }
 }
 
-// ===== Site settings =====
+/* ===== Site settings ===== */
 $site_name = 'สหกรณ์ปั๊มน้ำมันบ้านภูเขาทอง';
-$stationId = 1; // Default station ID
 try {
   $st = $pdo->prepare("SELECT setting_value, comment FROM settings WHERE setting_name='station_id' LIMIT 1");
   $st->execute();
   if ($r = $st->fetch(PDO::FETCH_ASSOC)) {
-      $stationId = (int)$r['setting_value'];
       $site_name = $r['comment'] ?: $site_name;
   }
-} catch (Throwable $e) {} // Ignore errors, use defaults
+} catch (Throwable $e) {}
 
 $role_th_map = [
   'admin'=>'ผู้ดูแลระบบ', 'manager'=>'ผู้บริหาร',
@@ -68,19 +67,20 @@ $role_th_map = [
 $current_role_th = $role_th_map[$current_role] ?? 'ผู้ใช้งาน';
 $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 
-// ===== Initialize data variables =====
+/* ===== Initialize data variables ===== */
 $dividend_periods = [];
 $rebate_periods = [];
-$members_dividends = []; // Use combined key 'type_id' e.g., 'member_123'
+$members_dividends = []; // keyed by 'type_id' => [...]
 $error_message = null;
-$total_dividend_paid = 0.0;
-$pending_dividend = 0.0;
-$total_rebate_paid = 0.0;
-$pending_rebate = 0.0;
-$total_members = 0;
-$total_shares = 0;
 
-// ===== Main Data Fetching Block =====
+$total_dividend_paid = 0.0;
+$pending_dividend    = 0.0;
+$total_rebate_paid   = 0.0;
+$pending_rebate      = 0.0;
+$total_members = 0;
+$total_shares  = 0;
+
+/* ===== Main Data Fetching Block ===== */
 try {
     // 1) งวดปันผล (Dividend Periods)
     if (table_exists($pdo, 'dividend_periods')) {
@@ -102,67 +102,54 @@ try {
             FROM rebate_periods
             ORDER BY `year` DESC, id DESC
         ")->fetchAll(PDO::FETCH_ASSOC);
-    } // No error message if rebate table missing, just empty array
+    } // ไม่มี error ถ้าตารางยังไม่มี
 
-    // 3) รวมสมาชิกทุกประเภท (Members, Managers, Committees) using UNION ALL
-    $all_members_query = [];
-    if (table_exists($pdo, 'members') && table_exists($pdo, 'users')) {
-        $all_members_query[] = "(SELECT
-            m.id, u.id as user_id, m.member_code, u.full_name, m.shares, 'member' AS member_type, m.house_number
-        FROM members m JOIN users u ON m.user_id = u.id WHERE m.is_active = 1)";
-    }
-    if (table_exists($pdo, 'managers') && table_exists($pdo, 'users')) {
-         $all_members_query[] = "(SELECT
-            mg.id, u.id as user_id, CONCAT('MGR-', mg.id) AS member_code, u.full_name, mg.shares, 'manager' AS member_type, mg.house_number
-        FROM managers mg JOIN users u ON mg.user_id = u.id)";
-    }
-     if (table_exists($pdo, 'committees') && table_exists($pdo, 'users')) {
-        $all_members_query[] = "(SELECT
-            c.id, u.id as user_id, c.committee_code AS member_code, u.full_name, c.shares, 'committee' AS member_type, c.house_number
-        FROM committees c JOIN users u ON c.user_id = u.id)";
-    }
+    // 3) รวมสมาชิกทั้งหมดจาก members + role จริงจาก users
+    $all_members = [];
+    try {
+        $stmt = $pdo->query("
+            SELECT 
+                m.id AS member_id, 
+                m.member_code, 
+                u.full_name, 
+                COALESCE(m.shares,0) AS shares, 
+                u.role AS member_type,
+                m.user_id 
+            FROM members m 
+            JOIN users u ON m.user_id = u.id 
+            WHERE m.is_active = 1
+        ");
+        $all_members = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) { error_log("Error fetching members: " . $e->getMessage()); }
 
-    if (!empty($all_members_query)) {
-        $sql = implode(" UNION ALL ", $all_members_query);
-        $all_members_stmt = $pdo->query($sql);
+    usort($all_members, function($a, $b) { return strcmp($a['member_code'] ?? '', $b['member_code'] ?? ''); });
 
-        // Process members into the $members_dividends array
-        while ($row = $all_members_stmt->fetch(PDO::FETCH_ASSOC)) {
-            $key = $row['member_type'] . '_' . $row['id']; // e.g., 'member_1', 'manager_12'
-            $members_dividends[$key] = [
-                'id' => (int)$row['id'],
-                'user_id' => (int)$row['user_id'],
-                'code' => $row['member_code'],
-                'member_name' => $row['full_name'],
-                'shares' => (int)$row['shares'],
-                'type' => $row['member_type'],
-                'type_th' => $role_th_map[$row['member_type']] ?? 'อื่นๆ', // Use existing map
-                'payments' => [], // period_id => amount
-                'rebates' => [],  // period_id => amount
-                'total_received' => 0.0,
-                'total_rebate_received' => 0.0
-            ];
-        }
-        $total_members = 0;
-        $total_shares = 0;
-        foreach ($members_dividends as $member) {
-            if ($member['type'] === 'member') {
-                $total_members++;
-                $total_shares += $member['shares'];
-            }
-        }
-          } else {
-              $error_message = ($error_message ? $error_message . ' | ' : '') . "ไม่พบตารางสมาชิก (members, managers, committees) หรือตาราง users";
-          }
+    // สร้าง array สำหรับแสดงผล (key = "{type}_{member_id}")
+    foreach ($all_members as $row) {
+        $type = $row['member_type'] ?: 'member';
+        $key = $type . '_' . (int)$row['member_id'];
+        $members_dividends[$key] = [
+            'id' => (int)$row['member_id'],
+            'code' => (string)$row['member_code'],
+            'member_name' => (string)$row['full_name'],
+            'shares' => (int)$row['shares'],
+            'type' => $type,
+            'type_th' => ['member' => 'สมาชิก', 'manager' => 'ผู้บริหาร', 'committee' => 'กรรมการ', 'admin' => 'ผู้ดูแลระบบ'][$type] ?? 'อื่นๆ',
+            'payments' => [],
+            'rebates' => [],
+            'total_received' => 0.0,
+            'total_rebate_received' => 0.0
+        ];
+    }
 
     // 4) จ่ายปันผลรายสมาชิก/งวด (Dividend Payments)
     if (table_exists($pdo, 'dividend_payments')) {
         $payments_stmt = $pdo->query("
-            SELECT dp.member_id, dp.member_type, dp.period_id, dp.dividend_amount, dp.payment_status
-            FROM dividend_payments dp
+            SELECT member_id, member_type, period_id, dividend_amount, payment_status
+            FROM dividend_payments
         ");
         foreach ($payments_stmt->fetchAll(PDO::FETCH_ASSOC) as $payment) {
-            $key = $payment['member_type'] . '_' . $payment['member_id'];
+            $key = ($payment['member_type'] ?: 'member') . '_' . (int)$payment['member_id'];
             if (!isset($members_dividends[$key])) continue;
             $pid = (int)$payment['period_id'];
             $amt = (float)$payment['dividend_amount'];
@@ -178,11 +165,11 @@ try {
     // 5) จ่ายเฉลี่ยคืนรายสมาชิก/งวด (Rebate Payments)
     if (table_exists($pdo, 'rebate_payments')) {
         $rebate_payments_stmt = $pdo->query("
-            SELECT rp.member_id, rp.member_type, rp.period_id, rp.rebate_amount, rp.payment_status
-            FROM rebate_payments rp
+            SELECT member_id, member_type, period_id, rebate_amount, payment_status
+            FROM rebate_payments
         ");
         foreach ($rebate_payments_stmt->fetchAll(PDO::FETCH_ASSOC) as $payment) {
-            $key = $payment['member_type'] . '_' . $payment['member_id'];
+            $key = ($payment['member_type'] ?: 'member') . '_' . (int)$payment['member_id'];
             if (!isset($members_dividends[$key])) continue;
             $pid = (int)$payment['period_id'];
             $amt = (float)$payment['rebate_amount'];
@@ -191,13 +178,13 @@ try {
                 $members_dividends[$key]['total_rebate_received'] += $amt;
             }
         }
-    } // No error if missing, just means no rebate data
+    } // ไม่ error ถ้าไม่มี
 
-    // 6) Calculate Stats (Paid/Pending Dividends & Rebates)
+    // 6) Summary Stats
     if (table_exists($pdo, 'dividend_periods')) {
         $stats = $pdo->query("
             SELECT
-              COALESCE(SUM(CASE WHEN status = 'paid' THEN total_dividend_amount ELSE 0 END), 0) AS total_paid,
+              COALESCE(SUM(CASE WHEN status = 'paid'     THEN total_dividend_amount ELSE 0 END), 0) AS total_paid,
               COALESCE(SUM(CASE WHEN status = 'approved' THEN total_dividend_amount ELSE 0 END), 0) AS total_pending
             FROM dividend_periods
         ")->fetch(PDO::FETCH_ASSOC);
@@ -208,24 +195,28 @@ try {
     if (table_exists($pdo, 'rebate_periods')) {
         $rebate_stats = $pdo->query("
             SELECT
-              COALESCE(SUM(CASE WHEN status = 'paid' THEN total_rebate_budget ELSE 0 END), 0) as total_paid,
+              COALESCE(SUM(CASE WHEN status = 'paid'     THEN total_rebate_budget ELSE 0 END), 0) as total_paid,
               COALESCE(SUM(CASE WHEN status = 'approved' THEN total_rebate_budget ELSE 0 END), 0) as total_pending
             FROM rebate_periods
         ")->fetch(PDO::FETCH_ASSOC);
         $total_rebate_paid = (float)($rebate_stats['total_paid'] ?? 0);
-        $pending_rebate = (float)($rebate_stats['total_pending'] ?? 0);
+        $pending_rebate    = (float)($rebate_stats['total_pending'] ?? 0);
     }
+
+    // 7) Counters
+    $total_members = count($members_dividends);
+    $total_shares  = array_sum(array_map(fn($m)=>(int)$m['shares'], $members_dividends));
 
 } catch (Throwable $e) {
     $error_message = ($error_message ? $error_message . ' | ' : '') . "เกิดข้อผิดพลาดในการดึงข้อมูลหลัก: " . $e->getMessage();
-    // Reset data arrays on major failure
+    // Reset on failure
     $dividend_periods = [];
     $rebate_periods = [];
     $members_dividends = [];
     $total_members = 0;
     $total_shares = 0;
+    $total_dividend_paid = $pending_dividend = $total_rebate_paid = $pending_rebate = 0;
 }
-
 ?>
 <!DOCTYPE html>
 <html lang="th">
@@ -240,32 +231,20 @@ try {
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
   <link rel="stylesheet" href="../assets/css/admin_dashboard.css" />
   <style>
-    /* [ปรับปรุง] ใช้ CSS variables จาก admin_dashboard.css มากขึ้น */
     .stat-card h5 { font-size: 1rem; color: var(--bs-secondary-color); margin-bottom: 0.5rem; }
     .stat-card h3 { font-weight: 700; }
-
-    .status-paid, .status-approved, .status-pending { padding: 0.25rem 0.6rem; border-radius: 20px; font-size: 0.8rem; font-weight: 500; display: inline-block; }
-    .status-paid { background-color: var(--bs-success-bg-subtle); color: var(--bs-success-text-emphasis); }
-    .status-approved { background-color: var(--bs-warning-bg-subtle); color: var(--bs-warning-text-emphasis); }
-    .status-pending { background-color: var(--bs-secondary-bg-subtle); color: var(--bs-secondary-text-emphasis); } /* [แก้ไข] Pending เป็น secondary */
-
+    .status-paid,.status-approved,.status-pending{padding:.25rem .6rem;border-radius:20px;font-size:.8rem;font-weight:500;display:inline-block}
+    .status-paid{background-color:var(--bs-success-bg-subtle);color:var(--bs-success-text-emphasis)}
+    .status-approved{background-color:var(--bs-warning-bg-subtle);color:var(--bs-warning-text-emphasis)}
+    .status-pending{background-color:var(--bs-secondary-bg-subtle);color:var(--bs-secondary-text-emphasis)}
     .dividend-card{ border:1px solid var(--bs-border-color-translucent); border-radius: var(--bs-card-border-radius); transition:.25s; background:#fff; box-shadow: var(--bs-box-shadow-sm); }
-    .dividend-card:hover{ box-shadow: var(--bs-box-shadow); transform: translateY(-2px); } /* [แก้ไข] ใช้ shadow ปกติ */
+    .dividend-card:hover{ box-shadow: var(--bs-box-shadow); transform: translateY(-2px); }
     .dividend-amount{ font-size:1.5rem; font-weight:700; color: var(--bs-success); }
     .dividend-rate{ font-size:1.2rem; font-weight:600; color: var(--bs-primary); }
     .rebate-amount { font-size: 1.5rem; font-weight: 700; color: var(--bs-info-text-emphasis); }
     .rebate-rate { font-size: 1.2rem; font-weight: 600; color: var(--bs-info); }
-
-    .member-row:hover{ background-color: rgba(var(--bs-primary-rgb), .05); } /* [แก้ไข] ใช้ rgba */
-    .member-type-badge { font-size:.75rem; padding:.2rem .5rem; border-radius:12px; font-weight: 500;}
-    .type-member { background-color: var(--bs-primary-bg-subtle); color: var(--bs-primary-text-emphasis); }
-    .type-manager { background-color: var(--bs-info-bg-subtle); color: var(--bs-info-text-emphasis); }
-    .type-committee { background-color: var(--bs-secondary-bg-subtle); color: var(--bs-secondary-text-emphasis); }
-
-    /* [ลบ] .panel (ใช้ .stat-card) */
-    .nav-tabs .nav-link { font-weight: 600; }
-    .nav-tabs .nav-link.active { color: var(--bs-primary); border-bottom-color: var(--bs-primary); }
-    .table th { white-space: nowrap; } /* Prevent header wrapping */
+    .member-row:hover{ background-color: rgba(var(--bs-primary-rgb), .05); }
+    .table th { white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -328,7 +307,7 @@ try {
       <?php if ($error_message): ?>
         <div class="alert alert-danger alert-dismissible fade show" role="alert">
             <strong><i class="bi bi-exclamation-triangle-fill me-2"></i>เกิดข้อผิดพลาด:</strong> <?= htmlspecialchars($error_message) ?>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="ปิด"></button>
         </div>
       <?php endif; ?>
 
@@ -369,6 +348,7 @@ try {
       </ul>
 
       <div class="tab-content pt-3" id="dividendTabContent">
+        <!-- งวดปันผล -->
         <div class="tab-pane fade show active" id="periods-panel" role="tabpanel">
           <div class="stat-card mb-3">
               <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
@@ -384,8 +364,7 @@ try {
                   <?php else: ?>
                       <?php foreach($dividend_periods as $period):
                           $status_map = ['paid'=>'จ่ายแล้ว','approved'=>'อนุมัติ','pending'=>'รออนุมัติ'];
-                          $status_class_map = ['paid'=>'paid','approved'=>'approved','pending'=>'pending']; // Match CSS classes
-                      ?>
+                          $status_class_map = ['paid'=>'paid','approved'=>'approved','pending'=>'pending']; ?>
                       <div class="col-md-6 col-lg-4">
                         <div class="dividend-card h-100 p-3">
                           <div class="d-flex justify-content-between align-items-start mb-2">
@@ -420,6 +399,7 @@ try {
           </div>
         </div>
 
+        <!-- งวดเฉลี่ยคืน -->
         <div class="tab-pane fade" id="rebate-panel" role="tabpanel">
            <div class="stat-card mb-3">
               <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
@@ -436,6 +416,10 @@ try {
                       <?php foreach($rebate_periods as $period):
                           $status_map = ['paid'=>'จ่ายแล้ว','approved'=>'อนุมัติ','pending'=>'รออนุมัติ'];
                           $status_class_map = ['paid'=>'paid','approved'=>'approved','pending'=>'pending'];
+                          $rate_text = '-';
+                          if (($period['rebate_type'] ?? '') === 'fixed') { $rate_text = 'คงที่'; }
+                          elseif (!empty($period['rebate_per_baht']) && (float)$period['rebate_per_baht'] > 0) { $rate_text = '฿' . nf($period['rebate_per_baht'], 4) . '/บาท'; }
+                          elseif (!empty($period['rebate_value']) && (float)$period['rebate_value'] > 0) { $rate_text = nf($period['rebate_value'], 1) . '%'; }
                       ?>
                       <div class="col-md-6 col-lg-4">
                         <div class="dividend-card h-100 p-3">
@@ -451,15 +435,7 @@ try {
                           <div class="row text-center my-3">
                             <div class="col-6 border-end">
                               <small class="text-muted">อัตรา/งบ</small><br>
-                              <span class="rebate-rate">
-                                <?php
-                                  $rate_text = '-';
-                                  if (($period['rebate_type'] ?? '') === 'fixed') { $rate_text = 'คงที่'; }
-                                  elseif (!empty($period['rebate_per_baht']) && (float)$period['rebate_per_baht'] > 0) { $rate_text = '฿' . nf($period['rebate_per_baht'], 4) . '/บาท'; }
-                                  elseif (!empty($period['rebate_value']) && (float)$period['rebate_value'] > 0) { $rate_text = nf($period['rebate_value'], 1) . '%'; }
-                                  echo $rate_text;
-                                ?>
-                              </span>
+                              <span class="rebate-rate"><?= $rate_text ?></span>
                             </div>
                             <div class="col-6">
                               <small class="text-muted">ยอดรวม</small><br>
@@ -481,25 +457,29 @@ try {
           </div>
         </div>
 
-        <div class="tab-pane fade" id="members-panel" role="tabpanel">
-          <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
-            <div class="d-flex flex-wrap gap-2">
-              <div class="input-group" style="max-width:280px;">
-                <span class="input-group-text"><i class="bi bi-search"></i></span>
-                <input type="search" id="memberSearch" class="form-control" placeholder="ค้นหา รหัส/ชื่อ สมาชิก...">
-              </div>
-              <input type="number" id="minShares" class="form-control" placeholder="หุ้นขั้นต่ำ" min="0" style="max-width: 150px;">
-            </div>
-            <div class="d-flex gap-2">
-              <button class="btn btn-outline-primary" onclick="exportMembers()" <?= empty($members_dividends) ? 'disabled' : '' ?>>
-                  <i class="bi bi-filetype-csv me-1"></i> ส่งออก CSV
-              </button>
-            </div>
-          </div>
-
+        <!-- สมาชิก -->
+        <div class="tab-pane fade" id="members-panel" role="tabpanel" aria-labelledby="members-tab">
           <div class="stat-card">
+            <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
+              <h5 class="mb-0"><i class="bi bi-people-fill me-2"></i>ผู้ถือหุ้น (<?= nf($total_members,0) ?> คน)</h5>
+              <div class="d-flex flex-wrap gap-2">
+                <div class="input-group input-group-sm" style="max-width:200px;">
+                  <span class="input-group-text"><i class="bi bi-search"></i></span>
+                  <input type="search" id="memberSearch" class="form-control" placeholder="ค้นหาชื่อ/รหัส...">
+                </div>
+                <select id="filterMemberType" class="form-select form-select-sm" style="max-width:130px;">
+                  <option value="">ทุกประเภท</option>
+                  <option value="member">สมาชิก</option>
+                  <option value="manager">ผู้บริหาร</option>
+                  <option value="committee">กรรมการ</option>
+                  <option value="admin">ผู้ดูแลระบบ</option>
+                </select>
+                <input type="number" id="minShares" class="form-control form-control-sm" placeholder="หุ้นขั้นต่ำ" min="0" style="max-width:100px;">
+                <button class="btn btn-sm btn-outline-secondary" onclick="exportMembers()" title="ส่งออก CSV"><i class="bi bi-download"></i></button>
+              </div>
+            </div>
             <div class="table-responsive">
-              <table class="table table-hover align-middle mb-0" id="membersTable">
+              <table class="table table-striped table-hover align-middle mb-0" id="membersTable">
                 <thead>
                   <tr>
                     <th>รหัส</th>
@@ -512,48 +492,44 @@ try {
                   </tr>
                 </thead>
                 <tbody>
-                <?php if (empty($members_dividends)): ?>
-                    <tr><td colspan="7" class="text-center text-muted p-4">ไม่พบข้อมูลสมาชิก</td></tr>
-                <?php else: ?>
+                  <?php if (empty($members_dividends)): ?>
+                    <tr><td colspan="7" class="text-center text-muted p-4">ไม่มีข้อมูลผู้ถือหุ้น</td></tr>
+                  <?php endif; ?>
                   <?php foreach($members_dividends as $key => $member): ?>
-                  <?php if ($member['type'] !== 'member') continue; // *** เพิ่มบรรทัดนี้เพื่อข้ามถ้าไม่ใช่ member *** ?>
-                      <tr class="member-row"
-                          data-member-key="<?= htmlspecialchars($key) ?>"
-                          data-member-name="<?= htmlspecialchars($member['member_name']) ?>"
-                          data-shares="<?= (int)$member['shares'] ?>">
-                        <td><b><?= htmlspecialchars($member['code']) ?></b></td>
-                        <td><?= htmlspecialchars($member['member_name']) ?></td>
-                        <td class="text-center">
-                            <span class="member-type-badge type-<?= htmlspecialchars($member['type']) ?>"><?= htmlspecialchars($member['type_th']) ?></span>
-                        </td>
-                        <td class="text-center">
-                          <span class="badge bg-secondary rounded-pill"><?= nf((int)$member['shares'], 0) ?> หุ้น</span>
-                        </td>
-                        <td class="text-end"><strong class="text-success">฿<?= nf($member['total_received'] ?? 0, 2) ?></strong></td>
-                        <td class="text-end"><strong class="text-info">฿<?= nf($member['total_rebate_received'] ?? 0, 2) ?></strong></td>
-                        <td class="text-end">
-                          <button class="btn btn-sm btn-outline-info py-0 px-1" title="ดูประวัติ"
-                                  onclick="viewMemberHistory('<?= htmlspecialchars($key) ?>', <?= (int)$member['id'] ?>, '<?= htmlspecialchars($member['type']) ?>')">
-                            <i class="bi bi-clock-history"></i>
-                          </button>
-                        </td>
-                      </tr>
-                    <?php endforeach; ?>
-                <?php endif; ?>
+                  <tr class="member-row" data-member-key="<?= htmlspecialchars($key) ?>" data-member-name="<?= htmlspecialchars($member['member_name']) ?>" data-member-type="<?= htmlspecialchars($member['type']) ?>" data-shares="<?= (int)$member['shares'] ?>">
+                    <td><strong><?= htmlspecialchars($member['code']) ?></strong></td>
+                    <td><?= htmlspecialchars($member['member_name']) ?></td>
+                    <td class="text-center"><span class="badge rounded-pill <?php
+                        if ($member['type'] === 'member') echo 'text-bg-primary';
+                        elseif ($member['type'] === 'manager') echo 'text-bg-info';
+                        elseif ($member['type'] === 'committee') echo 'text-bg-secondary';
+                        elseif ($member['type'] === 'admin') echo 'text-bg-danger';
+                        else echo 'text-bg-light';
+                    ?>"><?= htmlspecialchars($member['type_th']) ?></span></td>
+                    <td class="text-center"><span class="badge bg-secondary rounded-pill"><?= number_format($member['shares']) ?></span></td>
+                    <td class="text-end"><strong class="text-success">฿<?= number_format($member['total_received'], 2) ?></strong></td>
+                    <td class="text-end"><strong class="text-info">฿<?= number_format($member['total_rebate_received'], 2) ?></strong></td>
+                    <td class="text-end">
+                      <button class="btn btn-sm btn-outline-info py-0 px-1" title="ดูประวัติ" onclick="viewMemberHistory('<?= htmlspecialchars($key) ?>')"><i class="bi bi-clock-history"></i></button>
+                    </td>
+                  </tr>
+                  <?php endforeach; ?>
                 </tbody>
               </table>
             </div>
           </div>
         </div>
 
-        </div></main>
+      </div><!-- /tab-content -->
+    </main>
   </div>
 </div>
 
 <footer class="footer">
-    <span class="text-muted">© <?= date('Y') ?> <?= htmlspecialchars($site_name) ?></span>
+  <span class="text-muted">© <?= date('Y') ?> <?= htmlspecialchars($site_name) ?></span>
 </footer>
 
+<!-- Modal: ประวัติสมาชิก -->
 <div class="modal fade" id="modalMemberHistory" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable"> <div class="modal-content">
       <div class="modal-header">
@@ -586,6 +562,7 @@ try {
   </div>
 </div>
 
+<!-- Toast -->
 <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1080">
   <div id="liveToast" class="toast align-items-center text-bg-dark border-0" role="status" aria-live="polite" aria-atomic="true">
     <div class="d-flex">
@@ -600,11 +577,6 @@ try {
 const $ = (s, p=document)=>p.querySelector(s);
 const $$ = (s, p=document)=>[...p.querySelectorAll(s)];
 
-// [แก้ไข] ใช้ key จาก PHP ('type_id')
-const membersData = <?= json_encode($members_dividends, JSON_UNESCAPED_UNICODE | JSON_NUMERIC_CHECK) ?>;
-const dividendPeriodsData = <?= json_encode($dividend_periods, JSON_UNESCAPED_UNICODE | JSON_NUMERIC_CHECK) ?>;
-const rebatePeriodsData = <?= json_encode($rebate_periods, JSON_UNESCAPED_UNICODE | JSON_NUMERIC_CHECK) ?>;
-
 // JS Helper: Format number
 function nf(number, decimals = 2) {
     const num = parseFloat(number) || 0;
@@ -613,33 +585,21 @@ function nf(number, decimals = 2) {
         maximumFractionDigits: decimals
     });
 }
-// JS Helper: Format money for charts (optional, kept for potential future use)
-function humanMoney(v){
-    const n = Number(v||0);
-    if (Math.abs(n) >= 1e6) return (n/1e6).toFixed(1)+'ล.';
-    if (Math.abs(n) >= 1e3) return (n/1e3).toFixed(1)+'พ.';
-    return nf(n, 0);
-}
-// JS Helper: Format date
 function formatDate(dateString) {
-    if (!dateString || dateString === '0000-00-00' || dateString.startsWith('0000-00-00')) {
-        return '-';
-    }
+    if (!dateString || dateString.startsWith('0000-00-00')) return '-';
     try {
         const date = new Date(dateString);
-        if (isNaN(date.getTime())) return '-'; // Check invalid date
+        if (isNaN(date.getTime())) return '-';
         const day = String(date.getDate()).padStart(2, '0');
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const year = date.getFullYear();
         return `${day}/${month}/${year}`;
     } catch (e) { return '-'; }
 }
-// JS Helper: Get status text
 function getStatusText(status) {
     const map = { paid: 'จ่ายแล้ว', approved: 'อนุมัติ', pending: 'รออนุมัติ' };
     return map[status] || status || '?';
 }
-// JS Helper: Get rebate rate text
 function getRebateRateText(period) {
     if (!period) return '-';
     if (period.rebate_type === 'fixed') return 'คงที่';
@@ -648,111 +608,44 @@ function getRebateRateText(period) {
     return '-';
 }
 
-// JS Helper: Show toast message
+// Toast
 const toast = (msg, success=true)=>{
   const t = $('#liveToast');
   if (!t) return;
   const body = t.querySelector('.toast-body');
   t.className = `toast align-items-center border-0 ${success ? 'text-bg-success' : 'text-bg-danger'}`;
   if (body) body.textContent = msg || 'ดำเนินการสำเร็จ';
-  try { // Add try-catch for safety
-      bootstrap.Toast.getOrCreateInstance(t, { delay: 2000 }).show();
-  } catch(e) { console.error("Toast error:", e); }
+  try { bootstrap.Toast.getOrCreateInstance(t, { delay: 2200 }).show(); } catch(e) {}
 };
+
+// Data from PHP
+const membersData         = <?= json_encode($members_dividends, JSON_UNESCAPED_UNICODE | JSON_NUMERIC_CHECK) ?>; // keyed
+const dividendPeriodsData = <?= json_encode($dividend_periods, JSON_UNESCAPED_UNICODE | JSON_NUMERIC_CHECK) ?>;
+const rebatePeriodsData   = <?= json_encode($rebate_periods, JSON_UNESCAPED_UNICODE | JSON_NUMERIC_CHECK) ?>;
 
 // --- Member Filtering ---
 const memberSearch = $('#memberSearch');
+const filterMemberType = $('#filterMemberType');
 const minShares = $('#minShares');
-const membersTableBody = $('#membersTable tbody');
-
 function normalize(s){ return (s||'').toString().toLowerCase().trim(); }
 function applyMemberFilter(){
-  if (!membersTableBody) return;
-  const k = normalize(memberSearch?.value);
+  const keyword = normalize(memberSearch?.value || '');
+  const type = filterMemberType?.value || '';
   const minS = parseInt(minShares?.value || '0', 10);
 
-  membersTableBody.querySelectorAll('tr.member-row').forEach(tr=>{
+  $$('#membersTable tbody tr.member-row').forEach(tr=>{
     const searchText = normalize(`${tr.dataset.memberKey} ${tr.dataset.memberName}`);
+    const memberType = tr.dataset.memberType;
     const shares = parseInt(tr.dataset.shares || '0', 10);
-    const okK = !k || searchText.includes(k);
-    const okS = isNaN(minS) || minS <= 0 ? true : shares >= minS;
-    tr.style.display = (okK && okS) ? '' : 'none';
+    const matchKeyword = !keyword || searchText.includes(keyword);
+    const matchType = !type || memberType === type;
+    const matchShares = isNaN(minS) || shares >= minS;
+    tr.style.display = (matchKeyword && matchType && matchShares) ? '' : 'none';
   });
 }
 memberSearch?.addEventListener('input', applyMemberFilter);
+filterMemberType?.addEventListener('change', applyMemberFilter);
 minShares?.addEventListener('input', applyMemberFilter);
-
-// --- View Member History Modal ---
-async function viewMemberHistory(memberKey, memberId, memberType) {
-  const member = membersData[memberKey];
-  if (!member) {
-      toast('ไม่พบข้อมูลสมาชิก', false);
-      return;
-  }
-
-  $('#historyMemberCode').textContent = member.code;
-  $('#historyMemberName').textContent = member.member_name;
-  $('#historyMemberType').textContent = member.type_th;
-
-  const historyTable = $('#memberHistoryTable');
-  const summaryDiv = $('#modalMemberHistory .history-summary');
-  historyTable.innerHTML = '<tr><td colspan="5" class="text-center p-3"><span class="spinner-border spinner-border-sm me-2"></span>กำลังโหลด...</td></tr>';
-  if(summaryDiv) summaryDiv.innerHTML = '';
-
-  const modalInstance = bootstrap.Modal.getOrCreateInstance('#modalMemberHistory');
-  modalInstance.show();
-
-  try {
-    const response = await fetch(`dividend_member_history.php?member_id=${memberId}&member_type=${memberType}`);
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    const data = await response.json();
-
-    if (data.ok && data.history.length > 0) {
-        const summary = data.summary;
-        if(summaryDiv) {
-             summaryDiv.innerHTML = `
-                <div class="alert alert-light border small mb-3">
-                    <div class="row text-center g-2">
-                        <div class="col-6 col-md-3"><small class="text-muted d-block">ปันผล(รับแล้ว)</small><strong class="text-success">${summary.total_received_formatted}</strong></div>
-                        <div class="col-6 col-md-3"><small class="text-muted d-block">ปันผล(ค้างรับ)</small><strong class="text-warning">${summary.total_pending_formatted}</strong></div>
-                        <div class="col-6 col-md-3"><small class="text-muted d-block">เฉลี่ยคืน(รับแล้ว)</small><strong class="text-info">${summary.total_rebate_received_formatted || '฿0.00'}</strong></div>
-                        <div class="col-6 col-md-3"><small class="text-muted d-block">เฉลี่ยคืน(ค้างรับ)</small><strong class="text-warning">${summary.total_rebate_pending_formatted || '฿0.00'}</strong></div>
-                    </div>
-                </div>`;
-        }
-
-        let html = '';
-        data.history.forEach(item => {
-            const statusClass = item.payment_status === 'paid' ? 'status-paid' : (item.payment_status === 'approved' ? 'status-approved' : 'status-pending');
-            const statusText = getStatusText(item.payment_status); // Use helper
-            const isDividend = item.type === 'ปันผล (หุ้น)';
-
-            html += `
-                <tr>
-                    <td><strong>ปี ${item.year}</strong></td>
-                    <td>${item.type}</td>
-                    <td class="text-end small">${item.details}</td>
-                    <td class="text-end"><strong class="${isDividend ? 'text-success' : 'text-info'}">${item.amount_formatted}</strong></td>
-                    <td class="text-center">
-                        <span class="${statusClass}">${statusText}</span>
-                        ${item.payment_date_formatted && item.payment_date_formatted !== '-' ? `<br><small class="text-muted">${item.payment_date_formatted}</small>` : ''}
-                    </td>
-                </tr>`;
-        });
-        historyTable.innerHTML = html;
-
-    } else if (data.ok) {
-        if(summaryDiv) summaryDiv.innerHTML = '';
-        historyTable.innerHTML = '<tr><td colspan="5" class="text-center text-muted p-4"><i class="bi bi-inbox fs-3 d-block mb-2 opacity-25"></i>ยังไม่มีประวัติการรับปันผล/เฉลี่ยคืน</td></tr>';
-    } else {
-        throw new Error(data.error || 'ไม่สามารถโหลดข้อมูลประวัติได้ (รูปแบบไม่ถูกต้อง)');
-    }
-  } catch (error) {
-    console.error("Fetch history error:", error);
-    if(summaryDiv) summaryDiv.innerHTML = '';
-    historyTable.innerHTML = `<tr><td colspan="5" class="text-center text-danger p-3"><i class="bi bi-exclamation-triangle me-1"></i>เกิดข้อผิดพลาด: ${error.message}</td></tr>`;
-  }
-}
 
 // --- Export Functions ---
 function exportDividends(type) {
@@ -764,10 +657,7 @@ function exportDividends(type) {
         if (type === 'dividend') {
             filename = 'committee_dividend_periods.csv';
             headers = ['ปี', 'ชื่องวด', 'วันที่เริ่ม', 'วันที่สิ้นสุด', 'กำไรสุทธิ', 'อัตรา (%)', 'หุ้น ณ เวลานั้น', 'ยอดปันผลรวม', 'สถานะ', 'วันที่จ่าย'];
-            if (!dividendPeriodsData || dividendPeriodsData.length === 0) {
-                toast('ไม่มีข้อมูลงวดปันผลให้ส่งออก', false);
-                return;
-            }
+            if (!dividendPeriodsData || dividendPeriodsData.length === 0) { toast('ไม่มีข้อมูลงวดปันผลให้ส่งออก', false); return; }
             dividendPeriodsData.forEach(p => {
                 dataRows.push([
                     p.year,
@@ -785,11 +675,8 @@ function exportDividends(type) {
         } else if (type === 'rebate') {
             filename = 'committee_rebate_periods.csv';
             headers = ['ปี', 'ชื่องวด', 'วันที่เริ่ม', 'วันที่สิ้นสุด', 'ยอดซื้อรวม(ฐาน)', 'ประเภทเฉลี่ยคืน', 'อัตรา/งบ', 'งบประมาณรวม', 'สถานะ', 'วันที่จ่าย'];
-             if (!rebatePeriodsData || rebatePeriodsData.length === 0) {
-                toast('ไม่มีข้อมูลงวดเฉลี่ยคืนให้ส่งออก', false);
-                return;
-            }
-           rebatePeriodsData.forEach(p => {
+            if (!rebatePeriodsData || rebatePeriodsData.length === 0) { toast('ไม่มีข้อมูลงวดเฉลี่ยคืนให้ส่งออก', false); return; }
+            rebatePeriodsData.forEach(p => {
                 dataRows.push([
                     p.year,
                     p.period_name || '',
@@ -803,25 +690,20 @@ function exportDividends(type) {
                     formatDate(p.payment_date)
                 ]);
             });
-        } else {
-            toast('ประเภทการส่งออกไม่ถูกต้อง', false);
-            return;
-        }
+        } else { toast('ประเภทการส่งออกไม่ถูกต้อง', false); return; }
 
         const rows = [headers, ...dataRows];
-        // CSV generation (same as before)
         const csv = rows.map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n');
-        const blob = new Blob(['\uFEFF' + csv], {type:'text/csv;charset=utf-8;'}); // Add BOM for Excel
+        const blob = new Blob(['\uFEFF' + csv], {type:'text/csv;charset=utf-8;'});
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = filename;
-        a.style.display = 'none'; // Hide the link
-        document.body.appendChild(a); // Append to body to ensure click works on Firefox
+        a.style.display = 'none';
+        document.body.appendChild(a);
         a.click();
-        document.body.removeChild(a); // Clean up
+        document.body.removeChild(a);
         URL.revokeObjectURL(a.href);
         toast(`ส่งออกข้อมูล ${type === 'dividend' ? 'งวดปันผล' : 'งวดเฉลี่ยคืน'} สำเร็จ`);
-
     } catch (e) {
         console.error(`Export error (${type}):`, e);
         toast(`เกิดข้อผิดพลาดในการส่งออกข้อมูล ${type}`, false);
@@ -839,20 +721,17 @@ function exportMembers() {
     const tds = tr.querySelectorAll('td');
     if(tds.length >= 7){
       rows.push([
-        tds[0].textContent.trim(), // รหัส
-        tds[1].textContent.trim(), // ชื่อ
-        tds[2].textContent.trim(), // ประเภท
-        tr.dataset.shares,         // หุ้น (จาก data attribute)
-        tds[4].textContent.replace(/[฿,]/g,'').trim(), // รวมปันผล
-        tds[5].textContent.replace(/[฿,]/g,'').trim()  // รวมเฉลี่ยคืน
+        tds[0].textContent.trim(),
+        tds[1].textContent.trim(),
+        tds[2].textContent.trim(),
+        tr.dataset.shares,
+        tds[4].textContent.replace(/[฿,]/g,'').trim(),
+        tds[5].textContent.replace(/[฿,]/g,'').trim()
       ]);
     }
   });
 
-  if (visibleRowCount === 0) {
-      toast('ไม่มีข้อมูลสมาชิกให้ส่งออก (ตามตัวกรองปัจจุบัน)', false);
-      return;
-  }
+  if (!visibleRowCount) { toast('ไม่มีข้อมูลสมาชิกให้ส่งออก (ตามตัวกรองปัจจุบัน)', false); return; }
 
   try {
       const csv = rows.map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n');
@@ -868,23 +747,91 @@ function exportMembers() {
   }
 }
 
+// --- View Member History Modal ---
+async function viewMemberHistory(memberKey) {
+  const member = membersData[memberKey];
+  if (!member) { toast('ไม่พบข้อมูลสมาชิก', false); return; }
+
+  $('#historyMemberCode').textContent = member.code || '-';
+  $('#historyMemberName').textContent = member.member_name || '-';
+  $('#historyMemberType').textContent = member.type_th || '-';
+
+  const historyTable = $('#memberHistoryTable');
+  const summaryDiv = $('#modalMemberHistory .history-summary');
+  historyTable.innerHTML = '<tr><td colspan="5" class="text-center p-3"><span class="spinner-border spinner-border-sm me-2"></span>กำลังโหลด...</td></tr>';
+  if(summaryDiv) summaryDiv.innerHTML = '';
+
+  bootstrap.Modal.getOrCreateInstance('#modalMemberHistory').show();
+
+  try {
+    const response = await fetch(`dividend_member_history.php?member_id=${member.id}&member_type=${member.type}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+
+    if (data.ok && data.history.length > 0) {
+        const summary = data.summary || {};
+        if(summaryDiv) {
+             summaryDiv.innerHTML = `
+                <div class="alert alert-light border small mb-3">
+                    <div class="row text-center g-2">
+                        <div class="col-6 col-md-3"><small class="text-muted d-block">ปันผล(รับแล้ว)</small><strong class="text-success">${summary.total_received_formatted||'฿0.00'}</strong></div>
+                        <div class="col-6 col-md-3"><small class="text-muted d-block">ปันผล(ค้างรับ)</small><strong class="text-warning">${summary.total_pending_formatted||'฿0.00'}</strong></div>
+                        <div class="col-6 col-md-3"><small class="text-muted d-block">เฉลี่ยคืน(รับแล้ว)</small><strong class="text-info">${summary.total_rebate_received_formatted||'฿0.00'}</strong></div>
+                        <div class="col-6 col-md-3"><small class="text-muted d-block">เฉลี่ยคืน(ค้างรับ)</small><strong class="text-warning">${summary.total_rebate_pending_formatted||'฿0.00'}</strong></div>
+                    </div>
+                </div>`;
+        }
+
+        historyTable.innerHTML = data.history.map(item=>{
+            const statusClass = item.payment_status === 'paid' ? 'status-paid' : (item.payment_status === 'approved' ? 'status-approved' : 'status-pending');
+            const statusText = getStatusText(item.payment_status);
+            const isDividend = item.type === 'ปันผล (หุ้น)';
+            const details = isDividend
+              ? `${(item.shares_at_time || 0).toLocaleString('th-TH')} หุ้น @ ${parseFloat(item.dividend_rate || 0).toFixed(1)}%`
+              : `ซื้อ ${nf(item.purchase_amount_at_time || 0)} @ ${nf(item.rebate_per_baht || 0, 4)}/บาท`;
+            return `
+              <tr>
+                  <td><strong>ปี ${item.year}</strong></td>
+                  <td>${item.type}</td>
+                  <td class="text-end small">${details}</td>
+                  <td class="text-end"><strong class="${isDividend ? 'text-success' : 'text-info'}">${item.amount_formatted || '฿0.00'}</strong></td>
+                  <td class="text-center">
+                      <span class="${statusClass}">${statusText}</span>
+                      ${item.payment_date_formatted && item.payment_date_formatted !== '-' ? `<br><small class="text-muted">${item.payment_date_formatted}</small>` : ''}
+                  </td>
+              </tr>`;
+        }).join('');
+
+    } else if (data.ok) {
+        if(summaryDiv) summaryDiv.innerHTML = '';
+        historyTable.innerHTML = '<tr><td colspan="5" class="text-center text-muted p-4"><i class="bi bi-inbox fs-3 d-block mb-2 opacity-25"></i>ยังไม่มีประวัติการรับปันผล/เฉลี่ยคืน</td></tr>';
+    } else {
+        throw new Error(data.error || 'ไม่สามารถโหลดข้อมูลประวัติได้ (รูปแบบไม่ถูกต้อง)');
+    }
+  } catch (error) {
+    console.error("Fetch history error:", error);
+    if(summaryDiv) summaryDiv.innerHTML = '';
+    historyTable.innerHTML = `<tr><td colspan="5" class="text-center text-danger p-3"><i class="bi bi-exclamation-triangle me-1"></i>เกิดข้อผิดพลาด: ${error.message}</td></tr>`;
+  }
+}
+
 // --- Tab Activation ---
 document.addEventListener('DOMContentLoaded', () => {
     const hash = window.location.hash || '#periods-panel';
-    const tabTrigger = $(`button[data-bs-target="${hash}"]`);
+    const tabTrigger = document.querySelector(`button[data-bs-target="${hash}"]`);
     if (tabTrigger) {
         try {
             bootstrap.Tab.getOrCreateInstance(tabTrigger).show();
         } catch(e) { console.error("Error showing tab:", e); }
     }
-     $$('button[data-bs-toggle="tab"]').forEach(tabEl => {
+     document.querySelectorAll('button[data-bs-toggle="tab"]').forEach(tabEl => {
         tabEl.addEventListener('shown.bs.tab', event => {
             if (event.target.dataset.bsTarget) {
                 history.pushState(null, null, event.target.dataset.bsTarget);
             }
         })
     });
-    // Apply initial filter if search/shares inputs exist
+    // Apply initial filter
     applyMemberFilter();
 });
 </script>
