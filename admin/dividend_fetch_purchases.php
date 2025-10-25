@@ -1,5 +1,5 @@
 <?php
-// dividend_fetch_purchases.php
+// admin/dividend_fetch_purchases.php
 session_start();
 header('Content-Type: application/json');
 date_default_timezone_set('Asia/Bangkok');
@@ -33,20 +33,33 @@ if (!$start_date || !$end_date) {
 }
 
 try {
-    // Query เดิมที่ใช้ดึงยอดซื้อ
+    // [แก้ไข] Query ให้ JOIN ด้วย "บ้านเลขที่"
     $sql_purchases = "
         SELECT 
             COALESCE(m.id, mg.id, c.id) AS member_id,
             COALESCE(m.member_type, mg.member_type, c.member_type) AS member_type,
             SUM(s.total_amount) as total_purchase
         FROM sales s
-        JOIN users u ON s.customer_phone = u.phone
-        LEFT JOIN (SELECT id, user_id, 'member' as member_type FROM members WHERE is_active = 1) m ON u.id = m.user_id
-        LEFT JOIN (SELECT id, user_id, 'manager' as member_type FROM managers) mg ON u.id = mg.user_id
-        LEFT JOIN (SELECT id, user_id, 'committee' as member_type FROM committees) c ON u.id = c.user_id
+        
+        LEFT JOIN (
+            SELECT id, house_number, 'member' as member_type 
+            FROM members WHERE is_active = 1 AND house_number IS NOT NULL AND house_number != ''
+        ) m ON s.household_no = m.house_number
+        
+        LEFT JOIN (
+            SELECT id, house_number, 'manager' as member_type
+            FROM managers WHERE house_number IS NOT NULL AND house_number != ''
+        ) mg ON s.household_no = mg.house_number
+        
+        LEFT JOIN (
+            SELECT id, house_number, 'committee' as member_type
+            FROM committees WHERE house_number IS NOT NULL AND house_number != ''
+        ) c ON s.household_no = c.house_number
+
         WHERE s.sale_date BETWEEN ? AND ?
-          AND s.customer_phone IS NOT NULL
-          AND COALESCE(m.id, mg.id, c.id) IS NOT NULL
+          AND s.household_no IS NOT NULL AND s.household_no != ''
+          AND COALESCE(m.id, mg.id, c.id) IS NOT NULL 
+        
         GROUP BY member_id, member_type
         HAVING total_purchase > 0
     ";
