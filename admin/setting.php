@@ -33,29 +33,13 @@ function save_settings(PDO $pdo, string $key, array $data): bool {
   return $st->execute([':k'=>$key, ':v'=>$json]);
 }
 
-// ดึง users จริงจากฐานข้อมูล
-function fetch_users(PDO $pdo): array {
-  // ปรับชื่อคอลัมน์ได้ตามสคีมาของคุณ
-  $sql = "
-    SELECT id, username, full_name, email, role, status,
-           COALESCE(last_login, created_at) AS last_login,
-           COALESCE(created_at, created_date) AS created_date
-    FROM users
-    ORDER BY id ASC
-  ";
-  try {
-    $rows = $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
-    // ทำความสะอาดค่าที่จำเป็น
-    foreach ($rows as &$r) {
-      $r['status'] = $r['status'] ?: 'active';
-      $r['last_login'] = $r['last_login'] ?: date('Y-m-d H:i:s');
-      $r['created_date'] = $r['created_date'] ?: date('Y-m-d');
-    }
-    return $rows;
-  } catch (Throwable $e) {
-    // ถ้าตารางหรือคอลัมน์ต่างชื่อ ให้แก้ SQL ด้านบนตามจริง
-    return [];
-  }
+// [ลบ] function fetch_users()
+
+// [เพิ่ม] เพิ่ม Helper function d() ที่ขาดหายไป
+function d($s, $fmt = 'd/m/Y H:i') { 
+    if (empty($s)) return '-';
+    $t = strtotime($s); 
+    return $t ? date($fmt, $t) : '-'; 
 }
 
 // ค่าเริ่มต้น (ใช้เมื่อ DB ยังไม่มีค่า หรือคีย์บางตัวไม่มี)
@@ -92,22 +76,16 @@ $security_defaults = [
   'audit_log_enabled' => true,
   'backup_frequency' => 'daily'
 ];
-$fuel_price_defaults = [
-  'auto_price_update' => false,
-  'price_source' => 'manual',
-  'price_update_time' => '06:00',
-  'markup_percentage' => 2.5,
-  'round_to_satang' => 25
-];
+// [ลบ] fuel_price_defaults
 
 // โหลดค่าจริงจาก DB (ถ้าไม่มีจะได้ defaults)
 $system_settings        = load_settings($pdo, 'system_settings',        $system_defaults);
 $notification_settings  = load_settings($pdo, 'notification_settings',  $notification_defaults);
 $security_settings      = load_settings($pdo, 'security_settings',      $security_defaults);
-$fuel_price_settings    = load_settings($pdo, 'fuel_price_settings',    $fuel_price_defaults);
+// [ลบ] load fuel_price_settings
 
-// ดึง users จริง
-$users_list = fetch_users($pdo);
+// [ลบ] ดึง users จริง
+// $users_list = fetch_users($pdo);
 
 // ใช้ชื่อไซต์จาก system_settings
 $site_name     = $system_settings['site_name'] ?? 'สหกรณ์ปั๊มน้ำมันบ้านภูเขาทอง';
@@ -127,21 +105,6 @@ try {
   exit();
 }
 
-if (empty($_SESSION['csrf_token'])) {
-$_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-}
-try {
-    // ผู้ใช้ปัจจุบัน
-    if (isset($_SESSION['user_id'])) {
-        $st = $pdo->prepare("SELECT full_name, role FROM users WHERE id=:id LIMIT 1");
-        $st->execute([':id' => $_SESSION['user_id']]);
-        if ($u = $st->fetch()) {
-            $current_name = $u['full_name'] ?: $current_name;
-            $role = $u['role'] ?: 'guest';
-        }
-    }
-} catch (Throwable $e) {}
-
 $role_th_map = [
   'admin'=>'ผู้ดูแลระบบ', 'manager'=>'ผู้บริหาร',
   'employee'=>'พนักงาน',    'member'=>'สมาชิกสหกรณ์',
@@ -156,7 +119,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ตั้งค่าระบบ | สหกรณ์ปั๊มน้ำมัน</title>
+  <title>ตั้งค่าระบบ | <?= htmlspecialchars($site_name) ?></title>
 
   <!-- Fonts & Icons -->
   <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
@@ -167,20 +130,27 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   <!-- Global theme -->
   <link rel="stylesheet" href="../assets/css/admin_dashboard.css" />
   <style>
+    /* สไตล์สำหรับหน้านี้โดยเฉพาะ */
     .setting-section {
-      border: 1px solid #e9ecef;
-      border-radius: 12px;
-      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
       margin-bottom: 20px;
+      box-shadow: var(--shadow);
     }
     .setting-header {
-      background: #f8f9fa;
-      border-radius: 12px 12px 0 0;
-      padding: 15px 20px;
-      border-bottom: 1px solid #e9ecef;
+      background: linear-gradient(180deg,#fff,rgba(226,212,183,.35));
+      border-radius: var(--radius) var(--radius) 0 0;
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .setting-header h6 {
+        margin-bottom: 0;
+        font-weight: 700;
+        color: var(--navy);
     }
     .setting-body {
-      padding: 20px;
+      padding: 1.25rem;
     }
     .setting-item {
       display: flex;
@@ -226,22 +196,18 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
       border-radius: 50%;
     }
     input:checked + .slider {
-      background-color: #0d6efd;
+      background-color: var(--mint); /* สี mint */
     }
     input:checked + .slider:before {
       transform: translateX(26px);
     }
     .status-active {
-      color: #198754;
+      color: var(--mint); /* สี mint */
       font-weight: 600;
     }
     .status-inactive {
-      color: #dc3545;
+      color: var(--amber); /* สี amber */
       font-weight: 600;
-    }
-    .last-backup {
-      color: #6c757d;
-      font-size: 0.9rem;
     }
     .nav-tabs .nav-link {
       color: var(--steel);
@@ -295,6 +261,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
       <a href="member.php"><i class="bi bi-people-fill"></i> สมาชิก</a>
       <a href="finance.php"><i class="bi bi-wallet2"></i> การเงินและบัญชี</a>
       <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
+      <a href="report.php"><i class="fa-solid fa-chart-line"></i>รายงาน</a>
       <a class="active" href="setting.php"><i class="bi bi-gear-fill"></i> ตั้งค่าระบบ</a>
     </nav>
     <a class="logout mt-auto" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
@@ -315,6 +282,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
         <a href="member.php"><i class="bi bi-people-fill"></i> สมาชิก</a>
         <a href="finance.php"><i class="fa-solid fa-wallet"></i> การเงินและบัญชี</a>
         <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
+        <a href="report.php"><i class="fa-solid fa-chart-line"></i> รายงาน</a>
         <a class="active" href="setting.php"><i class="bi bi-gear-fill"></i> ตั้งค่า</a>
       </nav>
       <a class="logout" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
@@ -333,11 +301,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
             <i class="bi bi-gear-fill me-2"></i>ทั่วไป
           </button>
         </li>
-        <li class="nav-item" role="presentation">
-          <button class="nav-link" id="users-tab" data-bs-toggle="tab" data-bs-target="#users-panel" type="button" role="tab">
-            <i class="bi bi-people-fill me-2"></i>ผู้ใช้งาน
-          </button>
-        </li>
+        <!-- [ลบ] แท็บผู้ใช้งาน -->
         <li class="nav-item" role="presentation">
           <button class="nav-link" id="notifications-tab" data-bs-toggle="tab" data-bs-target="#notifications-panel" type="button" role="tab">
             <i class="bi bi-bell-fill me-2"></i>การแจ้งเตือน
@@ -451,6 +415,10 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- [ลบ] Users Panel -->
 
         <!-- Notifications Panel -->
         <div class="tab-pane fade" id="notifications-panel" role="tabpanel">
@@ -558,10 +526,78 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
           </div>
         </div>
 
+        <!-- Security Panel -->
+        <div class="tab-pane fade" id="security-panel" role="tabpanel">
+          <div class="row g-4">
+            <div class="col-lg-6">
+              <div class="setting-section">
+                <div class="setting-header">
+                  <h6 class="mb-0"><i class="bi bi-shield-lock-fill me-2"></i>ตั้งค่าความปลอดภัย</h6>
+                </div>
+                <div class="setting-body">
+                  <div class="setting-item">
+                    <div>
+                      <strong>Two-Factor Auth (2FA)</strong>
+                      <div class="text-muted small">บังคับใช้การยืนยันตัวตนสองขั้นตอน</div>
+                    </div>
+                    <label class="switch">
+                      <input type="checkbox" <?= $security_settings['two_factor_auth'] ? 'checked' : '' ?>>
+                      <span class="slider"></span>
+                    </label>
+                  </div>
+                  <div class="setting-item">
+                    <div>
+                      <strong>จำกัด IP ที่อนุญาต</strong>
+                      <div class="text-muted small">จำกัดการเข้าถึงจาก IP ที่กำหนด</div>
+                    </div>
+                    <label class="switch">
+                      <input type="checkbox" <?= $security_settings['ip_whitelist_enabled'] ? 'checked' : '' ?>>
+                      <span class="slider"></span>
+                    </label>
+                  </div>
+                  <div class="setting-item">
+                    <div>
+                      <strong>เปิดใช้งาน Audit Log</strong>
+                      <div class="text-muted small">บันทึกการกระทำสำคัญของผู้ใช้</div>
+                    </div>
+                    <label class="switch">
+                      <input type="checkbox" <?= $security_settings['audit_log_enabled'] ? 'checked' : '' ?>>
+                      <span class="slider"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div class="col-lg-6">
+              <div class="setting-section">
+                <div class="setting-header">
+                  <h6 class="mb-0"><i class="bi bi-key-fill me-2"></i>นโยบายรหัสผ่าน</h6>
+                </div>
+                <div class="setting-body">
+                  <div class="mb-3">
+                    <label class="form-label">หมดเวลา Session (นาที)</label>
+                    <input type="number" class="form-control" value="<?= $security_settings['session_timeout'] ?>">
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">จำนวนครั้งที่ล็อกอินผิดพลาด</label>
+                    <input type="number" class="form-control" value="<?= $security_settings['max_login_attempts'] ?>">
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">ความยาวรหัสผ่านขั้นต่ำ</label>
+                    <input type="number" class="form-control" value="<?= $security_settings['password_min_length'] ?>">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Tips -->
       <div class="alert alert-info mt-4 mb-0">
         <i class="bi bi-lightbulb me-1"></i>
-        เคล็ดลับ: การเปลี่ยนแปลงการตั้งค่าบางอย่างอาจต้องรีสตาร์ทระบบ และควรสำรองข้อมูลก่อนทำการปรับเปลี่ยนการตั้งค่าที่สำคัญ
+        เคล็ดลับ: การเปลี่ยนแปลงการตั้งค่าบางอย่างอาจต้องรีเฟรชหน้า หรือเข้าสู่ระบบใหม่
       </div>
     </main>
   </div>
@@ -571,50 +607,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 <footer class="footer">© <?= date('Y') ?> สหกรณ์ปั๊มน้ำมัน — ตั้งค่าระบบ</footer>
 
 <!-- ===== Modals ===== -->
-<!-- Add User Modal -->
-<div class="modal fade" id="modalAddUser" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <form class="modal-content" id="formAddUser" method="post" action="#" onsubmit="event.preventDefault();">
-      <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
-      <div class="modal-header">
-        <h5 class="modal-title"><i class="bi bi-person-plus me-2"></i>เพิ่มผู้ใช้งานใหม่</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="ปิด"></button>
-      </div>
-      <div class="modal-body">
-        <div class="row g-3">
-          <div class="col-sm-6">
-            <label class="form-label">ชื่อผู้ใช้</label>
-            <input type="text" class="form-control" id="addUsername" required>
-          </div>
-          <div class="col-sm-6">
-            <label class="form-label">ชื่อ-นามสกุล</label>
-            <input type="text" class="form-control" id="addFullName" required>
-          </div>
-          <div class="col-12">
-            <label class="form-label">อีเมล</label>
-            <input type="email" class="form-control" id="addEmail" required>
-          </div>
-          <div class="col-sm-6">
-            <label class="form-label">บทบาท</label>
-            <select id="addRole" class="form-select" required>
-              <option value="">เลือกบทบาท</option>
-              <option value="manager">ผู้บริหาร</option>
-              <option value="employee">พนักงาน</option>
-            </select>
-          </div>
-          <div class="col-sm-6">
-            <label class="form-label">รหัสผ่าน</label>
-            <input type="password" class="form-control" id="addPassword" required>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-primary" type="submit"><i class="bi bi-save me-1"></i> สร้างผู้ใช้</button>
-        <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">ยกเลิก</button>
-      </div>
-    </form>
-  </div>
-</div>
+<!-- [ลบ] Add User Modal -->
 
 <!-- Toast -->
 <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1080">
@@ -651,51 +644,9 @@ $('#systemPrefsForm')?.addEventListener('submit', (e) => {
   toast('บันทึกการตั้งค่าระบบแล้ว');
 });
 
-$('#formAddUser')?.addEventListener('submit', () => {
-  const username = $('#addUsername').value.trim();
-  const fullName = $('#addFullName').value.trim();
-  const email = $('#addEmail').value.trim();
-  const role = $('#addRole').value;
-  
-  if(!username || !fullName || !email || !role) {
-    toast('กรุณากรอกข้อมูลให้ครบถ้วน', false);
-    return;
-  }
-  
-  bootstrap.Modal.getInstance($('#modalAddUser')).hide();
-  $('#formAddUser').reset();
-  toast('เพิ่มผู้ใช้งานใหม่แล้ว');
-});
+// [ลบ] Form Add User
 
-// User management functions
-function editUser(userId) {
-  toast('เปิดหน้าแก้ไขผู้ใช้ ID: ' + userId);
-}
-
-function deleteUser(userId) {
-  if(confirm('ต้องการลบผู้ใช้นี้หรือไม่?')) {
-    toast('ลบผู้ใช้แล้ว');
-  }
-}
-
-// Backup functions
-function backupDatabase() {
-  toast('กำลังสำรองข้อมูลฐานข้อมูล...');
-}
-
-function backupFiles() {
-  toast('กำลังสำรองไฟล์ระบบ...');
-}
-
-function backupFull() {
-  toast('กำลังสำรองข้อมูลทั้งหมด...');
-}
-
-function restoreBackup() {
-  if(confirm('การคืนค่าข้อมูลจะเขียนทับข้อมูลปัจจุบัน ต้องการดำเนินการต่อหรือไม่?')) {
-    toast('กำลังคืนค่าข้อมูล...');
-  }
-}
+// [ลบ] User management functions
 
 // Switch change handlers
 $$('input[type="checkbox"]').forEach(checkbox => {
@@ -718,3 +669,4 @@ $$('input, select, textarea').forEach(input => {
 </script>
 </body>
 </html>
+
