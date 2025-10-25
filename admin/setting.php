@@ -348,11 +348,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
             <i class="bi bi-shield-lock-fill me-2"></i>ความปลอดภัย
           </button>
         </li>
-        <li class="nav-item" role="presentation">
-          <button class="nav-link" id="backup-tab" data-bs-toggle="tab" data-bs-target="#backup-panel" type="button" role="tab">
-            <i class="bi bi-cloud-download me-2"></i>สำรอง
-          </button>
-        </li>
       </ul>
 
       <!-- Tab Content -->
@@ -821,95 +816,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                       </select>
                     </div>
                   </div>
-                  
-                  <div class="mt-4">
-                    <h6>สำรองข้อมูลทันที</h6>
-                    <div class="row g-2">
-                      <div class="col-md-4">
-                        <button class="btn btn-success w-100" onclick="backupDatabase()">
-                          <i class="bi bi-database me-1"></i> สำรองฐานข้อมูล
-                        </button>
-                      </div>
-                      <div class="col-md-4">
-                        <button class="btn btn-info w-100" onclick="backupFiles()">
-                          <i class="bi bi-files me-1"></i> สำรองไฟล์ระบบ
-                        </button>
-                      </div>
-                      <div class="col-md-4">
-                        <button class="btn btn-primary w-100" onclick="backupFull()">
-                          <i class="bi bi-cloud-download me-1"></i> สำรองทั้งหมด
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="mt-4">
-                    <h6>คืนค่าข้อมูล</h6>
-                    <div class="input-group">
-                      <input type="file" class="form-control" accept=".sql,.zip,.tar.gz">
-                      <button class="btn btn-warning" onclick="restoreBackup()">
-                        <i class="bi bi-upload me-1"></i> คืนค่าข้อมูล
-                      </button>
-                    </div>
-                    <small class="text-warning">
-                      <i class="bi bi-exclamation-triangle me-1"></i>
-                      การคืนค่าข้อมูลจะเขียนทับข้อมูลปัจจุบัน กรุณาสำรองข้อมูลก่อน
-                    </small>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Backup History -->
-            <div class="col-lg-4">
-              <div class="setting-section">
-                <div class="setting-header">
-                  <h6 class="mb-0"><i class="bi bi-clock-history me-2"></i>ประวัติการสำรอง</h6>
-                </div>
-                <div class="setting-body">
-                  <div class="list-group list-group-flush">
-                    <div class="list-group-item px-0">
-                      <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                          <strong>สำรองอัตโนมัติ</strong>
-                          <div class="last-backup">วันนี้ 02:00</div>
-                        </div>
-                        <span class="badge bg-success">สำเร็จ</span>
-                      </div>
-                      <small class="text-muted">ขนาด: 24.5 MB</small>
-                    </div>
-                    <div class="list-group-item px-0">
-                      <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                          <strong>สำรองอัตโนมัติ</strong>
-                          <div class="last-backup">เมื่อวาน 02:00</div>
-                        </div>
-                        <span class="badge bg-success">สำเร็จ</span>
-                      </div>
-                      <small class="text-muted">ขนาด: 24.2 MB</small>
-                    </div>
-                    <div class="list-group-item px-0">
-                      <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                          <strong>สำรองด้วยตนเอง</strong>
-                          <div class="last-backup">2 วันที่แล้ว 15:30</div>
-                        </div>
-                        <span class="badge bg-success">สำเร็จ</span>
-                      </div>
-                      <small class="text-muted">ขนาด: 23.8 MB</small>
-                    </div>
-                  </div>
-                  <div class="mt-3">
-                    <button class="btn btn-outline-primary btn-sm w-100">
-                      <i class="bi bi-list me-1"></i> ดูประวัติทั้งหมด
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
       <!-- Tips -->
       <div class="alert alert-info mt-4 mb-0">
