@@ -1,5 +1,5 @@
 <?php
-// admin/dividend_member_history.php
+// dividend_member_history.php
 session_start();
 header('Content-Type: application/json');
 date_default_timezone_set('Asia/Bangkok');
@@ -15,7 +15,7 @@ if (!function_exists('d')) {
 
 $response = ['ok' => false, 'history' => [], 'summary' => [], 'error' => 'Invalid request'];
 
-if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'committee') {
     $response['error'] = 'Access denied';
     echo json_encode($response); exit;
 }
