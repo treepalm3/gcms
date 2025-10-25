@@ -359,13 +359,10 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     </div>
   </div>
 
-  <footer class="footer mt-auto py-3 bg-light">
-    <div class="container text-center">
-        <span class="text-muted">© <?= date('Y') ?> <?= htmlspecialchars($site_name) ?></span>
-    </div>
+  <footer class="footer ">
+        <span class="text">© <?= date('Y') ?> <?= htmlspecialchars($site_name) ?></span>  
   </footer>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script>
     function nf(number, decimals = 0) {
@@ -381,6 +378,52 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     const pieLabels = <?= json_encode($pie_labels, JSON_UNESCAPED_UNICODE) ?>;
     const pieValues = <?= json_encode($pie_values, JSON_UNESCAPED_UNICODE) ?>;
 
+    // Bar
+    new Chart(document.getElementById('barChart').getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: barLabels,
+        datasets: [{
+          label: 'จำนวน',
+          data: barValues,
+          backgroundColor: '#20A39E',
+          borderColor: '#36535E',
+          borderWidth: 2,
+          borderRadius: 6,
+          maxBarThickness: 34
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#36535E' } } },
+        scales: {
+          x: { ticks: { color: '#68727A' }, grid: { color: '#E9E1D3' } },
+          y: { ticks: { color: '#68727A' }, grid: { color: '#E9E1D3' }, beginAtZero: true }
+        }
+      }
+    });
+
+    // Pie/Doughnut
+    new Chart(document.getElementById('pieChart').getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: pieLabels,
+        datasets: [{
+          data: pieValues,
+          backgroundColor: ['#CCA43B','#20A39E','#B66D0D','#513F32','#212845','#A1C181','#E56B6F','#6D597A'],
+          borderColor: '#ffffff',
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '62%',
+        plugins: { legend: { position: 'bottom', labels: { color: '#36535E' } } }
+      }
+    });
+
     // Global Chart Config (จาก CSS)
     Chart.defaults.font.family = "var(--font-body)";
     Chart.defaults.color = "var(--steel)";
@@ -392,75 +435,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     Chart.defaults.plugins.tooltip.bodyFont.family = "var(--font-body)";
     Chart.defaults.plugins.tooltip.bodyFont.weight = '500';
 
-    // Bar
-    const barCtx = document.getElementById('barChart')?.getContext('2d');
-    if (barCtx && barValues.length > 0) {
-        new Chart(barCtx, {
-          type: 'bar',
-          data: {
-            labels: barLabels,
-            datasets: [{
-              label: 'ลิตร',
-              data: barValues,
-              backgroundColor: 'rgba(32, 163, 158, 0.7)', // var(--mint)
-              borderColor: 'rgba(32, 163, 158, 1)',
-              borderWidth: 1,
-              borderRadius: 5,
-              maxBarThickness: 50
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { 
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: (context) => `${nf(context.raw)} ลิตร`
-                    }
-                }
-            },
-            scales: {
-              x: { ticks: { color: 'var(--steel)' }, grid: { display: false } },
-              y: { ticks: { color: 'var(--steel)', callback: (v) => nf(v) }, grid: { color: 'rgba(0,0,0,0.05)' }, beginAtZero: true }
-            }
-          }
-        });
-    } else if (barCtx) {
-        barCtx.canvas.parentNode.innerHTML = '<div class="alert alert-light text-center h-100 d-flex align-items-center justify-content-center">ไม่มีข้อมูลยอดขายรายเดือน</div>';
-    }
-
-    // Pie/Doughnut
-    const pieCtx = document.getElementById('pieChart')?.getContext('2d');
-    if (pieCtx && pieValues.length > 0) {
-        new Chart(pieCtx, {
-          type: 'doughnut',
-          data: {
-            labels: pieLabels,
-            datasets: [{
-              data: pieValues,
-              backgroundColor: ['#20A39E', '#CCA43B', '#B66D0D', '#36535E', '#6f42c1', '#fd7e14'], // [mint, gold, amber, teal, ...]
-              borderColor: '#ffffff',
-              borderWidth: 2
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            cutout: '60%',
-            plugins: {
-                tooltip: {
-                    callbacks: {
-                        label: (context) => ` ${context.label}: ${nf(context.raw, 2)} ลิตร`
-                    }
-                }
-            }
-          }
-        });
-    } else if (pieCtx) {
-        pieCtx.canvas.parentNode.innerHTML = '<div class="alert alert-light text-center h-100 d-flex align-items-center justify-content-center">ไม่มีข้อมูลสัดส่วนน้ำมัน</div>';
-    }
+   
   </script>
 </body>
 </html>
-
