@@ -41,7 +41,6 @@ if (!function_exists('nf')) {
     function nf($n, $d = 2) { return number_format((float)$n, $d, '.', ','); }
 }
 if (!function_exists('d')) {
-    // [แก้ไข] เพิ่มการตรวจสอบ $s
     function d($s, $fmt = 'd/m/Y') {
         if (empty($s)) return '-';
         $t = strtotime($s); 
@@ -51,7 +50,7 @@ if (!function_exists('d')) {
 
 // ===== เตรียมข้อมูล =====
 $dividend_periods = [];
-$rebate_periods = []; // [เพิ่ม]
+$rebate_periods = [];
 $members_dividends = [];
 $error_message = null;
 
@@ -79,20 +78,33 @@ try {
     }
 
 
-    // 2) รวมสมาชิกทุกประเภท
+    // 2) รวมสมาชิกทุกประเภท (แหล่งข้อมูลเดียว: members, เพื่อป้องกันการนับซ้ำซ้อน)
     $all_members = [];
     try {
-        $stmt = $pdo->query("SELECT m.id AS member_id, m.member_code, u.full_name, m.shares, 'member' AS member_type FROM members m JOIN users u ON m.user_id = u.id WHERE m.is_active = 1");
-        $all_members = array_merge($all_members, $stmt->fetchAll(PDO::FETCH_ASSOC));
+        // ดึงข้อมูลสมาชิกทั้งหมดจากตาราง 'members' เท่านั้น และ JOIN เพื่อดึง role ที่แท้จริงจาก users
+        $stmt = $pdo->query("
+            SELECT 
+                m.id AS member_id, 
+                m.member_code, 
+                u.full_name, 
+                m.shares, 
+                u.role AS member_type, -- ใช้ role จาก users เพื่อระบุประเภท (member/manager/committee)
+                m.user_id 
+            FROM members m 
+            JOIN users u ON m.user_id = u.id 
+            WHERE m.is_active = 1
+        ");
+        $all_members = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        /*
+        // [ยกเลิก] โค้ดเดิมที่ดึงจากหลายตาราง (ซึ่งทำให้เกิดการนับซ้ำซ้อน)
+        // $stmt = $pdo->query("SELECT mg.id AS member_id, CONCAT('MGR-', LPAD(mg.id, 3, '0')) AS member_code, u.full_name, mg.shares, 'manager' AS member_type FROM managers mg JOIN users u ON mg.user_id = u.id");
+        // $all_members = array_merge($all_members, $stmt->fetchAll(PDO::FETCH_ASSOC));
+        // $stmt = $pdo->query("SELECT c.id AS member_id, c.committee_code AS member_code, u.full_name, COALESCE(c.shares, 0) AS shares, 'committee' AS member_type FROM committees c JOIN users u ON c.user_id = u.id");
+        // $all_members = array_merge($all_members, $stmt->fetchAll(PDO::FETCH_ASSOC));
+        */
+
     } catch (Throwable $e) { error_log("Error fetching members: " . $e->getMessage()); }
-    try {
-        $stmt = $pdo->query("SELECT mg.id AS member_id, CONCAT('MGR-', LPAD(mg.id, 3, '0')) AS member_code, u.full_name, mg.shares, 'manager' AS member_type FROM managers mg JOIN users u ON mg.user_id = u.id");
-        $all_members = array_merge($all_members, $stmt->fetchAll(PDO::FETCH_ASSOC));
-    } catch (Throwable $e) { error_log("Error fetching managers: " . $e->getMessage()); }
-    try {
-        $stmt = $pdo->query("SELECT c.id AS member_id, c.committee_code AS member_code, u.full_name, COALESCE(c.shares, 0) AS shares, 'committee' AS member_type FROM committees c JOIN users u ON c.user_id = u.id");
-        $all_members = array_merge($all_members, $stmt->fetchAll(PDO::FETCH_ASSOC));
-    } catch (Throwable $e) { error_log("Error fetching committees: " . $e->getMessage()); }
 
     usort($all_members, function($a, $b) { return strcmp($a['member_code'] ?? '', $b['member_code'] ?? ''); });
 
@@ -106,15 +118,16 @@ try {
             'member_name' => $row['full_name'],
             'shares' => (int)$row['shares'],
             'type' => $row['member_type'],
-            'type_th' => ['member' => 'สมาชิก', 'manager' => 'ผู้บริหาร', 'committee' => 'กรรมการ'][$row['member_type']] ?? 'อื่นๆ',
+            'type_th' => ['member' => 'สมาชิก', 'manager' => 'ผู้บริหาร', 'committee' => 'กรรมการ', 'admin' => 'ผู้ดูแลระบบ'][$row['member_type']] ?? 'อื่นๆ',
             'payments' => [],
-            'rebates' => [], // [เพิ่ม]
+            'rebates' => [],
             'total_received' => 0.0,
-            'total_rebate_received' => 0.0 // [เพิ่ม]
+            'total_rebate_received' => 0.0
         ];
     }
 
     // 3) การจ่ายปันผล
+    // Note: ตาราง dividend_payments อาจจะยังใช้ member_type และ member_id เก่าอยู่ ต้องดูว่ามีการปรับใช้ user_id หรือไม่
     $payments_stmt = $pdo->query("SELECT dp.member_id, dp.member_type, dp.period_id, dp.dividend_amount, dp.payment_status FROM dividend_payments dp");
     foreach ($payments_stmt->fetchAll(PDO::FETCH_ASSOC) as $payment) {
         $key = $payment['member_type'] . '_' . $payment['member_id'];
@@ -164,8 +177,8 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 // ===== คำนวณสถิติรวม =====
 $total_dividend_paid = 0;
 $pending_dividend = 0;
-$total_rebate_paid = 0; // [เพิ่ม]
-$pending_rebate = 0; // [เพิ่ม]
+$total_rebate_paid = 0;
+$pending_rebate = 0;
 $total_members = count($members_dividends);
 $total_shares = array_sum(array_column($members_dividends, 'shares'));
 
@@ -179,7 +192,7 @@ try {
     $total_dividend_paid = (float)($stats['total_paid'] ?? 0);
     $pending_dividend = (float)($stats['total_pending'] ?? 0);
     
-    // [เพิ่ม] ยอดเฉลี่ยคืน
+    // ยอดเฉลี่ยคืน
     try {
         $rebate_stats = $pdo->query("
             SELECT
@@ -203,11 +216,8 @@ try {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    <!-- [แก้ไข] ใช้ CSS หลัก -->
     <link rel="stylesheet" href="../assets/css/admin_dashboard.css" />
     
-    <!-- [ลบ] <style> inline ออก -->
-
 </head>
 <body>
 
@@ -268,7 +278,6 @@ try {
         </aside>
 
         <main class="col-lg-10 p-4">
-            <!-- [แก้ไข] ใช้ .main-header -->
             <div class="main-header">
                 <h2 class="mb-0"><i class="fa-solid fa-gift me-2"></i> จัดการปันผลและเฉลี่ยคืน</h2>
             </div>
@@ -277,7 +286,6 @@ try {
                 <div class="alert alert-danger"><?= htmlspecialchars($error_message) ?></div>
             <?php endif; ?>
 
-            <!-- [แก้ไข] ใช้ .stats-grid และ .stat-card -->
             <div class="stats-grid">
                 <div class="stat-card text-center">
                     <div class="fs-4 text-success mb-2"><i class="fa-solid fa-hand-holding-dollar"></i></div>
@@ -319,7 +327,6 @@ try {
 
             <div class="tab-content pt-3">
                 <div class="tab-pane fade show active" id="periods-panel" role="tabpanel" aria-labelledby="periods-tab">
-                    <!-- [แก้ไข] ใช้ .panel -->
                     <div class="panel mb-4">
                        <div class="d-flex justify-content-between align-items-center mb-3">
                             <h5 class="mb-0"><i class="fa-solid fa-calendar-days me-2"></i>งวดปันผลตามหุ้น</h5>
@@ -333,7 +340,6 @@ try {
                            <?php else: ?>
                                <?php foreach($dividend_periods as $period): ?>
                                <div class="col-md-6 col-lg-4">
-                                   <!-- [แก้ไข] ใช้ .stat-card -->
                                    <div class="stat-card h-100 d-flex flex-column">
                                        <div class="d-flex flex-column flex-grow-1">
                                            <div class="d-flex justify-content-between align-items-start mb-2">
@@ -341,7 +347,6 @@ try {
                                                    <h5 class="card-title mb-0">ปี <?= htmlspecialchars($period['year']) ?></h5>
                                                    <small class="text-muted d-block mb-1"><?= htmlspecialchars($period['period_name']) ?></small>
                                                </div>
-                                               <!-- [แก้ไข] ใช้ Badge ของ Bootstrap 5.3 -->
                                                <span class="badge rounded-pill <?=
                                                    $period['status'] === 'paid' ? 'text-bg-success' :
                                                    ($period['status'] === 'approved' ? 'text-bg-warning' : 'text-bg-danger')
@@ -491,11 +496,11 @@ try {
                                     <tr class="member-row" data-member-key="<?= htmlspecialchars($key) ?>" data-member-name="<?= htmlspecialchars($member['member_name']) ?>" data-member-type="<?= htmlspecialchars($member['type']) ?>" data-shares="<?= (int)$member['shares'] ?>">
                                         <td><strong><?= htmlspecialchars($member['code']) ?></strong></td>
                                         <td><?= htmlspecialchars($member['member_name']) ?></td>
-                                        <!-- [แก้ไข] ใช้ Badge ของ Bootstrap 5.3 -->
                                         <td class="text-center"><span class="badge rounded-pill <?php
                                             if ($member['type'] === 'member') echo 'text-bg-primary';
                                             elseif ($member['type'] === 'manager') echo 'text-bg-info';
                                             elseif ($member['type'] === 'committee') echo 'text-bg-secondary';
+                                            elseif ($member['type'] === 'admin') echo 'text-bg-danger';
                                             else echo 'text-bg-light';
                                         ?>"><?= htmlspecialchars($member['type_th']) ?></span></td>
                                         <td class="text-center"><span class="badge bg-secondary rounded-pill"><?= number_format($member['shares']) ?></span></td>
@@ -758,7 +763,7 @@ function calculateDateRange(prefix) {
     }
 }
 
-// ===== [แก้ไข] MODAL CALC (ทำให้ง่ายขึ้น) =====
+// ===== MODAL CALC (แก้ไขเพื่อให้ง่ายขึ้น) =====
 function updateModalCalc(prefix) {
     if (prefix === 'dividend') {
         const profitInput = $('#modalProfit');
@@ -811,7 +816,7 @@ async function viewMemberHistory(memberKey) {
   historyModal.show();
 
   try {
-      const response = await fetch(`dividend_member_history.php?member_id=${memberId}&member_type=${memberType}`);
+      const response = await fetch(`dividend_member_history.php?member_id=${member.id}&member_type=${member.type}`);
       if (!response.ok) throw new Error(`ไม่สามารถดึงข้อมูลได้ (HTTP ${response.status})`);
       const data = await response.json();
 
