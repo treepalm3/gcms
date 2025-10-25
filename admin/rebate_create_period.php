@@ -1,5 +1,5 @@
 <?php
-// rebate_create_period.php
+// admin/rebate_create_period.php
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 require_once '../config/db.php';
@@ -20,20 +20,23 @@ if (empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_PO
     redirect_back('CSRF token ไม่ถูกต้อง', true);
 }
 
-// รับค่า
+// [แก้ไข] รับค่าตามฟอร์มใหม่ที่เรียบง่าย
 $year = (int)$_POST['year'];
 $period_name = trim($_POST['period_name'] ?? "เฉลี่ยคืนประจำปี $year");
 $start_date = $_POST['start_date'];
 $end_date = $_POST['end_date'];
-$total_profit = (float)($_POST['total_profit'] ?? 0); // (รับค่ากำไรอ้างอิง)
-$rebate_base = $_POST['rebate_base'] ?? 'profit';
-$rebate_type = $_POST['rebate_type'] ?? 'rate';
-$rebate_value = (float)$_POST['rebate_value'];
-$rebate_mode = $_POST['rebate_mode'] ?? 'weighted';
-$total_rebate_budget = (float)$_POST['total_rebate_budget']; // (รับค่างบประมาณที่คำนวณแล้ว)
+$total_profit = (float)($_POST['total_profit'] ?? 0); // กำไรสุทธิ (ฐาน)
+$rebate_rate_percent = (float)($_POST['rebate_rate_percent'] ?? 0); // อัตรา %
+$total_rebate_budget = (float)($_POST['total_rebate_budget'] ?? 0); // งบประมาณที่คำนวณแล้ว
 
-if ($year <= 2020 || empty($start_date) || empty($end_date) || $rebate_value <= 0 || $total_rebate_budget <= 0) {
-    redirect_back('ข้อมูลไม่ถูกต้อง กรุณากรอกข้อมูลสำคัญให้ครบ', true);
+// [แก้ไข] รับค่า Hidden fields
+$rebate_base = $_POST['rebate_base'] ?? 'profit'; // (profit)
+$rebate_type = $_POST['rebate_type'] ?? 'rate';   // (rate)
+$rebate_mode = $_POST['rebate_mode'] ?? 'weighted'; // (weighted)
+$rebate_value = $rebate_rate_percent; // [แก้ไข] ค่า value คือ % ที่กรอกมา
+
+if ($year <= 2020 || empty($start_date) || empty($end_date) || $total_profit <= 0 || $rebate_rate_percent <= 0 || $total_rebate_budget <= 0) {
+    redirect_back('ข้อมูลไม่ถูกต้อง กรุณากรอกข้อมูลสำคัญให้ครบ (ปี, ช่วงวันที่, กำไร, อัตรา%)', true);
 }
 
 try {
@@ -46,20 +49,19 @@ try {
         redirect_back("งวดเฉลี่ยคืนสำหรับปี $year ได้ถูกสร้างไปแล้ว", true);
     }
 
-    // 2. ดึงยอดซื้อรวมของสมาชิกทุกคนในปีนี้ (จาก sales)
-    // นี่คือ Query ที่ซับซ้อนที่สุด
+    // 2. ดึงยอดซื้อรวมของสมาชิกทุกคนในปีนี้
     $sql_purchases = "
         SELECT 
             COALESCE(m.id, mg.id, c.id) AS member_id,
             COALESCE(m.member_type, mg.member_type, c.member_type) AS member_type,
             SUM(s.total_amount) as total_purchase
         FROM sales s
-        JOIN users u ON s.customer_phone = u.phone
+        LEFT JOIN users u ON s.customer_phone = u.phone 
         LEFT JOIN (SELECT id, user_id, 'member' as member_type FROM members WHERE is_active = 1) m ON u.id = m.user_id
         LEFT JOIN (SELECT id, user_id, 'manager' as member_type FROM managers) mg ON u.id = mg.user_id
         LEFT JOIN (SELECT id, user_id, 'committee' as member_type FROM committees) c ON u.id = c.user_id
         WHERE s.sale_date BETWEEN ? AND ?
-          AND s.customer_phone IS NOT NULL
+          AND s.customer_phone IS NOT NULL AND s.customer_phone != ''
           AND COALESCE(m.id, mg.id, c.id) IS NOT NULL
         GROUP BY member_id, member_type
         HAVING total_purchase > 0
@@ -76,7 +78,7 @@ try {
     $buyers_count = count($all_purchases);
     $rebate_per_baht = 0;
 
-    if ($rebate_mode === 'weighted') {
+    if ($rebate_mode === 'weighted') { // ซึ่งตอนนี้เป็น weighted เสมอ
         $rebate_per_baht = ($total_purchase_amount > 0) ? ($total_rebate_budget / $total_purchase_amount) : 0;
     }
 
@@ -108,8 +110,8 @@ try {
 
         if ($rebate_mode === 'weighted') {
             $rebate_amount = $purchase_amount * $rebate_per_baht;
-        } else { // equal
-            $rebate_amount = $total_rebate_budget / $buyers_count; // แบ่งเท่ากันทุกคนที่มียอดซื้อ
+        } else { // (เผื่ออนาคตถ้าเปลี่ยนกลับ)
+            $rebate_amount = $total_rebate_budget / $buyers_count;
         }
 
         if ($rebate_amount > 0) {
