@@ -20,20 +20,18 @@ if (empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_PO
     redirect_back('CSRF token ไม่ถูกต้อง', true);
 }
 
-// [แก้ไข] รับค่าตามฟอร์มใหม่ที่เรียบง่าย
+// รับค่า
 $year = (int)$_POST['year'];
 $period_name = trim($_POST['period_name'] ?? "เฉลี่ยคืนประจำปี $year");
 $start_date = $_POST['start_date'];
 $end_date = $_POST['end_date'];
-$total_profit = (float)($_POST['total_profit'] ?? 0); // กำไรสุทธิ (ฐาน)
-$rebate_rate_percent = (float)($_POST['rebate_rate_percent'] ?? 0); // อัตรา %
-$total_rebate_budget = (float)($_POST['total_rebate_budget'] ?? 0); // งบประมาณที่คำนวณแล้ว
-
-// [แก้ไข] รับค่า Hidden fields
-$rebate_base = $_POST['rebate_base'] ?? 'profit'; // (profit)
-$rebate_type = $_POST['rebate_type'] ?? 'rate';   // (rate)
-$rebate_mode = $_POST['rebate_mode'] ?? 'weighted'; // (weighted)
-$rebate_value = $rebate_rate_percent; // [แก้ไข] ค่า value คือ % ที่กรอกมา
+$total_profit = (float)($_POST['total_profit'] ?? 0); 
+$rebate_rate_percent = (float)($_POST['rebate_rate_percent'] ?? 0);
+$total_rebate_budget = (float)($_POST['total_rebate_budget'] ?? 0);
+$rebate_base = $_POST['rebate_base'] ?? 'profit';
+$rebate_type = $_POST['rebate_type'] ?? 'rate';
+$rebate_mode = $_POST['rebate_mode'] ?? 'weighted';
+$rebate_value = $rebate_rate_percent;
 
 if ($year <= 2020 || empty($start_date) || empty($end_date) || $total_profit <= 0 || $rebate_rate_percent <= 0 || $total_rebate_budget <= 0) {
     redirect_back('ข้อมูลไม่ถูกต้อง กรุณากรอกข้อมูลสำคัญให้ครบ (ปี, ช่วงวันที่, กำไร, อัตรา%)', true);
@@ -49,36 +47,54 @@ try {
         redirect_back("งวดเฉลี่ยคืนสำหรับปี $year ได้ถูกสร้างไปแล้ว", true);
     }
 
-    // 2. ดึงยอดซื้อรวมของสมาชิกทุกคนในปีนี้
+    // 2. [แก้ไข] ดึงยอดซื้อรวม โดย JOIN ด้วย "บ้านเลขที่"
     $sql_purchases = "
         SELECT 
             COALESCE(m.id, mg.id, c.id) AS member_id,
             COALESCE(m.member_type, mg.member_type, c.member_type) AS member_type,
             SUM(s.total_amount) as total_purchase
         FROM sales s
-        LEFT JOIN users u ON s.customer_phone = u.phone 
-        LEFT JOIN (SELECT id, user_id, 'member' as member_type FROM members WHERE is_active = 1) m ON u.id = m.user_id
-        LEFT JOIN (SELECT id, user_id, 'manager' as member_type FROM managers) mg ON u.id = mg.user_id
-        LEFT JOIN (SELECT id, user_id, 'committee' as member_type FROM committees) c ON u.id = c.user_id
+        
+        /* Join สมาชิก (members) ด้วยบ้านเลขที่ */
+        LEFT JOIN (
+            SELECT id, house_number, 'member' as member_type 
+            FROM members WHERE is_active = 1 AND house_number IS NOT NULL AND house_number != ''
+        ) m ON s.household_no = m.house_number
+        
+        /* Join ผู้บริหาร (managers) ด้วยบ้านเลขที่ */
+        LEFT JOIN (
+            SELECT id, house_number, 'manager' as member_type
+            FROM managers WHERE house_number IS NOT NULL AND house_number != ''
+        ) mg ON s.household_no = mg.house_number
+        
+        /* Join กรรมการ (committees) ด้วยบ้านเลขที่ */
+        LEFT JOIN (
+            SELECT id, house_number, 'committee' as member_type
+            FROM committees WHERE house_number IS NOT NULL AND house_number != ''
+        ) c ON s.household_no = c.house_number
+
         WHERE s.sale_date BETWEEN ? AND ?
-          AND s.customer_phone IS NOT NULL AND s.customer_phone != ''
-          AND COALESCE(m.id, mg.id, c.id) IS NOT NULL
+          AND s.household_no IS NOT NULL AND s.household_no != ''
+          /* ต้องมั่นใจว่า Join เจออย่างน้อย 1 ตาราง */
+          AND COALESCE(m.id, mg.id, c.id) IS NOT NULL 
+        
         GROUP BY member_id, member_type
         HAVING total_purchase > 0
     ";
+    
     $stmt_purchases = $pdo->prepare($sql_purchases);
     $stmt_purchases->execute([$start_date, $end_date]);
     $all_purchases = $stmt_purchases->fetchAll(PDO::FETCH_ASSOC);
 
     if (empty($all_purchases)) {
-        redirect_back('ไม่พบยอดซื้อของสมาชิกในปีที่เลือก', true);
+        redirect_back('ไม่พบยอดซื้อของสมาชิก (ที่ผูกกับบ้านเลขที่) ในปีที่เลือก', true);
     }
 
     $total_purchase_amount = array_sum(array_column($all_purchases, 'total_purchase'));
     $buyers_count = count($all_purchases);
     $rebate_per_baht = 0;
 
-    if ($rebate_mode === 'weighted') { // ซึ่งตอนนี้เป็น weighted เสมอ
+    if ($rebate_mode === 'weighted') { // "คนซื้อเยอะได้เยอะ"
         $rebate_per_baht = ($total_purchase_amount > 0) ? ($total_rebate_budget / $total_purchase_amount) : 0;
     }
 
@@ -108,9 +124,9 @@ try {
         $purchase_amount = (float)$member['total_purchase'];
         $rebate_amount = 0;
 
-        if ($rebate_mode === 'weighted') {
+        if ($rebate_mode === 'weighted') { // "คนซื้อเยอะได้เยอะ"
             $rebate_amount = $purchase_amount * $rebate_per_baht;
-        } else { // (เผื่ออนาคตถ้าเปลี่ยนกลับ)
+        } else { // (กรณีแบ่งเท่ากัน)
             $rebate_amount = $total_rebate_budget / $buyers_count;
         }
 
@@ -126,7 +142,7 @@ try {
     }
 
     $pdo->commit();
-    redirect_back("สร้างงวดเฉลี่ยคืนปี $year สำเร็จ สร้างรายการจ่ายสำหรับสมาชิก $buyers_count คน");
+    redirect_back("สร้างงวดเฉลี่ยคืนปี $year สำเร็จ สร้างรายการจ่ายสำหรับสมาชิก $buyers_count คน (จากบ้านเลขที่)");
 
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) $pdo->rollBack();
