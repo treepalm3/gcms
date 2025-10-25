@@ -147,7 +147,9 @@ if ($db_ok && $search_term !== '') {
         m.tier          AS tier
       FROM users u
       JOIN members m ON m.user_id = u.id
-      WHERE u.role = 'member' AND u.is_active = 1
+      WHERE u.is_active = 1
+        -- [แก้ไข] ขยายเงื่อนไข WHERE เพื่อรวมบทบาทผู้บริหาร กรรมการ และ Admin ที่มี Record ใน members
+        AND u.role IN ('member', 'manager', 'committee', 'admin') 
         AND m.station_id = :st
         AND (
              u.full_name    LIKE :term_name
@@ -209,7 +211,6 @@ if ($db_ok && $search_term !== '') {
   </style>
 </head>
 <body>
-  <!-- App Bar -->
   <nav class="navbar navbar-dark bg-primary">
     <div class="container-fluid">
       <div class="d-flex align-items-center gap-2">
@@ -228,7 +229,6 @@ if ($db_ok && $search_term !== '') {
     </div>
   </nav>
 
-  <!-- Offcanvas Sidebar -->
   <div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasSidebar" aria-labelledby="offcanvasLabel">
     <div class="offcanvas-header">
       <h5 class="offcanvas-title" id="offcanvasLabel"><?= htmlspecialchars($site_name) ?></h5>
@@ -248,10 +248,8 @@ if ($db_ok && $search_term !== '') {
     </div>
   </div>
 
-  <!-- Main -->
   <div class="container-fluid">
     <div class="row">
-      <!-- Sidebar Desktop -->
       <aside class="col-lg-2 d-none d-lg-flex flex-column sidebar py-4">
         <div class="side-brand mb-3"><h3><span>Employee</span></h3></div>
         <nav class="sidebar-menu flex-grow-1">
@@ -265,7 +263,6 @@ if ($db_ok && $search_term !== '') {
         <a class="logout" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket me-1"></i>ออกจากระบบ</a>
       </aside>
 
-      <!-- Content -->
       <main class="col-lg-10 p-4">
         <div class="main-header">
           <h2><i class="bi bi-star-fill me-2"></i>จัดการแต้มสมาชิก</h2>
@@ -278,7 +275,6 @@ if ($db_ok && $search_term !== '') {
         <?php if ($update_message): ?><div class="alert alert-success"><?= htmlspecialchars($update_message) ?></div><?php endif; ?>
         <?php if ($error_message): ?><div class="alert alert-danger"><?= htmlspecialchars($error_message) ?></div><?php endif; ?>
 
-        <!-- Search Form -->
         <div class="stat-card mb-4">
           <form method="GET" action="">
             <div class="row g-2 align-items-end">
@@ -295,7 +291,6 @@ if ($db_ok && $search_term !== '') {
 
         <?php if ($member_data): ?>
         <div class="row g-4">
-          <!-- Member Details -->
           <div class="col-lg-4">
             <div class="stat-card">
               <h5><i class="bi bi-person-circle me-2"></i>ข้อมูลสมาชิก</h5>
@@ -312,7 +307,6 @@ if ($db_ok && $search_term !== '') {
             </div>
           </div>
 
-          <!-- Point History -->
           <div class="col-lg-8">
             <div class="stat-card">
               <h5><i class="bi bi-clock-history me-2"></i>ประวัติแต้ม</h5>
@@ -354,7 +348,6 @@ if ($db_ok && $search_term !== '') {
     </div>
   </div>
 
-  <!-- Adjust Points Modal -->
   <?php if ($member_data): ?>
   <div class="modal fade" id="adjustPointsModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
@@ -362,8 +355,7 @@ if ($db_ok && $search_term !== '') {
         <form method="POST">
           <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
           <input type="hidden" name="action" value="adjust_points">
-          <input type="hidden" name="member_id" value="<?= (int)$member_data['member_id'] ?>"><!-- ต้องเป็น members.id -->
-          <div class="modal-header">
+          <input type="hidden" name="member_id" value="<?= (int)$member_data['member_id'] ?>"><div class="modal-header">
             <h5 class="modal-title">ปรับปรุงแต้ม: <?= htmlspecialchars($member_data['full_name']) ?></h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
