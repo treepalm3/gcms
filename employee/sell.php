@@ -859,7 +859,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       memberNameSpan.innerHTML = `กำลังค้นหา... ${spinner}`;
 
       try {
-          const url = `/api/search_member.php?term=${encodeURIComponent(term)}`; // [แก้ไข] ใช้ /admin/api/
+          const url = `/admin/api/search_member.php?term=${encodeURIComponent(term)}`; // [แก้ไข] ใช้ /admin/api/
           const res = await fetch(url);
           
           if (!res.ok) throw new Error('bad_status_' + res.status);
