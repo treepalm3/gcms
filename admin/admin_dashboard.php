@@ -205,38 +205,11 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+    <!-- [แก้ไข] ใช้ไฟล์ CSS ภายนอก -->
     <link rel="stylesheet" href="../assets/css/admin_dashboard.css" />
-    <style>
-        /* [แก้ไข] ปรับ Grid ให้รองรับ 4 ช่อง */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); /* ปรับ minmax */
-            gap: 1.5rem;
-        }
-        .stat-card {
-            background: #fff;
-            border-radius: var(--bs-card-border-radius);
-            padding: 1.5rem;
-            box-shadow: var(--bs-box-shadow-sm);
-            border: 1px solid var(--bs-border-color-translucent);
-        }
-        .stat-card h5 {
-            font-size: 1rem;
-            color: var(--bs-secondary-color);
-            margin-bottom: 0.5rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .stat-card h3 {
-            font-weight: 700;
-        }
-        .chart-wrap {
-            position: relative;
-            height: 350px;
-            width: 100%;
-        }
-    </style>
+    
+    <!-- [ลบ] ลบ <style> inline ทั้งหมดออก -->
+
 </head>
 
 <body>
@@ -305,55 +278,55 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 
       <!-- Content -->
       <main class="col-lg-10 p-4 fade-in">
-        <div class="main-header mb-4">
-            <h2><i class="fa-solid fa-border-all"></i> ภาพรวมแดชบอร์ด</h2>
+        <!-- [แก้ไข] ใช้ .main-header จาก CSS หลัก -->
+        <div class="main-header">
+            <h2><i class="fa-solid fa-border-all"></i> ภาพรวม</h2>
         </div>
 
         <?php if ($error_message): ?>
             <div class="alert alert-danger"><?= htmlspecialchars($error_message) ?></div>
         <?php endif; ?>
 
-        <!-- [แก้ไข] Stats Grid (4 ช่อง) -->
+        <!-- [แก้ไข] ใช้ .stats-grid (4 ช่อง) จาก CSS หลัก -->
         <div class="stats-grid mb-4">
           <div class="stat-card">
             <h5><i class="bi bi-cash-coin text-success"></i> สรุปยอดขายวันนี้</h5>
             <h3 class="text-success">฿<?= nf($stats['today_revenue'], 2) ?></h3>
-            <p class="text-muted mb-0">
+            <p>
                 <?= nf($stats['today_liters'], 2) ?> ลิตร (<?= nf($stats['today_bills'], 0) ?> บิล)
             </p>
           </div>
           <div class="stat-card">
             <h5><i class="bi bi-graph-up-arrow text-primary"></i> สรุปกำไรวันนี้</h5>
             <h3 class="text-primary">฿<?= nf($stats['today_profit'], 2) ?></h3>
-            <p class="text-muted mb-0">
+            <p>
                 ต้นทุน: ฿<?= nf($stats['today_cogs'], 2) ?>
             </p>
           </div>
           
-          <!-- [เพิ่ม] การ์ดกำไรคงเหลือ พร้อมปุ่ม -->
           <div class="stat-card d-flex flex-column">
             <h5><i class="bi bi-box-seam text-warning"></i> กำไรคงเหลือในถัง</h5>
             <h3 class="text-warning">฿<?= nf($stats['potential_profit'], 2) ?></h3>
-            <a href="profit_report.php" class="btn btn-sm btn-outline-warning mt-2 stretched-link p-0" style="max-width: 120px;">
-                ดูรายละเอียด <i class="bi bi-arrow-right-short"></i>
+            <!-- [แก้ไข] ปรับปุ่มให้เข้ากับ CSS หลัก -->
+            <a href="profit_report.php" class="btn btn-sm btn-outline-warning mt-2 stretched-link" style="max-width: 140px;">
+                ดูรายละเอียด Lot <i class="bi bi-arrow-right-short"></i>
             </a>
           </div>
           
           <div class="stat-card">
             <h5><i class="bi bi-people-fill text-secondary"></i> สมาชิก/หุ้น</h5>
             <h3 class="text-secondary mb-0"><?= nf($stats['total_members'], 0) ?> <small>คน</small></h3>
-            <p class="text-muted mb-0">
+            <p>
                 รวม <?= nf($stats['total_shares'], 0) ?> หุ้น
             </p>
           </div>
         </div>
 
-
-        <!-- Charts (คงเดิม) -->
-        <div class="row g-4 mt-4">
+        <!-- Charts (ใช้ .stat-card) -->
+        <div class="row g-4 mt-4 row-charts">
           <div class="col-12 col-lg-6">
             <div class="stat-card h-100">
-              <h5 class="card-title mb-2">
+              <h5 class="mb-2">
                 <i class="bi bi-bar-chart text-primary"></i>
                 ยอดขายน้ำมัน (ลิตร/เดือน) 6 เดือนล่าสุด
               </h5>
@@ -361,14 +334,12 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
             </div>
           </div>
           <div class="col-12 col-lg-6">
-            <div class="card shadow-sm h-100">
-              <div class="card-body">
-                <h5 class="card-title mb-2">
+            <div class="stat-card h-100">
+                <h5 class="mb-2">
                   <i class="bi bi-pie-chart text-info"></i>
                   สัดส่วนยอดขาย (ลิตร) 30 วันล่าสุด
                 </h5>
                 <div class="chart-wrap"><canvas id="pieChart"></canvas></div>
-              </div>
             </div>
           </div>
         </div>
@@ -385,7 +356,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script>
-    // [เพิ่ม] ฟังก์ชัน nf() เวอร์ชัน JavaScript
     function nf(number, decimals = 0) {
         const num = parseFloat(number) || 0;
         return num.toLocaleString('th-TH', {
@@ -399,11 +369,15 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     const pieLabels = <?= json_encode($pie_labels, JSON_UNESCAPED_UNICODE) ?>;
     const pieValues = <?= json_encode($pie_values, JSON_UNESCAPED_UNICODE) ?>;
 
-    // Global Chart Config
-    Chart.defaults.font.family = "'Prompt', sans-serif";
+    // Global Chart Config (จาก CSS)
+    Chart.defaults.font.family = "var(--font-body)";
+    Chart.defaults.color = "var(--steel)";
     Chart.defaults.plugins.legend.position = 'bottom';
-    Chart.defaults.plugins.tooltip.backgroundColor = '#212529';
+    Chart.defaults.plugins.legend.labels.font.size = 14;
+    Chart.defaults.plugins.tooltip.backgroundColor = 'var(--navy)';
+    Chart.defaults.plugins.tooltip.titleFont.family = "var(--font-heading)";
     Chart.defaults.plugins.tooltip.titleFont.weight = '600';
+    Chart.defaults.plugins.tooltip.bodyFont.family = "var(--font-body)";
     Chart.defaults.plugins.tooltip.bodyFont.weight = '500';
 
     // Bar
@@ -416,8 +390,8 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
             datasets: [{
               label: 'ลิตร',
               data: barValues,
-              backgroundColor: 'rgba(13, 110, 253, 0.7)', // Primary
-              borderColor: 'rgba(13, 110, 253, 1)',
+              backgroundColor: 'rgba(32, 163, 158, 0.7)', // var(--mint)
+              borderColor: 'rgba(32, 163, 158, 1)',
               borderWidth: 1,
               borderRadius: 5,
               maxBarThickness: 50
@@ -435,8 +409,8 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                 }
             },
             scales: {
-              x: { ticks: { color: '#6c757d' }, grid: { display: false } },
-              y: { ticks: { color: '#6c757d', callback: (v) => nf(v) }, grid: { color: '#e9ecef' }, beginAtZero: true }
+              x: { ticks: { color: 'var(--steel)' }, grid: { display: false } },
+              y: { ticks: { color: 'var(--steel)', callback: (v) => nf(v) }, grid: { color: 'rgba(0,0,0,0.05)' }, beginAtZero: true }
             }
           }
         });
@@ -453,7 +427,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
             labels: pieLabels,
             datasets: [{
               data: pieValues,
-              backgroundColor: ['#0d6efd', '#198754', '#ffc107', '#0dcaf0', '#dc3545', '#6f42c1'],
+              backgroundColor: ['#20A39E', '#CCA43B', '#B66D0D', '#36535E', '#6f42c1', '#fd7e14'], // [mint, gold, amber, teal, ...]
               borderColor: '#ffffff',
               borderWidth: 2
             }]
@@ -477,3 +451,4 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   </script>
 </body>
 </html>
+
