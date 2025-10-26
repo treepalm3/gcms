@@ -172,15 +172,39 @@ $utilization    = $total_capacity > 0 ? ($total_stock / $total_capacity) * 100 :
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
 <link rel="stylesheet" href="../assets/css/admin_dashboard.css" />
 <style>
-  .stock-card { border-left: 4px solid #6c757d; }
-  .stock-card.low-stock { border-left-color: #dc3545; }
-  .stock-card.medium-stock { border-left-color: #ffc107; }
-  .stock-card.high-stock { border-left-color: #198754; }
-  .stock-progress { height: 8px; }
-  .stock-progress-bar.low { background-color: #dc3545; }
-  .stock-progress-bar.medium { background-color: #ffc107; }
-  .stock-progress-bar.high { background-color: #198754; }
-</style>
+        .stock-card { 
+            border-left: 4px solid var(--steel); 
+            transition: all .3s ease; 
+            background: #fff;
+            border-radius: var(--radius);
+            border-top-left-radius: 0;
+            border-bottom-left-radius: 0;
+            border: 1px solid var(--border);
+            border-left-width: 4px;
+            box-shadow: var(--shadow);
+            padding: 1rem 1.25rem;
+        }
+        .stock-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--hover-shadow);
+        }
+        .stock-card.low-stock { border-left-color: var(--amber); }
+        .stock-card.medium-stock { border-left-color: var(--gold); }
+        .stock-card.high-stock { border-left-color: var(--mint); }
+        
+        .stock-progress { height: 8px; background-color: #e9ecef; border-radius: 4px; overflow: hidden; }
+        .stock-progress-bar { height: 100%; transition: width .3s ease; }
+        .stock-progress-bar.low { background: linear-gradient(90deg, #dc3545, #fd7e14); }
+        .stock-progress-bar.medium { background: linear-gradient(90deg, #ffc107, #fd7e14); }
+        .stock-progress-bar.high { background: linear-gradient(90deg, #28a745, #20c997); }
+
+        .fuel-price-card{border:1px solid #e9ecef; border-radius:12px; transition:.25s; background:#fff}
+        .fuel-price-card:hover{box-shadow:0 8px 20px rgba(0,0,0,.06); transform:translateY(-1px)}
+        .fuel-price-actions{display:flex; gap:.5rem; margin-top:.75rem; flex-wrap:wrap}
+        .badge-price{font-weight:600}
+        .nav-tabs .nav-link { font-weight: 600; }
+        .nav-tabs .nav-link.active { color: var(--navy); border-color: var(--border) var(--border) #fff; }
+    </style>
 </head>
 <body>
 
