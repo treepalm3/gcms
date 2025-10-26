@@ -1,5 +1,5 @@
 <?php
-// member/bills.php — ประวัติการซื้อของสมาชิก (เชื่อม DB จริง)
+// member/bills.php — ประวัติการซื้อของสมาชิก (แก้ไข: รองรับกรรมการ/ผู้บริหารที่เป็นสมาชิก)
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 
@@ -15,7 +15,10 @@ try {
   }
   $current_name = $_SESSION['full_name'] ?: 'สมาชิกสหกรณ์';
   $current_role = $_SESSION['role'] ?? 'guest';
-  if($current_role!=='member'){
+  
+  // [แก้ไข] อนุญาตทุกบทบาทที่มีสถานะเป็นสมาชิก
+  $allowed_roles = ['member', 'manager', 'committee', 'admin']; 
+  if(!in_array($current_role, $allowed_roles)){
     header('Location: /index/login.php?err=คุณไม่มีสิทธิ์เข้าถึงหน้านี้'); exit();
   }
 } catch(Throwable $e){
@@ -77,12 +80,13 @@ $member_house = null;
 
 if ($db_ok) {
   try {
+    // [แก้ไข] ลบเงื่อนไข u.role='member' เพื่อให้ดึงข้อมูลได้ทุกบทบาทที่เป็นสมาชิก
     $sql = "
       SELECT u.id AS user_id, u.full_name, u.phone,
              m.id AS member_id, m.house_number, m.member_code
       FROM users u
       JOIN members m ON m.user_id = u.id
-      WHERE u.id = :uid AND u.role='member' AND u.is_active=1
+      WHERE u.id = :uid AND u.is_active=1
       LIMIT 1
     ";
     $st = $pdo->prepare($sql);
@@ -99,6 +103,7 @@ if ($db_ok) {
 }
 
 // ====== ดึงบิลของสมาชิก ======
+// ... (ส่วนที่เหลือของโค้ดดึงบิลใช้ member_phone และ member_house ที่ดึงมาแล้ว)
 $rows = [];
 if ($db_ok && $member) {
   try {
@@ -252,7 +257,6 @@ sort($pay_methods);
 </head>
 <body>
 
-  <!-- App Bar -->
   <nav class="navbar navbar-dark bg-primary">
     <div class="container-fluid">
       <div class="d-flex align-items-center gap-2">
@@ -271,7 +275,6 @@ sort($pay_methods);
     </div>
   </nav>
 
-  <!-- Offcanvas Sidebar -->
   <div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasSidebar" aria-labelledby="offcanvasLabel">
     <div class="offcanvas-header">
       <h5 class="offcanvas-title" id="offcanvasLabel"><?= htmlspecialchars($site_name) ?></h5>
@@ -292,7 +295,6 @@ sort($pay_methods);
 
   <div class="container-fluid">
     <div class="row">
-      <!-- Sidebar Desktop -->
       <aside class="col-lg-2 d-none d-lg-flex flex-column sidebar py-4">
         <div class="side-brand mb-3"><h3><span>Member</span></h3></div>
         <nav class="sidebar-menu flex-grow-1">
@@ -305,7 +307,6 @@ sort($pay_methods);
         <a class="logout" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
       </aside>
 
-      <!-- Content -->
       <main class="col-lg-10 p-4">
         <div class="main-header">
           <h2><i class="fa-solid fa-receipt me-2"></i>ประวัติการซื้อ</h2>
@@ -316,7 +317,6 @@ sort($pay_methods);
         <?php endif; ?>
 
         <div class="panel">
-          <!-- Toolbar -->
           <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
             <div class="d-flex flex-wrap gap-2">
               <div class="input-group">
@@ -343,7 +343,6 @@ sort($pay_methods);
             </div>
           </div>
 
-          <!-- Table -->
           <div class="table-responsive">
             <table class="table table-hover align-middle mb-0" id="tblBills">
               <thead><tr>
