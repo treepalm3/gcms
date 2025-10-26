@@ -41,13 +41,12 @@ if (!function_exists('column_exists')) {
 }
 function nf($n, $d=2){ return number_format((float)$n, $d, '.', ','); }
 function ymd($s){ $t=strtotime($s); return $t? date('Y-m-d',$t) : null; }
-// [แก้ไข] เพิ่มการตรวจสอบ $s
+// เพิ่มการตรวจสอบ $s
 function d($s, $fmt = 'd/m/Y') { 
     if (empty($s)) return '-';
     $t = strtotime($s); 
     return $t ? date($fmt, $t) : '-'; 
 }
-
 
 /* ===== ค่าพื้นฐาน ===== */
 $site_name = 'สหกรณ์ปั๊มน้ำมันบ้านภูเขาทอง';
@@ -111,6 +110,7 @@ $has_sales_station= column_exists($pdo,'sales','station_id');
 $transactions = [];
 $categories   = ['income'=>[],'expense'=>[]];
 $total_income = 0.0; $total_expense = 0.0; $net_profit = 0.0; $total_transactions_all = 0;
+$error_message = null;
 
 try {
   if ($has_ft) {
@@ -129,11 +129,11 @@ try {
       LEFT JOIN users u ON u.id = ft.user_id
       $w
       ORDER BY ft.transaction_date DESC, ft.id DESC
-      LIMIT 1000 -- จำกัดการดึงข้อมูล
+      LIMIT 1000
     ");
     $stmt->execute($p);
     $transactions = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-    $total_transactions_all = count($transactions); // นับจากที่ดึงมา
+    $total_transactions_all = count($transactions);
 
     // ดึงหมวดหมู่
     $catSql = "SELECT type, GROUP_CONCAT(DISTINCT category ORDER BY category SEPARATOR '||') cats
@@ -148,7 +148,7 @@ try {
     // ดึงยอดสรุป
     $sumSql = "SELECT COALESCE(SUM(CASE WHEN type='income'  THEN amount END),0) ti,
                       COALESCE(SUM(CASE WHEN type='expense' THEN amount END),0) te
-               FROM financial_transactions ft $w"; // [แก้ไข] ไม่ต้องนับ COUNT(*) ที่นี่
+               FROM financial_transactions ft $w";
     $sum = $pdo->prepare($sumSql);
     $sum->execute($p);
     $s = $sum->fetch(PDO::FETCH_ASSOC);
@@ -164,6 +164,10 @@ try {
   $transactions = []; $categories = ['income'=>[],'expense'=>[]];
 }
 
+/* ===== Base QS สำหรับ pagination ===== */
+$base_qs = $_GET;
+unset($base_qs['page_fin'], $base_qs['page_sales']);
+
 // Pagination - รายการการเงิน
 $per_fin = 7;
 $page_fin = max(1, (int)($_GET['page_fin'] ?? 1));
@@ -173,7 +177,6 @@ $total_pages_fin = max(1, (int)ceil($total_transactions_all / $per_fin));
 $fin_from_i = $total_transactions_all ? $offset_fin + 1 : 0;
 $fin_to_i   = min($offset_fin + $per_fin, $total_transactions_all);
 
-
 /* ===== ดึง "รายการขาย" (ผูกกับช่วงวันที่ส่วนกลาง) ===== */
 $sales_rows = []; $sales_total=0.0; $sales_count=0;
 try {
@@ -182,7 +185,7 @@ try {
   if ($rangeFromStr) { $sw.=" AND DATE(s.sale_date) >= :f"; $sp[':f']=$rangeFromStr; }
   if ($rangeToStr)   { $sw.=" AND DATE(s.sale_date) <= :t"; $sp[':t']=$rangeToStr; }
 
-  // [แก้ไข] ดึง user_id จาก created_by ถ้ามี
+  // ดึง user จาก created_by ถ้ามี
   $ss = $pdo->prepare("
       SELECT s.sale_date AS date, s.sale_code AS code, s.total_amount AS amount,
              CONCAT('ขายเชื้อเพลิง (', COALESCE(s.payment_method,''), ')') AS description,
@@ -192,7 +195,7 @@ try {
       LEFT JOIN users u ON u.id = e.user_id
       $sw
       ORDER BY s.sale_date DESC, s.id DESC
-      LIMIT 1000 -- จำกัดการดึงข้อมูล
+      LIMIT 1000
   ");
   $ss->execute($sp);
   $sales_rows = $ss->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -271,7 +274,6 @@ if ($has_gpv) {
   } catch (Throwable $e) { $has_gpv = false; error_log("GPV error: ".$e->getMessage()); }
 }
 
-
 $role_th_map = ['admin'=>'ผู้ดูแลระบบ','manager'=>'ผู้บริหาร','employee'=>'พนักงาน','member'=>'สมาชิกสหกรณ์','committee'=>'กรรมการ'];
 $current_role_th = $role_th_map[$current_role] ?? 'ผู้ใช้งาน';
 $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
@@ -336,7 +338,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
         <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
         <a href="setting.php"><i class="bi bi-gear-fill"></i> ตั้งค่า</a>
     </nav>
-    <a class="logout mt-auto" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
+    <a class="logout mt-auto" href="../index.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
   </div>
 </div>
 
@@ -354,11 +356,10 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
           <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
           <a href="setting.php"><i class="bi bi-gear-fill"></i> ตั้งค่า</a>
       </nav>
-      <a class="logout" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
+      <a class="logout" href="../index.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
     </aside>
 
     <main class="col-lg-10 p-4">
-      <!-- [แก้ไข] ใช้ .main-header -->
       <div class="main-header">
         <h2><i class="fa-solid fa-wallet"></i> การเงินและบัญชี</h2>
         <div class="d-flex gap-2">
@@ -370,7 +371,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
         </div>
       </div>
 
-      <!-- [แก้ไข] ใช้ .panel -->
       <div class="panel filter-section">
         <form method="GET" action="" class="row g-2 align-items-end">
             <div class="col-md">
@@ -397,7 +397,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
         </form>
       </div>
 
-      <!-- [แก้ไข] ใช้ .stats-grid และ .stat-card -->
       <div class="stats-grid my-4">
         <div class="stat-card text-center">
           <h5><i class="bi bi-arrow-down-circle-fill me-2 text-success"></i>รายได้รวม (ช่วง)</h5>
@@ -414,7 +413,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
         </div>
       </div>
 
-      <!-- [แก้ไข] ใช้ .stat-card -->
       <div class="stat-card mb-4">
         <h5 class="mb-3"><i class="bi bi-bar-chart-line-fill me-2"></i>สรุปภาพรวม (ตามช่วงที่เลือก)</h5>
         <div class="row g-3">
@@ -433,7 +431,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
         </div>
       </div>
 
-
       <!-- Tabs -->
       <ul class="nav nav-tabs mb-3" id="inventoryTab" role="tablist">
         <li class="nav-item" role="presentation">
@@ -449,7 +446,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
       </ul>
 
       <div class="tab-content" id="inventoryTabContent">
-        <!-- [แก้ไข] ใช้ .panel -->
         <div class="tab-pane fade show active" id="financial-panel" role="tabpanel">
             <div class="panel">
                 <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
@@ -463,6 +459,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                         <option value="income">รายได้</option>
                         <option value="expense">ค่าใช้จ่าย</option>
                     </select>
+                    <!-- แก้แท็กปิดผิด: เอา </datalist> ออก และปิดด้วย </select> เท่านั้น -->
                     <select id="filterCategory" class="form-select" style="width:auto;">
                           <option value="">ทุกหมวดหมู่</option>
                           <?php
@@ -478,9 +475,8 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                                 echo '<option value="'.htmlspecialchars($c).'">'.htmlspecialchars($c).'</option>';
                             }
                           ?>
-                      </datalist>
-                  </select>
-                  <button class="btn btn-outline-secondary" id="btnTxnShowAll" title="ล้างตัวกรอง"><i class="bi bi-arrow-clockwise"></i></button>
+                    </select>
+                    <button class="btn btn-outline-secondary" id="btnTxnShowAll" title="ล้างตัวกรอง"><i class="bi bi-arrow-clockwise"></i></button>
                   </div>
                 </div>
                 
@@ -496,7 +492,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                     </thead>
                     <tbody>
                       <?php if (empty($transactions_display)): ?>
-                        <tr><td colspan="7" class="text-center text-muted p-4">ไม่พบข้อมูลใน่ชวงวันที่ที่เลือก</td></tr>
+                        <tr><td colspan="7" class="text-center text-muted p-4">ไม่พบข้อมูลในช่วงวันที่ที่เลือก</td></tr>
                       <?php endif; ?>
                       <?php foreach($transactions_display as $tx):
                         $isIncome = ($tx['type']==='income');
@@ -539,7 +535,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                         <td class="text-end"><span class="<?= $isIncome ? 'text-success' : 'text-warning' ?> fw-bold"><?= $isIncome ? '+' : '-' ?>฿<?= nf($tx['amount']) ?></span></td>
                         <td class="d-none d-xl-table-cell"><?= htmlspecialchars($tx['created_by']) ?></td>
                         <td class="text-end pe-3">
-                          <!-- [แก้ไข] ลบปุ่ม แก้ไข/ลบ ออก เหลือแต่ใบเสร็จ -->
                           <button class="btn btn-sm btn-outline-secondary btnReceipt" title="ดูใบเสร็จ"><i class="bi bi-receipt"></i></button>
                         </td>
                       </tr>
@@ -574,7 +569,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                     <thead class="table-light"><tr><th>วันที่</th><th>รหัสขาย</th><th>รายละเอียด</th><th class="text-end">จำนวนเงิน</th><th class="d-none d-lg-table-cell">ผู้บันทึก</th><th class="text-end">ใบเสร็จ</th></tr></thead>
                     <tbody>
                       <?php if (empty($sales_rows_display)): ?>
-                        <tr><td colspan="6" class="text-center text-muted p-4">ไม่พบข้อมูลใน่ชวงวันที่ที่เลือก</td></tr>
+                        <tr><td colspan="6" class="text-center text-muted p-4">ไม่พบข้อมูลในช่วงวันที่ที่เลือก</td></tr>
                       <?php endif; ?>
                       <?php foreach($sales_rows_display as $r): ?>
                         <tr
@@ -623,7 +618,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 
 <footer class="footer">© <?= date('Y') ?> <?= htmlspecialchars($site_name) ?> — จัดการการเงินและบัญชี</footer>
 
-<!-- [แก้ไข] Modal Add (ปรับดีไซน์เล็กน้อย) -->
+<!-- Modal Add -->
 <div class="modal fade" id="modalAddTransaction" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg">
     <form class="modal-content" id="formAddTransaction" method="post" action="finance_create.php">
@@ -657,8 +652,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
             <input type="text" class="form-control" name="category" id="addCategory" required list="categoryList" placeholder="เช่น เงินลงทุน, ค่าไฟ, จ่ายเงินรายวัน" <?= $has_ft?'':'disabled' ?>>
             <datalist id="categoryList">
                 <?php
-                  // (โค้ด PHP สำหรับ datalist เหมือนเดิม)
-                  $allCatsModal = array_unique(array_merge($categories['income'],$categories['expense']));
+                  // เติมตัวเลือกจาก $finalCats
                   foreach($finalCats as $c) {
                       echo '<option value="'.htmlspecialchars($c).'">';
                   }
@@ -684,8 +678,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   </div>
 </div>
 
-<!-- [ลบ] ModalEditTransaction และ ModalDeleteTransaction -->
-
 <div class="position-fixed bottom-0 end-0 p-3" style="z-index:1080">
   <div id="liveToast" class="toast align-items-center text-bg-dark border-0" role="status" aria-live="polite">
     <div class="d-flex">
@@ -701,7 +693,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 (function(){
   const canEdit = <?= $has_ft ? 'true' : 'false' ?>;
 
-  // [เพิ่ม] JS Helpers
+  // Helpers
   function nf(number, decimals = 0) {
       const num = parseFloat(number) || 0;
       return num.toLocaleString('th-TH', {
@@ -715,133 +707,158 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     if (Math.abs(n) >= 1e3) return (n/1e3).toFixed(1)+'พ.';
     return nf(n, 0);
   }
-  
-  // [แก้ไข] ดึงสีจาก CSS Variables
-  const colors = {
-      primary: getComputedStyle(document.documentElement).getPropertyValue('--teal').trim() || '#36535E',
-      success: getComputedStyle(document.documentElement).getPropertyValue('--mint').trim() || '#20A39E',
-      warning: getComputedStyle(document.documentElement).getPropertyValue('--amber').trim() || '#B66D0D',
-      gold: getComputedStyle(document.documentElement).getPropertyValue('--gold').trim() || '#CCA43B',
-      navy: getComputedStyle(document.documentElement).getPropertyValue('--navy').trim() || '#212845',
-      steel: getComputedStyle(document.documentElement).getPropertyValue('--steel').trim() || '#68727A'
-  };
 
-  Chart.defaults.color = colors.steel;
-  Chart.defaults.font.family = "'Prompt', sans-serif";
-  Chart.defaults.plugins.legend.position = 'bottom';
-  Chart.defaults.plugins.tooltip.backgroundColor = colors.navy;
-  Chart.defaults.plugins.tooltip.titleFont.weight = 'bold';
-  Chart.defaults.plugins.tooltip.bodyFont.weight = '500';
-
-  const pieCtx = document.getElementById('pieChart')?.getContext('2d');
-  const lineCtx = document.getElementById('lineChart')?.getContext('2d');
-
-  if (pieCtx) {
-    new Chart(pieCtx, {
-      type: 'doughnut',
-      data: {
-        labels: ['รายได้','ค่าใช้จ่าย'],
-        datasets: [{
-          data: [<?= json_encode(round($total_income,2)) ?>, <?= json_encode(round($total_expense,2)) ?>],
-          backgroundColor: [colors.success, colors.warning], // [แก้ไข]
-          borderColor: '#ffffff',
-          borderWidth: 2
-        }]
-      },
-      options: { responsive:true, maintainAspectRatio: false, cutout: '60%' }
-    });
+  // ==== Chart.js: ทนทานขึ้น ====
+  function ready(fn){
+    if (document.readyState !== 'loading') fn();
+    else document.addEventListener('DOMContentLoaded', fn);
   }
+  ready(function(){
+    if (typeof Chart === 'undefined') {
+      console.error('Chart.js ไม่ได้โหลด');
+      return;
+    }
+    // สีจาก CSS variables + fallback
+    var root = getComputedStyle(document.documentElement);
+    var colors = {
+      primary: (root.getPropertyValue('--teal')  || '').trim() || '#36535E',
+      success: (root.getPropertyValue('--mint')  || '').trim() || '#20A39E',
+      warning:(root.getPropertyValue('--amber') || '').trim() || '#B66D0D',
+      gold:   (root.getPropertyValue('--gold')  || '').trim() || '#CCA43B',
+      navy:   (root.getPropertyValue('--navy')  || '').trim() || '#212845',
+      steel:  (root.getPropertyValue('--steel') || '').trim() || '#68727A'
+    };
 
-  if (lineCtx) {
-    new Chart(lineCtx, {
-      type: 'line',
-      data: {
-        labels: <?= json_encode($labels) ?>,
-        datasets: [
-          { label: 'รายได้', data: <?= json_encode($seriesIncome) ?>, tension:.3, fill:false, borderColor: colors.success, borderWidth: 2, pointBackgroundColor: colors.success },
-          { label: 'ค่าใช้จ่าย', data: <?= json_encode($seriesExpense) ?>, tension:.3, fill:false, borderColor: colors.warning, borderWidth: 2, pointBackgroundColor: colors.warning }
-        ]
-      },
-      options: { 
-          responsive:true, 
-          maintainAspectRatio: false, 
-          scales:{ y:{ beginAtZero:true, ticks: { callback: (v)=> '฿'+humanMoney(v) } } } 
+    Chart.defaults.color = colors.steel;
+    Chart.defaults.font = Chart.defaults.font || {};
+    Chart.defaults.font.family = "'Prompt', sans-serif";
+    Chart.defaults.plugins = Chart.defaults.plugins || {};
+    Chart.defaults.plugins.legend = Chart.defaults.plugins.legend || {};
+    Chart.defaults.plugins.legend.position = 'bottom';
+    Chart.defaults.plugins.tooltip = Chart.defaults.plugins.tooltip || {};
+    Chart.defaults.plugins.tooltip.backgroundColor = colors.navy;
+    Chart.defaults.plugins.tooltip.titleFont = Chart.defaults.plugins.tooltip.titleFont || {};
+    Chart.defaults.plugins.tooltip.bodyFont  = Chart.defaults.plugins.tooltip.bodyFont  || {};
+    Chart.defaults.plugins.tooltip.titleFont.weight = 'bold';
+    Chart.defaults.plugins.tooltip.bodyFont.weight  = '500';
+
+    // Data จาก PHP
+    var incTotal = Number(<?= json_encode(round($total_income,2)) ?>) || 0;
+    var expTotal = Number(<?= json_encode(round($total_expense,2)) ?>) || 0;
+    var labels   = <?= json_encode($labels) ?> || [];
+    var seriesIncome  = <?= json_encode($seriesIncome) ?> || [];
+    var seriesExpense = <?= json_encode($seriesExpense) ?> || [];
+    var gpLabels = <?= json_encode($gp_labels, JSON_UNESCAPED_UNICODE) ?> || [];
+    var gpSeries = <?= json_encode($gp_series) ?> || [];
+
+    // Pie
+    try {
+      var pieEl = document.getElementById('pieChart');
+      if (pieEl) {
+        new Chart(pieEl, {
+          type: 'doughnut',
+          data: {
+            labels: ['รายได้','ค่าใช้จ่าย'],
+            datasets: [{
+              data: [incTotal, expTotal],
+              backgroundColor: [colors.success, colors.warning],
+              borderColor: '#ffffff',
+              borderWidth: 2
+            }]
+          },
+          options: { responsive:true, maintainAspectRatio:false, cutout:'60%' }
+        });
       }
-    });
-  }
+    } catch (e) { console.error('Pie error:', e); }
 
-  const gpCanvas = document.getElementById('gpBarChart');
-  if (gpCanvas) {
-    const gpLabels = <?= json_encode($gp_labels, JSON_UNESCAPED_UNICODE) ?>;
-    const gpSeries = <?= json_encode($gp_series) ?>;
-    new Chart(gpCanvas, {
-      type: 'bar',
-      data: {
-        labels: gpLabels,
-        datasets: [{
-          label: 'กำไรขั้นต้น',
-          data: gpSeries,
-          backgroundColor: colors.primary + 'B3', // 70% opacity
-          borderColor: colors.primary,
-          borderWidth: 1,
-          borderRadius: 4
-        }]
-      },
-      options: { 
-          responsive:true, 
-          maintainAspectRatio: false, 
-          scales:{ y:{ beginAtZero:true, ticks: { callback: (v)=> '฿'+humanMoney(v) } } }
+    // Line
+    try {
+      var lineEl = document.getElementById('lineChart');
+      if (lineEl) {
+        new Chart(lineEl, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [
+              { label: 'รายได้',    data: seriesIncome,  tension:.3, fill:false, borderColor: colors.success, borderWidth:2, pointBackgroundColor: colors.success },
+              { label: 'ค่าใช้จ่าย', data: seriesExpense, tension:.3, fill:false, borderColor: colors.warning, borderWidth:2, pointBackgroundColor: colors.warning }
+            ]
+          },
+          options: {
+            responsive:true, maintainAspectRatio:false,
+            scales:{ y:{ beginAtZero:true, ticks:{ callback: function(v){ return '฿'+humanMoney(v); } } } }
+          }
+        });
       }
-    });
-  }
+    } catch (e) { console.error('Line error:', e); }
 
+    // GP Bar
+    try {
+      var gpEl = document.getElementById('gpBarChart');
+      if (gpEl) {
+        new Chart(gpEl, {
+          type: 'bar',
+          data: {
+            labels: gpLabels,
+            datasets: [{
+              label: 'กำไรขั้นต้น',
+              data: gpSeries,
+              backgroundColor: colors.primary + 'B3',
+              borderColor: colors.primary,
+              borderWidth: 1,
+              borderRadius: 4
+            }]
+          },
+          options: {
+            responsive:true, maintainAspectRatio:false,
+            scales:{ y:{ beginAtZero:true, ticks:{ callback: function(v){ return '฿'+humanMoney(v); } } } }
+          }
+        });
+      }
+    } catch (e) { console.error('GP error:', e); }
+  });
+
+  // ====== ใบเสร็จ: route ======
   const receiptRoutes = {
     sale:   code => `sales_receipt.php?code=${encodeURIComponent(code)}`,
     receive:id   => `receive_view.php?id=${encodeURIComponent(id)}`,
     lot:    code => `lot_view.php?code=${encodeURIComponent(code)}`,
     transaction: token => /^\d+$/.test(String(token))
-    ? `txn_receipt.php?id=${encodeURIComponent(token)}`
-    : `txn_receipt.php?code=${encodeURIComponent(token)}`
+      ? `txn_receipt.php?id=${encodeURIComponent(token)}`
+      : `txn_receipt.php?code=${encodeURIComponent(token)}`
   };
 
-  // Event Listeners สำหรับปุ่มในตาราง (ใช้ event delegation)
+  // Delegation: ปุ่มใบเสร็จ
   document.body.addEventListener('click', function(e) {
-      // ปุ่มดูใบเสร็จ
       const receiptBtn = e.target.closest('.btnReceipt');
       if (receiptBtn) {
           const tr = receiptBtn.closest('tr');
           const type = tr?.dataset?.receiptType;
           const code = tr?.dataset?.receiptCode;
           let url = (tr?.dataset?.receiptUrl || '').trim();
-          
           if (!url && type && code && receiptRoutes[type]) url = receiptRoutes[type](code);
           if (!url) return showToast('ยังไม่มีลิงก์ใบเสร็จสำหรับรายการนี้', false);
           window.open(url, '_blank');
       }
-
-      // [ลบ] Event Listener ของ .btnEdit
-      // [ลบ] Event Listener ของ .btnDel
-
   });
 
-
+  // ฟิลเตอร์ตาราง FT
   const q = document.getElementById('txnSearch');
   const fType = document.getElementById('filterType');
   const fCat  = document.getElementById('filterCategory');
   const tbody = document.querySelector('#txnTable tbody');
 
   function normalize(s){ return (s||'').toString().toLowerCase(); }
-
   function applyFilters(){
     const text = q ? normalize(q.value) : '';
     const type = fType ? fType.value : '';
     const cat  = fCat ? fCat.value : '';
+    if (!tbody) return;
 
     tbody.querySelectorAll('tr').forEach(tr=>{
       const d = tr.dataset; let ok = true;
       if (type && d.type !== type) ok = false;
       if (cat  && d.category !== cat) ok = false;
-
       if (ok && text) {
         const blob = (d.id+' '+(d.category||'')+' '+(d.description||'')+' '+(d.reference||'')).toLowerCase();
         if (!blob.includes(text)) ok = false;
@@ -849,19 +866,17 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
       tr.style.display = ok? '' : 'none';
     });
   }
-
   [q,fType,fCat].forEach(el=>el && el.addEventListener('input', applyFilters));
-
   document.getElementById('btnTxnShowAll')?.addEventListener('click', ()=>{
     if (q) q.value = '';
     if (fType) fType.value = '';
     if (fCat) fCat.value = '';
     applyFilters();
   });
-
   if (tbody) applyFilters();
 
-   function wireSimpleTable({tableId, searchId, resetId}) {
+  // ตาราง Sales (opt-in ถ้ามีช่องค้นหา)
+  function wireSimpleTable({tableId, searchId, resetId}) {
     const table = document.getElementById(tableId);
     if (!table) return;
     const tbody = table.querySelector('tbody');
@@ -870,17 +885,13 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     if (!tbody || !q || !resetBtn) return;
 
     const norm = s => (s||'').toString().toLowerCase();
-
     function apply(){
       const text = norm(q?.value || '');
       tbody.querySelectorAll('tr').forEach(tr=>{
         const ds = tr.dataset || {};
         let ok = true;
         if (ok && text) {
-          const blob = [
-            ds.code, ds.description, ds.createdBy, ds.amount,
-            tr.textContent
-          ].join(' ').toLowerCase();
+          const blob = [ds.code, ds.description, ds.createdBy, ds.amount, tr.textContent].join(' ').toLowerCase();
           ok = blob.includes(text);
         }
         tr.style.display = ok ? '' : 'none';
@@ -890,9 +901,9 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     resetBtn.addEventListener('click', ()=>{ q.value = ''; apply(); });
     apply();
   }
-
   wireSimpleTable({ tableId:'salesTable', searchId:'salesSearch', resetId:'salesShowAll' });
-  
+
+  // Toast
   const toastEl = document.getElementById('liveToast'); const toastMsg = document.getElementById('toastMsg');
   const toast = toastEl ? new bootstrap.Toast(toastEl, {delay:2000}) : null;
   function showToast(msg, isSuccess = true){
@@ -902,13 +913,14 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     toast.show();
   }
 
+  // ok/err จาก query
   const urlParams = new URLSearchParams(window.location.search);
   const okMsg = urlParams.get('ok');
   const errMsg = urlParams.get('err');
   if (okMsg) { showToast(okMsg, true); window.history.replaceState({}, document.title, window.location.pathname + window.location.hash); }
   if (errMsg) { showToast(errMsg, false); window.history.replaceState({}, document.title, window.location.pathname + window.location.hash); }
 
-  // เปิดแท็บตามพารามิเตอร์ ?tab=...
+  // เปิดแท็บจาก ?tab= หรือ #hash
   const params = new URLSearchParams(location.search);
   const tab = params.get('tab');
   const map = { financial:'#financial-panel', sales:'#sales-panel' };
@@ -916,35 +928,33 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     const trigger = document.querySelector(`[data-bs-target="${map[tab]}"]`);
     if (trigger) bootstrap.Tab.getOrCreateInstance(trigger).show();
   } else {
-    // [แก้ไข] เปิดแท็บตาม Hash
     const hash = window.location.hash || '#financial-panel';
     const tabTrigger = document.querySelector(`button[data-bs-target="${hash}"]`);
     if (tabTrigger) {
         bootstrap.Tab.getOrCreateInstance(tabTrigger).show();
     }
   }
-   // [เพิ่ม] บันทึก Hash
-   document.querySelectorAll('button[data-bs-toggle="tab"]').forEach(tabEl => {
+  // sync hash เมื่อเปลี่ยนแท็บ
+  document.querySelectorAll('button[data-bs-toggle="tab"]').forEach(tabEl => {
       tabEl.addEventListener('shown.bs.tab', event => {
           history.pushState(null, null, event.target.dataset.bsTarget);
       })
   });
 
-
-  // [เพิ่ม] อัปเดตรหัสรายการอัตโนมัติเมื่อ Modal เปิด
+  // อัปเดตรหัส FT อัตโนมัติเมื่อเปิด Modal
   const addModal = document.getElementById('modalAddTransaction');
   if (addModal) {
     addModal.addEventListener('show.bs.modal', function () {
       const codeInput = document.getElementById('addTransactionCode');
       if (codeInput) {
         const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const day = String(now.getDate()).padStart(2, '0');
-        const hours = String(now.getHours()).padStart(2, '0');
-        const minutes = String(now.getMinutes()).padStart(2, '0');
-        const seconds = String(now.getSeconds()).padStart(2, '0');
-        codeInput.value = `FT-${year}${month}${day}-${hours}${minutes}${seconds}`;
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        const hh= String(now.getHours()).padStart(2, '0');
+        const mm= String(now.getMinutes()).padStart(2, '0');
+        const ss= String(now.getSeconds()).padStart(2, '0');
+        codeInput.value = `FT-${y}${m}${d}-${hh}${mm}${ss}`;
       }
     });
   }
@@ -953,4 +963,3 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 </script>
 </body>
 </html>
-
