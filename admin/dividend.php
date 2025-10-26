@@ -255,7 +255,7 @@ try {
             <a class="active" href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
             <a href="setting.php"><i class="bi bi-gear-fill"></i> ตั้งค่าระบบ</a>
         </nav>
-        <a class="logout mt-auto" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
+        <a class="logout mt-auto" href="../index.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
     </div>
 </div>
 
@@ -274,7 +274,7 @@ try {
                 <a class="active" href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
                 <a href="setting.php"><i class="bi bi-gear-fill"></i> ตั้งค่า</a>
             </nav>
-            <a class="logout" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
+            <a class="logout" href="../index.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
         </aside>
 
         <main class="col-lg-10 p-4">
