@@ -1,5 +1,5 @@
 <?php
-// employee/dividend.php — ประวัติการรับปันผล (เชื่อม DB จริง)
+// member/dividend.php — ประวัติการรับปันผล (เชื่อม DB จริง)
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 
