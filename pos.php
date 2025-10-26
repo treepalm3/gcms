@@ -408,14 +408,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
   <nav class="navbar navbar-dark bg-primary">
     <div class="container-fluid">
       <div class="d-flex align-items-center gap-2">
-        <a class="navbar-brand" href="profile.php"><?= htmlspecialchars($site_name) ?></a>
+        <a class="navbar-brand" href="pos.php"><?= htmlspecialchars($site_name) ?></a>
       </div>
       <div class="d-flex align-items-center gap-3 ms-auto">
         <div class="nav-identity text-end d-none d-sm-block">
           <div class="nav-name"><?= htmlspecialchars($current_name) ?></div>
           <div class="nav-sub"><?= htmlspecialchars($current_role_th) ?><?= $kiosk_emp_code ? ' · '.htmlspecialchars($kiosk_emp_code) : '' ?></div>
         </div>
-        <a href="profile.php" class="avatar-circle text-decoration-none"><?= htmlspecialchars($avatar_text) ?></a>
+        <a href="pos.php" class="avatar-circle text-decoration-none"><?= htmlspecialchars($avatar_text) ?></a>
         <a href="?switch_emp=1" class="btn btn-sm btn-warning d-none d-md-inline-flex">
           <i class="bi bi-arrow-repeat me-1"></i> เปลี่ยนพนักงาน
         </a>
