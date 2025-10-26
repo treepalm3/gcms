@@ -325,6 +325,17 @@
       .stats-grid { grid-template-columns: repeat(2, 1fr); }
       .stat-number { font-size: 2rem; }
     }
+    .navbar .btn-login {
+      background-color: #20A39E; /* สีน้ำเงิน (Primary) */
+      border-color: #B66D0D;
+      color: #ffffff;
+    }
+
+    .navbar .btn-login:hover {
+      background-color: #20A39E; /* สีน้ำเงินเข้มขึ้น */
+      border-color: #B66D0D;
+      color: #ffffff;
+    }
   </style>
 </head>
 <body>
