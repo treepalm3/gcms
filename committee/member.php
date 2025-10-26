@@ -36,32 +36,86 @@ $avatar_text = mb_substr($current_name ?: 'ก', 0, 1, 'UTF-8');
 
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
-// ===== ดึงข้อมูลสมาชิกจากฐานข้อมูลจริง =====
+// ===== ดึงข้อมูลผู้มีหุ้นทุกประเภท แต่ไม่ซ้ำคน (user_id) =====
 $members = [];
 $tiers = [];
+
 try {
-  // ดึงรายการสมาชิกที่ยังใช้งาน (ตัดรายการที่ลบ/ปิด)
-  $stmt = $pdo->query("
+  $sql = "
+    WITH all_people AS (
+      -- 1) สมาชิกสหกรณ์ (ลำดับความสำคัญสูงสุด)
+      SELECT
+        u.id AS user_id,
+        'member' AS role_source,
+        m.member_code  AS id,
+        u.full_name    AS name,
+        u.phone,
+        m.tier,
+        m.points,
+        m.joined_date  AS joined,
+        m.shares,
+        m.house_number,
+        m.address
+      FROM members m
+      JOIN users u ON m.user_id = u.id
+      WHERE m.is_active = 1 AND m.deleted_at IS NULL
+
+      UNION ALL
+
+      -- 2) ผู้บริหาร (ถ้าคนนี้ไม่มีใน members)
+      SELECT
+        u.id AS user_id,
+        'manager' AS role_source,
+        CONCAT('MGR-', LPAD(mg.id,3,'0')) AS id,
+        u.full_name AS name,
+        u.phone,
+        NULL AS tier,
+        0    AS points,
+        DATE(mg.created_at) AS joined,
+        mg.shares,
+        mg.house_number,
+        mg.address
+      FROM managers mg
+      JOIN users u ON mg.user_id = u.id
+
+      UNION ALL
+
+      -- 3) กรรมการ (ถ้าคนนี้ไม่มีใน members)
+      SELECT
+        u.id AS user_id,
+        'committee' AS role_source,
+        c.committee_code AS id,
+        u.full_name AS name,
+        u.phone,
+        NULL AS tier,
+        0    AS points,
+        c.joined_date    AS joined,
+        COALESCE(c.shares,0) AS shares,
+        c.house_number,
+        c.address
+      FROM committees c
+      JOIN users u ON c.user_id = u.id
+    ),
+    ranked AS (
+      SELECT
+        a.*,
+        ROW_NUMBER() OVER (
+          PARTITION BY a.user_id
+          ORDER BY FIELD(a.role_source,'member','manager','committee')
+        ) AS rn
+      FROM all_people a
+    )
     SELECT
-      m.member_code  AS id,
-      u.full_name    AS name,
-      u.phone,
-      m.tier,
-      m.points,
-      m.joined_date  AS joined,
-      m.shares,
-      m.house_number,
-      m.address
-    FROM members m
-    JOIN users u ON m.user_id = u.id
-    WHERE u.role = 'member'
-      AND m.is_active = 1
-      AND m.deleted_at IS NULL
-    ORDER BY m.joined_date DESC, m.id DESC
-  ");
+      user_id, role_source, id, name, phone, tier, points, joined, shares, house_number, address
+    FROM ranked
+    WHERE rn = 1
+    ORDER BY joined DESC, id DESC
+  ";
+
+  $stmt = $pdo->query($sql);
   $members = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-  // ดึงรายการระดับสมาชิกสำหรับตัวกรอง
+  // รายการระดับสมาชิกสำหรับตัวกรอง (มีเฉพาะใน members)
   $tier_stmt = $pdo->query("
     SELECT DISTINCT tier
     FROM members
@@ -73,7 +127,6 @@ try {
     $tiers = ['Diamond','Platinum','Gold','Silver','Bronze'];
   }
 } catch (Throwable $e) {
-  // หากผิดพลาด แสดง 1 แถวอธิบายข้อผิดพลาดแทน
   $members = [[
     'id'=>'M-ERR',
     'name'=>'เกิดข้อผิดพลาดในการโหลดข้อมูล',
