@@ -1,5 +1,5 @@
 <?php
-// member/member_dashboard.php — ศูนย์สมาชิก (เชื่อม DB จริง)
+// member/member_dashboard.php — ศูนย์สมาชิก (แก้ไข: รองรับกรรมการ/ผู้บริหารที่เป็นสมาชิก)
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 
@@ -15,7 +15,10 @@ try {
   }
   $current_name = $_SESSION['full_name'] ?: 'สมาชิกสหกรณ์';
   $current_role = $_SESSION['role'] ?? 'guest';
-  if ($current_role !== 'member') {
+  
+  // [แก้ไข] อนุญาตหลายบทบาทที่ได้รับสถานะสมาชิกเข้าถึงหน้านี้
+  $allowed_roles = ['member', 'manager', 'committee', 'admin']; 
+  if (!in_array($current_role, $allowed_roles)) {
     header('Location: /index/login.php?err=คุณไม่มีสิทธิ์เข้าถึงหน้านี้'); exit();
   }
 } catch (Throwable $e) {
@@ -93,6 +96,7 @@ $member_id = null; // members.id
 
 if ($db_ok) {
   try {
+    // [แก้ไข] ดึงข้อมูลสมาชิกโดยไม่สนใจ user.role, ตราบใดที่มี record ใน members
     $sql = "
       SELECT
         u.id       AS user_id,
@@ -107,7 +111,8 @@ if ($db_ok) {
         m.address
       FROM users u
       JOIN members m ON m.user_id = u.id
-      WHERE u.id = :uid AND u.role='member' AND u.is_active=1
+      WHERE u.id = :uid 
+        AND u.is_active=1
       LIMIT 1
     ";
     $st = $pdo->prepare($sql);
@@ -293,7 +298,6 @@ $pay_th = ['cash'=>'เงินสด','qr'=>'QR Code','transfer'=>'โอน�
 </head>
 <body>
 
-  <!-- App Bar -->
   <nav class="navbar navbar-dark bg-primary">
     <div class="container-fluid">
       <div class="d-flex align-items-center gap-2">
@@ -312,7 +316,6 @@ $pay_th = ['cash'=>'เงินสด','qr'=>'QR Code','transfer'=>'โอน�
     </div>
   </nav>
 
-  <!-- Offcanvas Sidebar -->
   <div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasSidebar" aria-labelledby="offcanvasLabel">
     <div class="offcanvas-header">
       <h5 class="offcanvas-title" id="offcanvasLabel"><?= htmlspecialchars($site_name) ?></h5>
@@ -333,7 +336,6 @@ $pay_th = ['cash'=>'เงินสด','qr'=>'QR Code','transfer'=>'โอน�
 
   <div class="container-fluid">
     <div class="row">
-      <!-- Sidebar Desktop -->
       <aside class="col-lg-2 d-none d-lg-flex flex-column sidebar py-4">
         <div class="side-brand mb-3"><h3><span>Member</span></h3></div>
         <nav class="sidebar-menu flex-grow-1">
@@ -346,7 +348,6 @@ $pay_th = ['cash'=>'เงินสด','qr'=>'QR Code','transfer'=>'โอน�
         <a class="logout" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
       </aside>
 
-      <!-- Content -->
       <main class="col-lg-10 p-4">
         <?php if (!$db_ok): ?>
           <div class="alert alert-danger">เชื่อมต่อฐานข้อมูลไม่สำเร็จ: <?= htmlspecialchars($db_err) ?></div>
@@ -355,7 +356,6 @@ $pay_th = ['cash'=>'เงินสด','qr'=>'QR Code','transfer'=>'โอน�
         <?php endif; ?>
 
         <div class="row g-4">
-          <!-- Member Card -->
           <div class="col-12">
             <div class="member-card" id="printCard">
               <div class="d-flex justify-content-between align-items-center">
@@ -379,7 +379,6 @@ $pay_th = ['cash'=>'เงินสด','qr'=>'QR Code','transfer'=>'โอน�
         </div>
 
         <div class="row g-4 mt-4">
-          <!-- Points -->
           <div class="col-12 col-xl-6" id="points">
             <div class="panel h-100">
               <div class="panel-head">
@@ -432,7 +431,6 @@ $pay_th = ['cash'=>'เงินสด','qr'=>'QR Code','transfer'=>'โอน�
             </div>
           </div>
 
-          <!-- Dividend -->
           <div class="col-12 col-xl-6">
             <div class="panel h-100">
               <div class="panel-head">
@@ -453,7 +451,6 @@ $pay_th = ['cash'=>'เงินสด','qr'=>'QR Code','transfer'=>'โอน�
           </div>
         </div>
 
-        <!-- Recent activity -->
         <div class="row g-4 mt-4" id="bills">
           <div class="col-12">
             <div class="panel">
