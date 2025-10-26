@@ -21,6 +21,7 @@ if (empty($_SESSION['csrf_token'])) {
 $dbFile = __DIR__ . '/../config/db.php';
 if (!file_exists($dbFile)) { $dbFile = __DIR__ . '/config/db.php'; }
 require_once $dbFile; // ต้องกำหนดตัวแปร $pdo (PDO)
+$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION); // [แก้ไข] เพิ่มการตั้งค่า PDO
 
 // ===== Helpers =====
 function get_setting(PDO $pdo, string $name, $default = null) {
@@ -120,10 +121,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     $quantity       = filter_var($_POST['quantity'] ?? 0, FILTER_VALIDATE_FLOAT);
     $payment_method = $_POST['payment_method'] ?? 'cash';
     
-    // [แก้ไข] รับค่าจากช่องที่ซ่อนไว้ (ที่ JavaScript กรอกให้)
     $customer_phone = preg_replace('/\D+/', '', (string)($_POST['customer_phone'] ?? ''));
     $household_no   = trim((string)($_POST['household_no'] ?? ''));
-    $member_pk_from_js = (int)($_POST['member_pk_for_points'] ?? 0); // [เพิ่ม] รับ PK จาก JS
+    $member_pk_from_js = (int)($_POST['member_pk_for_points'] ?? 0); 
 
     $discount_in    = $_POST['discount'] ?? 0;
     $discount       = is_numeric($discount_in) ? (float)$discount_in : 0.0;
@@ -135,7 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     // ===== ตรวจสอบ =====
     if (!array_key_exists($fuel_id, $fuel_types)) {
       $sale_error = 'กรุณาเลือกชนิดน้ำมันให้ถูกต้อง';
-    } elseif ($quantity === false || $quantity <= 0) {
+    } elseif ($quantity === false || $quantity <= 0.01) { // [แก้ไข] ใช้ 0.01
       $sale_error = 'กรุณาใส่จำนวนเงินหรือปริมาณลิตรให้ถูกต้อง';
     } else {
       // ===== คำนวณ =====
@@ -156,9 +156,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       $discount_amount = round($total_amount * ($discount/100.0), 2);
       $net_amount      = round($total_amount - $discount_amount, 2);
 
-      // [แก้ไข] แต้มสะสม: 30 บาท = 1 แต้ม
+      // แต้มสะสม: 30 บาท = 1 แต้ม
       $POINT_RATE     = 30; 
-      $has_loyalty_id = (bool)($member_pk_from_js > 0); // [แก้ไข] เช็คจาก PK
+      $has_loyalty_id = (bool)($member_pk_from_js > 0); 
       $points_earned  = $has_loyalty_id ? (int)floor($net_amount / $POINT_RATE) : 0;
 
       $now = date('Y-m-d H:i:s');
@@ -181,6 +181,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
         $col_house   = has_column($pdo, 'sales', 'household_no');
         $col_discpct = has_column($pdo, 'sales', 'discount_pct');
         $col_discamt = has_column($pdo, 'sales', 'discount_amount');
+        $col_emp_id  = has_column($pdo, 'sales', 'employee_user_id');
 
         $tries = 0; $sale_id = null;
         do {
@@ -196,6 +197,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
           if ($col_house)   { $cols[] = 'household_no';    $params[':household_no']    = $household_no ?: null; }
           if ($col_discpct) { $cols[] = 'discount_pct';    $params[':discount_pct']    = $discount; }
           if ($col_discamt) { $cols[] = 'discount_amount'; $params[':discount_amount'] = $discount_amount; }
+          if ($col_emp_id)  { $cols[] = 'employee_user_id'; $params[':employee_user_id'] = $current_user_id; }
 
           $placeholders = array_map(fn($c) => ':'.$c, $cols);
           foreach ($cols as $c) { $k = ':'.$c; if (!array_key_exists($k, $params)) { $params[$k] = null; } }
@@ -283,12 +285,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
           } else { error_log("No active tank for station {$station_id} and fuel {$fuel_id} with enough stock ({$liters_db}L) for sale {$sale_id}"); }
         } catch (Throwable $invE) { error_log("Inventory update skipped: ".$invE->getMessage()); }
 
-        // [แก้ไข] 4) สะสมแต้ม -> scores (ใช้ $member_pk_from_js)
+        // 4) สะสมแต้ม -> scores (ใช้ $member_pk_from_js)
         if ($points_earned > 0 && $member_pk_from_js > 0) {
           try {
-            // $member_id คือ ID จากตาราง 'members' (PK)
             $member_id = $member_pk_from_js; 
             
+            // 1. บันทึกประวัติแต้ม
             $insScore = $pdo->prepare("
                 INSERT INTO scores (member_id, score, activity, score_date)
                 VALUES (:member_id, :score, :activity, NOW())
@@ -298,6 +300,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                 ':score'     => (int)$points_earned,
                 ':activity'  => 'POS '.$sale_data['receipt_no']
             ]);
+
+            // 2. อัปเดตแต้มรวมในตาราง members (สำคัญมาก)
+            $updPoints = $pdo->prepare("
+                UPDATE members SET points = points + :score WHERE id = :member_id
+            ");
+            $updPoints->execute([
+                ':score'     => (int)$points_earned,
+                ':member_id' => (int)$member_id
+            ]);
+            
             error_log("Points earned: {$points_earned} for member_id: {$member_id}");
             
           } catch (Throwable $ptsE) {
@@ -332,17 +344,125 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
   <link rel="stylesheet" href="../assets/css/admin_dashboard.css" />
+  
   <style>
     .fuel-selector{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem}
     .fuel-card{border:2px solid var(--border);border-radius:var(--radius);padding:1rem;cursor:pointer;transition:.2s;text-align:center}
     .fuel-card:hover{border-color:var(--primary);transform:translateY(-3px)}
     .fuel-card.selected{border-color:var(--primary);background-color:var(--primary-light);box-shadow:0 4px 15px rgba(32,163,158,.25)}
     .fuel-icon{width:50px;height:50px;border-radius:50%;margin:0 auto .5rem;display:flex;align-items:center;justify-content:center;font-size:1.5rem;color:#fff}
+    
     .pos-panel{background:var(--surface-glass);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:1.5rem}
+    
     .amount-display{background:var(--dark);color:#20e8a0;font-family:"Courier New",monospace;border-radius:var(--radius);padding:1rem;text-align:right;font-size:2.25rem;font-weight:700;margin-bottom:1rem;min-height:70px}
     .numpad-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem}
     .numpad-btn{aspect-ratio:1.2/1;border:1px solid var(--border);background:var(--surface);border-radius:var(--radius);font-size:1.5rem;font-weight:600;cursor:pointer;transition:.15s}
     .numpad-btn:hover{background:var(--primary);color:#fff}
+
+    /* [เพิ่ม] CSS สำหรับ Quick Buttons */
+    .quick-amount-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.75rem;
+    }
+    .quick-btn {
+        border: 1px solid var(--border);
+        background: var(--surface);
+        border-radius: var(--radius);
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--primary);
+        cursor: pointer;
+        transition: all .15s ease;
+        padding: 0.75rem 0.5rem;
+    }
+    .quick-btn:hover {
+        background: var(--primary-light);
+        border-color: var(--primary);
+    }
+    .quick-btn:active {
+        transform: scale(0.95);
+        background: var(--primary);
+        color: #fff;
+    }
+    /* [สิ้นสุด CSS ใหม่] */
+
+    /* ===== Quick Amount (เด่นขึ้นเล็กน้อย) ===== */
+.quick-wrap{
+  border:2px dashed var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  border-radius: var(--radius);
+  padding: .75rem;
+  margin-bottom: .75rem;
+}
+
+.quick-label{
+  display:flex;
+  align-items:center;
+  gap:.5rem;
+  margin:0 0 .5rem 0;
+  font-weight:700;
+  letter-spacing:.2px;
+  color: var(--primary);
+}
+.quick-label .badge{
+  background: var(--primary);
+  color:#fff;
+  font-weight:700;
+  border-radius: 999px;
+  padding: .2rem .5rem;
+  font-size:.8rem;
+}
+
+/* ปรับ grid ให้แน่นขึ้นเล็กน้อยและ responsive */
+.quick-amount-grid{
+  display:grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: .75rem;
+}
+@media (min-width: 576px){
+  .quick-amount-grid{ grid-template-columns: repeat(4, 1fr); }
+}
+@media (min-width: 992px){
+  .quick-amount-grid{ grid-template-columns: repeat(5, 1fr); }
+}
+
+/* ปุ่มให้ใหญ่ขึ้น คลิกง่าย และดูเด่น */
+.quick-btn{
+  border:1px solid var(--primary);
+  background: linear-gradient(180deg, #fff, var(--surface));
+  border-radius: 14px;
+  min-height: 56px;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--primary);
+  cursor: pointer;
+  transition: all .15s ease;
+  padding:.5rem .75rem;
+  box-shadow: 0 6px 14px rgba(0,0,0,.06), inset 0 -2px 0 rgba(0,0,0,.04);
+  touch-action: manipulation;
+}
+.quick-btn::before{
+  content:"฿";
+  margin-right:2px;
+  opacity:.85;
+}
+.quick-btn:hover{
+  transform: translateY(-1px);
+  background: var(--primary);
+  color:#fff;
+  border-color: var(--primary);
+  box-shadow: 0 10px 18px rgba(32,163,158,.18);
+}
+.quick-btn:active{
+  transform: translateY(0);
+  box-shadow: 0 4px 10px rgba(0,0,0,.08) inset;
+}
+.quick-btn:focus-visible{
+  outline:3px solid var(--primary);
+  outline-offset:2px;
+}
+
     .receipt{font-family:'Courier New',monospace}
     @media print{body *{visibility:hidden}.receipt-print-area,.receipt-print-area *{visibility:visible}.receipt-print-area{position:absolute;left:0;top:0;width:100%}}
   </style>
@@ -431,11 +551,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
           
           <input type="hidden" name="customer_phone" id="customerPhoneHidden">
           <input type="hidden" name="household_no" id="householdNoHidden">
-          <input type="hidden" name="member_pk_for_points" id="memberPkHidden"> <div class="row g-4">
+          <input type="hidden" name="member_pk_for_points" id="memberPkHidden"> 
+          
+          <div class="row g-4">
+            
             <div class="col-lg-7">
-              <div class="pos-panel">
+              
+              <div class="pos-panel mb-4">
                 <h5 class="mb-3"><i class="bi bi-fuel-pump-fill me-2"></i>1. เลือกชนิดน้ำมัน</h5>
                 <div class="fuel-selector mb-4">
+                  <?php if (empty($fuel_types)): ?>
+                      <div class="alert alert-warning w-100">ไม่พบข้อมูลราคาน้ำมัน</div>
+                  <?php endif; ?>
                   <?php foreach ($fuel_types as $key => $fuel): ?>
                   <div class="fuel-card" data-fuel="<?= htmlspecialchars($key) ?>" data-price="<?= htmlspecialchars($fuel['price']) ?>">
                     <div class="fuel-icon" style="background-color: <?= htmlspecialchars($fuel['color']) ?>"><i class="bi bi-droplet-fill"></i></div>
@@ -444,8 +571,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                   </div>
                   <?php endforeach; ?>
                 </div>
-                <hr>
-                <h5 class="mb-3"><i class="bi bi-gear-fill me-2"></i>2. ระบุข้อมูลการขาย</h5>
+              </div>
+
+              <div class="pos-panel mb-4">
+                <h5 class="mb-3"><i class="bi bi-calculator-fill me-2"></i>2. กรอกจำนวน</h5>
+                <div class="d-flex justify-content-center mb-3">
+                  <div class="btn-group" role="group">
+                    <input type="radio" class="btn-check" name="sale_type" id="byAmount" value="amount" checked>
+                    <label class="btn btn-outline-primary" for="byAmount">ขายตามจำนวนเงิน (บาท)</label>
+                    <input type="radio" class="btn-check" name="sale_type" id="byLiters" value="liters">
+                    <label class="btn btn-outline-primary" for="byLiters">ขายตามปริมาณ (ลิตร)</label>
+                  </div>
+                </div>
+                
+                <div id="amountDisplay" class="amount-display">0</div>
+
+                <div class="quick-wrap mb-3" aria-label="ยอดเติมบ่อยเป็นเงินบาท">
+                <h6 id="quickAmountLabel" class="quick-label">
+                  <i class="bi bi-lightning-charge-fill"></i>
+                  ยอดเติมบ่อย <span class="badge rounded-pill">บาท</span>
+                </h6>
+                <div class="quick-amount-grid">
+                  <button type="button" class="quick-btn" data-amount="20">20</button>
+                  <button type="button" class="quick-btn" data-amount="30">30</button>
+                  <button type="button" class="quick-btn" data-amount="40">40</button>
+                  <button type="button" class="quick-btn" data-amount="50">50</button>
+                  <button type="button" class="quick-btn" data-amount="100">100</button>
+                  <button type="button" class="quick-btn" data-amount="500">500</button>
+                </div>
+              </div>
+                <div class="numpad-grid">
+                  <button type="button" class="numpad-btn" data-num="7">7</button>
+                  <button type="button" class="numpad-btn" data-num="8">8</button>
+                  <button type="button" class="numpad-btn" data-num="9">9</button>
+                  <button type="button" class="numpad-btn" data-num="4">4</button>
+                  <button type="button" class="numpad-btn" data-num="5">5</button>
+                  <button type="button" class="numpad-btn" data-num="6">6</button>
+                  <button type="button" class="numpad-btn" data-num="1">1</button>
+                  <button type="button" class="numpad-btn" data-num="2">2</button>
+                  <button type="button" class="numpad-btn" data-num="3">3</button>
+                  <button type="button" class="numpad-btn" data-action="decimal">.</button>
+                  <button type="button" class="numpad-btn" data-num="0">0</button>
+                  <button type="button" class="numpad-btn" data-action="backspace"><i class="bi bi-backspace-fill"></i></button>
+                </div>
+                <button type="button" class="btn btn-danger w-100 mt-3" data-action="clear">ล้างค่า (C)</button>
+              </div>
+              
+              <div class="pos-panel mb-4">
+                <h5 class="mb-3"><i class="bi bi-gear-fill me-2"></i>3. ระบุข้อมูลการขาย</h5>
                 <div class="row g-3">
                   <div class="col-md-6">
                     <label class="form-label">วิธีการชำระเงิน</label>
@@ -453,7 +626,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                       <option value="cash">เงินสด</option>
                       <option value="qr">QR Code</option>
                       <option value="transfer">โอนเงิน</option>
-                      <option value="card">บัตรเครดิต</option>
                     </select>
                   </div>
 
@@ -475,41 +647,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                       </div>
                     </div>
                   </div>
-
                 </div>
               </div>
-            </div>
 
-            <div class="col-lg-5">
+            </div> <div class="col-lg-5">
               <div class="pos-panel sticky-top" style="top: 20px;">
-                <div class="d-flex justify-content-center mb-3">
-                  <div class="btn-group" role="group">
-                    <input type="radio" class="btn-check" name="sale_type" id="byAmount" value="amount" checked>
-                    <label class="btn btn-outline-primary" for="byAmount">ขายตามจำนวนเงิน (บาท)</label>
-                    <input type="radio" class="btn-check" name="sale_type" id="byLiters" value="liters">
-                    <label class="btn btn-outline-primary" for="byLiters">ขายตามปริมาณ (ลิตร)</label>
-                  </div>
-                </div>
-
-                <div id="amountDisplay" class="amount-display">0</div>
-
-                <div class="numpad-grid">
-                  <button type="button" class="numpad-btn" data-num="7">7</button>
-                  <button type="button" class="numpad-btn" data-num="8">8</button>
-                  <button type="button" class="numpad-btn" data-num="9">9</button>
-                  <button type="button" class="numpad-btn" data-num="4">4</button>
-                  <button type="button" class="numpad-btn" data-num="5">5</button>
-                  <button type="button" class="numpad-btn" data-num="6">6</button>
-                  <button type="button" class="numpad-btn" data-num="1">1</button>
-                  <button type="button" class="numpad-btn" data-num="2">2</button>
-                  <button type="button" class="numpad-btn" data-num="3">3</button>
-                  <button type="button" class="numpad-btn" data-action="decimal">.</button>
-                  <button type="button" class="numpad-btn" data-num="0">0</button>
-                  <button type="button" class="numpad-btn" data-action="backspace"><i class="bi bi-backspace-fill"></i></button>
-                </div>
-                <button type="button" class="btn btn-danger w-100 mt-3" data-action="clear">ล้างค่า (C)</button>
-                <hr>
-
+                <h5 class="mb-3"><i class="bi bi-receipt me-2"></i>4. สรุปและบันทึก</h5>
                 <div id="summaryPanel" class="mb-3">
                   <p class="text-center text-muted">กรุณาเลือกชนิดน้ำมันและใส่จำนวน</p>
                 </div>
@@ -522,10 +665,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                     <i class="fa-solid fa-list-ul"></i> รายการขาย
                   </button>
                 </div>
-
               </div>
-            </div>
-          </div>
+            </div> </div>
         </form>
       </main>
     </div>
@@ -613,8 +754,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     const saleTypeRadios  = document.querySelectorAll('input[name="sale_type"]');
     const submitBtn       = document.getElementById('submitBtn');
     const posForm         = document.getElementById('posForm');
+    const quickAmountBtns = document.querySelectorAll('.quick-btn'); // [เพิ่ม]
 
-    // --- [แก้ไข] Member Search ---
+    // --- Member Search ---
     const memberIdentifierInput = document.getElementById('memberIdentifierInput'); // ช่องค้นหาใหม่
     const customerPhoneHidden = document.getElementById('customerPhoneHidden'); // ช่องซ่อนสำหรับส่งเบอร์โทร
     const householdNoHidden   = document.getElementById('householdNoHidden');   // ช่องซ่อนสำหรับส่งบ้านเลขที่
@@ -630,20 +772,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
     posForm.addEventListener('submit', validateForm);
     
     memberIdentifierInput.addEventListener('input', handleMemberSearch);
+    
+    // [เพิ่ม] Event listener สำหรับปุ่มกดเร็ว
+    quickAmountBtns.forEach(btn => btn.addEventListener('click', handleQuickAmount));
 
     document.querySelector('[data-action="clear"]').addEventListener('click', function() {
       currentInput = '0';
-      selectedFuel = null;
+      // [แก้ไข] ไม่ต้องรีเซ็ตเชื้อเพลิงเมื่อกด Clear
+      // selectedFuel = null; 
+      // fuelCards.forEach(c => c.classList.remove('selected'));
       display.textContent = currentInput;
       quantityInput.value = '0';
-      summaryPanel.innerHTML = '<p class="text-center text-muted">กรุณาเลือกชนิดน้ำมันและใส่จำนวน</p>';
-      submitBtn.disabled = true;
-      memberIdentifierInput.value = '';
-      customerPhoneHidden.value = '';
-      householdNoHidden.value = '';
-      memberPkHidden.value = ''; // [เพิ่ม]
-      memberInfoDiv.style.display = 'none';
+      updateSummary(); 
+      validateState();
     });
+    
+    // [เพิ่ม] ฟังก์ชันสำหรับปุ่มกดเร็ว
+    function handleQuickAmount(e) {
+      const amount = e.currentTarget.dataset.amount;
+      if (amount) {
+          // บังคับให้เป็น 'amount'
+          document.getElementById('byAmount').checked = true;
+          currentInput = amount;
+          updateDisplayAndSummary();
+      }
+    }
 
     function handleFuelSelect(e){
       fuelCards.forEach(c => c.classList.remove('selected'));
@@ -716,22 +869,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
 
     function validateState(){
       const qty = parseFloat(currentInput);
-      submitBtn.disabled = !(selectedFuel && qty > 0);
+      submitBtn.disabled = !(selectedFuel && qty > 0.01); // [แก้ไข] ใช้ 0.01
     }
 
     function validateForm(e){
-      if (submitBtn.disabled) { e.preventDefault(); alert('ข้อมูลยังไม่ครบถ้วน กรุณาเลือกชนิดน้ำมันและใส่จำนวน'); }
+      if (submitBtn.disabled) { 
+          e.preventDefault(); 
+          alert('ข้อมูลยังไม่ครบถ้วน กรุณาเลือกชนิดน้ำมันและใส่จำนวน'); 
+      }
     }
 
-    // --- [แก้ไข] Member Search ---
+    // --- Member Search ---
     function handleMemberSearch(e) {
       clearTimeout(searchTimeout);
       const term = e.target.value.trim();
 
-      // ล้างค่าที่ซ่อนไว้ก่อน
       customerPhoneHidden.value = '';
       householdNoHidden.value = '';
-      memberPkHidden.value = ''; // [เพิ่ม]
+      memberPkHidden.value = ''; 
 
       if (term === '') {
         memberInfoDiv.style.display = 'none';
@@ -754,27 +909,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       memberInfoDiv.style.display = 'block';
       alertDiv.className = 'alert alert-secondary py-2 px-3 d-flex align-items-center';
       memberNameSpan.innerHTML = `กำลังค้นหา... ${spinner}`;
-      memberPkHidden.value = ''; // [เพิ่ม]
+      memberPkHidden.value = ''; 
 
       try {
-          const url = `/admin/api/search_member.php?term=${encodeURIComponent(term)}`; // [แก้ไข] ใช้ /admin/api/
+          // [แก้ไข] API path ต้องอ้างอิงจาก /admin/
+          const url = `../admin/api/search_member.php?term=${encodeURIComponent(term)}`; 
           const res = await fetch(url);
           
           if (!res.ok) throw new Error('bad_status_' + res.status);
           
           const member = await res.json();
 
-          if (member && !member.error) {
+          if (member && !member.error && member.member_pk) {
               alertDiv.className = 'alert alert-info py-2 px-3 d-flex align-items-center';
               alertDiv.querySelector('i').className = 'bi bi-person-check-fill me-2';
-              memberNameSpan.textContent = `สมาชิก: ${member.full_name} (${member.type_th})`;
+              memberNameSpan.textContent = `สมาชิก: ${member.full_name} (${member.member_code})`;
 
-              // อัปเดตข้อมูลที่พบลงในช่อง input ที่ซ่อนไว้
               customerPhoneHidden.value = member.phone || '';
               householdNoHidden.value = member.house_number || '';
-              memberPkHidden.value = member.member_pk || ''; // [เพิ่ม]
+              memberPkHidden.value = member.member_pk || '';
               
-              // อัปเดตค่าในช่องที่แสดงผล
               memberIdentifierInput.value = term;
 
           } else {
@@ -782,9 +936,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
               alertDiv.querySelector('i').className = 'bi bi-person-exclamation me-2';
               memberNameSpan.textContent = 'ไม่พบสมาชิก';
 
-              // ถ้าไม่เจอ ส่งค่าที่ผู้ใช้กรอกไปตรงๆ
               const numericTerm = term.replace(/\D+/g, '');
-              if (/^[0-9\s\-()+]{9,}$/.test(term) && numericTerm.length >= 9) {
+              if (numericTerm.length >= 9) {
                   customerPhoneHidden.value = numericTerm;
                   householdNoHidden.value = '';
               } else {
@@ -797,7 +950,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
           alertDiv.className = 'alert alert-danger py-2 px-3 d-flex align-items-center';
           alertDiv.querySelector('i').className = 'bi bi-wifi-off me-2';
           memberNameSpan.textContent = 'การเชื่อมต่อล้มเหลว';
-          memberPkHidden.value = ''; // [เพิ่ม]
+          memberPkHidden.value = ''; 
       }
     }
     // --- (จบส่วน Member Search) ---
@@ -848,6 +1001,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       if (receiptModalEl) {
         const receiptModal = new bootstrap.Modal(receiptModalEl);
         receiptModal.show();
+        // [แก้ไข] รีเซ็ตฟอร์มหลังจากปิด Modal
+        receiptModalEl.addEventListener('hidden.bs.modal', event => {
+            document.querySelector('[data-action="clear"]').click(); // สั่งคลิกปุ่มล้างค่า
+        });
       }
     <?php endif; ?>
 
