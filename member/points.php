@@ -1,5 +1,5 @@
 <?php
-// employee/points.php — คะแนนสะสมและของรางวัล (เชื่อม DB จริง + แลกแต้มจริง)
+// member/points.php — คะแนนสะสมและของรางวัล (แก้ไข: รองรับกรรมการ/ผู้บริหารที่เป็นสมาชิก)
 session_start();
 date_default_timezone_set('Asia/Bangkok');
 
@@ -13,7 +13,10 @@ try {
   if (!isset($_SESSION['user_id'])) { header('Location: /index/login.php'); exit(); }
   $current_name = $_SESSION['full_name'] ?: 'สมาชิกสหกรณ์';
   $current_role = $_SESSION['role'] ?? 'guest';
-  if ($current_role !== 'member') {
+  
+  // [แก้ไข] อนุญาตทุกบทบาทที่ได้รับสถานะสมาชิก
+  $allowed_roles = ['member', 'manager', 'committee', 'admin']; 
+  if (!in_array($current_role, $allowed_roles)) {
     header('Location: /index/login.php?err=คุณไม่มีสิทธิ์เข้าถึงหน้านี้'); exit();
   }
 } catch(Throwable $e){
@@ -34,7 +37,7 @@ try {
 } catch (Throwable $e) { $db_ok = false; $db_err = $e->getMessage(); }
 
 // ====== ค่าหน้าเว็บ / สถานี ======
-$site_name = 'สหกรณ์ปั๊มน้ำบ้านภูเขาทอง';
+$site_name = 'สหกรณ์ปั๊มน้ำมันบ้านภูเขาทอง';
 $site_subtitle = 'ระบบบริหารจัดการปั๊มน้ำมัน';
 $station_id = 1;
 
@@ -68,12 +71,13 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 $member = null;   // ['id'=>members.id, 'name', 'tier', 'points', 'member_code', 'house_number', 'phone']
 if ($db_ok) {
   try {
+    // [แก้ไข] ลบ u.role='member' เพื่อให้ดึงข้อมูลได้ทุกบทบาทที่มี record ใน members
     $st = $pdo->prepare("
       SELECT m.id AS id, u.full_name AS name, m.tier, m.points,
              m.member_code, m.house_number, u.phone
       FROM users u
       JOIN members m ON m.user_id = u.id
-      WHERE u.id = :uid AND u.role='member' AND u.is_active=1 AND m.station_id = :st
+      WHERE u.id = :uid AND u.is_active=1 AND m.station_id = :st
       LIMIT 1
     ");
     $st->execute([':uid'=>$current_user_id, ':st'=>$station_id]);
@@ -234,7 +238,6 @@ if ($db_ok) {
 </head>
 <body>
 
-  <!-- App Bar -->
   <nav class="navbar navbar-dark bg-primary">
     <div class="container-fluid">
       <div class="d-flex align-items-center gap-2">
@@ -253,7 +256,6 @@ if ($db_ok) {
     </div>
   </nav>
 
-  <!-- Offcanvas Sidebar -->
   <div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasSidebar" aria-labelledby="offcanvasLabel">
     <div class="offcanvas-header">
       <h5 class="offcanvas-title" id="offcanvasLabel"><?= htmlspecialchars($site_name) ?></h5>
@@ -274,7 +276,6 @@ if ($db_ok) {
 
   <div class="container-fluid">
     <div class="row">
-      <!-- Sidebar Desktop -->
       <aside class="col-lg-2 d-none d-lg-flex flex-column sidebar py-4">
         <div class="side-brand mb-3"><h3><span>Member</span></h3></div>
         <nav class="sidebar-menu flex-grow-1">
@@ -287,7 +288,6 @@ if ($db_ok) {
         <a class="logout" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
       </aside>
 
-      <!-- Content -->
       <main class="col-lg-10 p-4">
         <div class="main-header">
           <h2><i class="fa-solid fa-star me-2"></i>คะแนนสะสมและของรางวัล</h2>
@@ -299,14 +299,12 @@ if ($db_ok) {
         <?php if ($flash_ok): ?><div class="alert alert-success"><?= htmlspecialchars($flash_ok) ?></div><?php endif; ?>
         <?php if ($flash_err): ?><div class="alert alert-danger"><?= htmlspecialchars($flash_err) ?></div><?php endif; ?>
 
-        <!-- Current Points -->
         <div class="stat-card mb-4">
           <h5>คะแนนสะสมปัจจุบัน</h5>
           <h3 class="text-primary"><?= number_format((int)$member['points']) ?> <span style="font-size: 1.2rem; font-weight: 500;">แต้ม</span></h3>
           <p class="mb-0 text-muted">ระดับสมาชิก: <?= htmlspecialchars($member['tier'] ?? '-') ?></p>
         </div>
 
-        <!-- Rewards -->
         <div class="panel mb-4">
           <div class="panel-head">
             <h5><i class="fa-solid fa-gift me-2"></i>ของรางวัลที่แลกได้</h5>
@@ -325,7 +323,6 @@ if ($db_ok) {
                     ต้องใช้ <?= number_format($need) ?> แต้ม
                   </span>
 
-                  <!-- ปุ่มเปิดโมดอล แลกแต้ม -->
                   <button
                     class="btn btn-sm <?= $enough ? 'btn-primary' : 'btn-outline-secondary' ?>"
                     <?= $enough ? '' : 'disabled' ?>
@@ -342,7 +339,6 @@ if ($db_ok) {
           </div>
         </div>
 
-        <!-- Redemption History -->
         <div class="panel">
           <div class="panel-head">
             <h5><i class="fa-solid fa-history me-2"></i>ประวัติการแลกคะแนน</h5>
@@ -374,7 +370,6 @@ if ($db_ok) {
 
   <footer class="footer">© <?= date('Y') ?> <?= htmlspecialchars($site_name) ?> — ศูนย์สมาชิก</footer>
 
-  <!-- Redeem Modal -->
   <div class="modal fade" id="redeemModal" tabindex="-1" aria-labelledby="redeemModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
       <form method="POST" class="modal-content">
