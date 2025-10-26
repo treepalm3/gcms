@@ -453,28 +453,22 @@
         align-items: center;
       }
     }
+    .navbar .btn-login {
+      background-color: #20A39E; /* สีน้ำเงิน (Primary) */
+      border-color: #B66D0D;
+      color: #ffffff;
+    }
+
+    .navbar .btn-login:hover {
+      background-color: #20A39E; /* สีน้ำเงินเข้มขึ้น */
+      border-color: #B66D0D;
+      color: #ffffff;
+    }
   </style>
 </head>
 
 <body>
-  <!-- Top contact bar -->
-  <div class="topbar" role="contentinfo">
-    <div class="container topbar-inner">
-      <div class="tb-left">
-        <i class="fa-solid fa-phone" aria-hidden="true"></i>
-        <a class="link" href="tel:043123456" aria-label="โทร 043 123 456">043-123-456</a>
-        <span class="sep">|</span>
-        <i class="fa-regular fa-envelope" aria-hidden="true"></i>
-        <a class="link" href="mailto:info@phukhaothong-coop.th">info@phukhaothong-coop.th</a>
-      </div>
-      <div class="tb-right">
-        <a href="#" aria-label="Facebook"><i class="fa-brands fa-facebook-f"></i></a>
-        <a href="#" aria-label="LINE"><i class="fa-brands fa-line"></i></a>
-        <a href="#" aria-label="YouTube"><i class="fa-brands fa-youtube"></i></a>
-      </div>
-    </div>
-  </div>
-
+  
   <!-- Navbar -->
   <header class="navbar" role="banner">
   <div class="container nav-inner">
