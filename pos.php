@@ -17,7 +17,14 @@ if (empty($_SESSION['csrf_token'])) {
 /* ================== โหมดคีออสก์: กรอกรหัสพนักงานแทนการล็อกอิน ================== */
 if (isset($_GET['switch_emp'])) {
   unset($_SESSION['kiosk_emp_id'], $_SESSION['kiosk_emp_code'], $_SESSION['kiosk_emp_name'], $_SESSION['kiosk_user_id']);
-  header('Location: '.$_SERVER['PHP_SELF']);
+  session_regenerate_id(true); // กัน session fixation เล็กน้อย
+
+  // อนุญาต redirect เฉพาะ path ภายในไซต์เพื่อความปลอดภัย
+  $redirect = $_GET['redirect'] ?? $_SERVER['PHP_SELF'];
+  if (!preg_match('~^[a-zA-Z0-9_./-]+$~', $redirect)) {
+      $redirect = $_SERVER['PHP_SELF'];
+  }
+  header('Location: ' . $redirect);
   exit();
 }
 
@@ -562,10 +569,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
             <div class="d-grid gap-2">
               <button type="submit" class="btn btn-primary btn-lg" id="submitBtn" disabled>
                 <i class="bi bi-check-circle-fill me-2"></i>บันทึกการขาย
-              </button>
-              <button type="button" class="btn btn-outline-dark" onclick="window.location.href='index.php';">
-                <i class="bi bi-house-door-fill me-1"></i> กลับหน้าแรก
-              </button>
+                <button type="button" class="btn btn-outline-dark"
+                  onclick="window.location.href='pos.php?switch_emp=1&redirect=index.php';">
+                  <i class="bi bi-house-door-fill me-1"></i> กลับหน้าแรก
+                </button>
             </div>
           </div>
         </div>
