@@ -7,8 +7,12 @@ date_default_timezone_set('Asia/Bangkok');
 $response = ['error' => 'Invalid request'];
 
 // --- การเชื่อมต่อและความปลอดภัย ---
-if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'employee') {
-    $response['error'] = 'Access Denied';
+// [แก้ไข] ตรวจสอบทั้ง Session ปกติ หรือ Kiosk Session
+$is_logged_in_session = (isset($_SESSION['user_id']) && ($_SESSION['role'] ?? '') === 'employee');
+$is_logged_in_kiosk = (isset($_SESSION['kiosk_emp_id']) && (int)$_SESSION['kiosk_emp_id'] > 0);
+
+if (!$is_logged_in_session && !$is_logged_in_kiosk) {
+    $response['error'] = 'Access Denied (API)';
     echo json_encode($response);
     exit;
 }
