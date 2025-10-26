@@ -563,8 +563,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
               <button type="submit" class="btn btn-primary btn-lg" id="submitBtn" disabled>
                 <i class="bi bi-check-circle-fill me-2"></i>บันทึกการขาย
               </button>
-              <button type="button" class="btn btn-outline-secondary" onclick="window.location.href = 'list_sell.php';">
-                <i class="fa-solid fa-list-ul"></i> รายการขาย
+              <button type="button" class="btn btn-outline-dark" onclick="window.location.href='index.php';">
+                <i class="bi bi-house-door-fill me-1"></i> กลับหน้าแรก
               </button>
             </div>
           </div>
