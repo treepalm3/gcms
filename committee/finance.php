@@ -473,7 +473,7 @@ try {
       <a href="member.php"><i class="bi bi-people-fill"></i> สมาชิก</a>
       <a href="profile.php"><i class="fa-solid fa-user-gear"></i> โปรไฟล์</a>
     </nav>
-    <a class="logout mt-auto" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
+    <a class="logout mt-auto" href="../index.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
   </div>
 </div>
 
@@ -488,7 +488,7 @@ try {
         <a href="member.php"><i class="bi bi-people-fill"></i> สมาชิก</a>
         <a href="profile.php"><i class="fa-solid fa-user-gear"></i> โปรไฟล์</a>
       </nav>
-      <a class="logout" href="/index/logout.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
+      <a class="logout" href="../index.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
     </aside>
 
     <main class="col-lg-10 p-4">
