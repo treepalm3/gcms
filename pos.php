@@ -834,7 +834,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
       memberPkHidden.value = ''; 
 
       try {
-          const url = `admin/api/search_member.php?term=${encodeURIComponent(term)}`; 
+          const url = `/admin/api/search_member.php?term=${encodeURIComponent(term)}`;
           const res = await fetch(url);
           if (!res.ok) throw new Error('bad_status_' + res.status);
           const member = await res.json();
