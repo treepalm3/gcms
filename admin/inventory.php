@@ -222,11 +222,11 @@ $utilization    = $total_capacity > 0 ? ($total_stock / $total_capacity) * 100 :
     </div>
 </nav>
 
-<div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasSidebar">
-    <div class="offcanvas-header">
-        <h5 class="offcanvas-title">Menu</h5>
-        <button class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
-    </div>
+<div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasSidebar" aria-labelledby="offcanvasLabel">
+  <div class="offcanvas-header">
+    <h5 class="offcanvas-title" id="offcanvasLabel"><?= htmlspecialchars($site_name) ?></h5>
+    <button class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="ปิด"></button>
+  </div>
     <div class="offcanvas-body sidebar">
         <div class="side-brand mb-2"><h3><span>Admin</span></h3></div>
         <nav class="sidebar-menu">
