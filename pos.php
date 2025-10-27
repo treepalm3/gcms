@@ -498,12 +498,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                 ยอดเติมบ่อย <span class="badge rounded-pill">บาท</span>
               </h6>
               <div class="quick-amount-grid">
-                <button type="button" class="quick-btn" data-amount="20">20</button>
-                <button type="button" class="quick-btn" data-amount="30">30</button>
                 <button type="button" class="quick-btn" data-amount="40">40</button>
                 <button type="button" class="quick-btn" data-amount="50">50</button>
+                <button type="button" class="quick-btn" data-amount="60">60</button>
                 <button type="button" class="quick-btn" data-amount="100">100</button>
-                <button type="button" class="quick-btn" data-amount="500">500</button>
+                <button type="button" class="quick-btn" data-amount="500">300</button>
+                <button type="button" class="quick-btn" data-amount="30">500</button>
               </div>
             </div>
 
