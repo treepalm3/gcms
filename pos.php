@@ -502,8 +502,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'proce
                 <button type="button" class="quick-btn" data-amount="50">50</button>
                 <button type="button" class="quick-btn" data-amount="60">60</button>
                 <button type="button" class="quick-btn" data-amount="100">100</button>
-                <button type="button" class="quick-btn" data-amount="500">300</button>
-                <button type="button" class="quick-btn" data-amount="30">500</button>
+                <button type="button" class="quick-btn" data-amount="300">300</button>
+                <button type="button" class="quick-btn" data-amount="500">500</button>
               </div>
             </div>
 
