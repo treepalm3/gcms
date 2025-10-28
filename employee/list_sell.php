@@ -187,7 +187,7 @@ $date_to   = trim($_GET['date_to'] ?? '');
 $payment   = trim($_GET['payment'] ?? '');
 $fuel      = trim($_GET['fuel'] ?? '');
 $limit_in  = (int)($_GET['limit'] ?? 500);
-$limit     = max(1, min(2000, $limit_in ?: 500)); // 1..2000
+$limit     = max(1, min(2000, $limit_in ?: 500)); // 1..2000 (ปลอดภัยแล้ว)
 
 // ====== Fetch Sales ======
 $sales = [];
@@ -203,6 +203,7 @@ if ($db_ok) {
 
     $whereSql = 'WHERE '.implode(' AND ', $where);
 
+    // [!! แก้ไข !!] ลบ :lim ออก และใส่ $limit เข้าไปตรงๆ
     $sql = "
       SELECT
         s.id, s.station_id, s.sale_code, s.total_amount, s.net_amount, s.sale_date,
@@ -243,12 +244,12 @@ if ($db_ok) {
 
       $whereSql
       ORDER BY s.sale_date DESC, s.id DESC
-      LIMIT :lim
-    ";
+      LIMIT $limit
+    "; // [!! แก้ไข !!]
 
     $stmt = $pdo->prepare($sql);
     foreach ($params as $k=>$v) $stmt->bindValue($k, $v);
-    $stmt->bindValue(':lim', (int)$limit, PDO::PARAM_INT);
+    // [!! แก้ไข !!] ลบบรรทัด $stmt->bindValue(':lim', ...) ออก
     $stmt->execute();
     $sales = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
   } catch (Throwable $e) {
