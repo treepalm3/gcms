@@ -655,11 +655,17 @@ try {
                       <span class="text-muted small">-</span>
                     <?php endif; ?>
                   </td>
-                  <td>
-                    <button class="btn btn-outline-secondary receipt-btn" onclick="printReceipt('<?= htmlspecialchars($r['sale_data_json'], ENT_QUOTES) ?>')">
-                      <i class="bi bi-printer"></i> พิมพ์
-                    </button>
-                  </td>
+                  <td class="text-end">
+  <button
+    class="btn btn-sm btn-outline-secondary btnReceipt"
+    title="ดูใบเสร็จ"
+    data-receipt-type="sale"
+    data-receipt-code="<?= htmlspecialchars($r['receipt_no']) ?>"
+    data-receipt-url="sales_receipt.php?code=<?= urlencode($r['receipt_no']) ?>">
+    <i class="bi bi-receipt"></i>
+  </button>
+</td>
+
                 </tr>
                 <?php endforeach; ?>
                 <?php if(empty($recent)): ?>
@@ -847,6 +853,33 @@ try {
         plugins: { legend: { position: 'bottom', labels: { color: '#36535E' } } }
       }
     });
+
+    // ===== ใบเสร็จ: รูทเดียวกับ committee/finance.php =====
+const receiptRoutes = {
+  sale:   code => `sales_receipt.php?code=${encodeURIComponent(code)}`,
+  receive:id   => `receive_view.php?id=${encodeURIComponent(id)}`,
+  lot:    code => `lot_view.php?code=${encodeURIComponent(code)}`,
+  transaction: token => /^\d+$/.test(String(token))
+    ? `txn_receipt.php?id=${encodeURIComponent(token)}`
+    : `txn_receipt.php?code=${encodeURIComponent(token)}`
+};
+
+document.body.addEventListener('click', function(e){
+  const btn = e.target.closest('.btnReceipt');
+  if (!btn) return;
+  const type = btn.dataset.receiptType || 'sale';
+  const code = btn.dataset.receiptCode || '';
+  let url = (btn.dataset.receiptUrl || '').trim();
+
+  if (!url && receiptRoutes[type] && code) {
+    url = receiptRoutes[type](code);
+  }
+  if (!url) {
+    alert('ยังไม่มีลิงก์ใบเสร็จสำหรับรายการนี้'); 
+    return;
+  }
+  window.open(url, '_blank');
+});
   </script>
 </body>
 </html>
