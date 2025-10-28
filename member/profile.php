@@ -266,10 +266,10 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     <div class="offcanvas-body sidebar">
       <div class="side-brand mb-2"><h3><span>Member</span></h3></div>
       <nav class="sidebar-menu">
-        <a href="member_dashboard.php"><i class="fa-solid fa-id-card"></i>ภาพรวม</a>
+        <a href="member_dashboard.php"><i class="fa-solid fa-id-card"></i>แดชบอร์ด</a>
         <a href="bills.php"><i class="fa-solid fa-receipt"></i> ประวัติการซื้อ</a>
         <a href="points.php"><i class="fa-solid fa-star"></i> คะแนนสะสม</a>
-        <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
+        <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผลและเฉลี่ยคืน</a>
         <a class="active" href="profile.php"><i class="fa-solid fa-user-gear"></i> โปรไฟล์</a>
       </nav>
       <a class="logout mt-auto" href="../index.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
@@ -282,10 +282,10 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
       <aside class="col-lg-2 d-none d-lg-flex flex-column sidebar py-4">
         <div class="side-brand mb-3"><h3><span>Member</span></h3></div>
         <nav class="sidebar-menu flex-grow-1">
-          <a href="member_dashboard.php"><i class="fa-solid fa-id-card"></i>ภาพรวม</a>
+          <a href="member_dashboard.php"><i class="fa-solid fa-id-card"></i>แดชบอร์ด</a>
           <a href="bills.php"><i class="fa-solid fa-receipt"></i> ประวัติการซื้อ</a>
           <a href="points.php"><i class="fa-solid fa-star"></i> คะแนนสะสม</a>
-          <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
+          <a href="dividend.php"><i class="fa-solid fa-gift"></i>ปันผลและเฉลี่ยคืน</a>
           <a class="active" href="profile.php"><i class="fa-solid fa-user-gear"></i> โปรไฟล์</a>
         </nav>
         <a class="logout" href="../index.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
