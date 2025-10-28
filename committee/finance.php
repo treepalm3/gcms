@@ -614,11 +614,10 @@ try {
                 <div class="table-responsive">
                   <table class="table table-hover align-middle mb-0" id="txnTable">
                     <thead class="table-light">
-                      <tr>
+                    <tr>
                         <th>วันที่</th><th>รหัส</th><th>ประเภท</th><th>รายละเอียด</th>
                         <th class="text-end">จำนวนเงิน</th>
-                        <th class="d-none d-xl-table-cell">ผู้บันทึก</th>
-                        <th class="text-end">จัดการ</th>
+                        <th class="d-none d-lg-table-cell">ผู้บันทึก</th> <th class="text-end">ใบเสร็จ</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -663,9 +662,9 @@ try {
                           <?= htmlspecialchars($tx['description']) ?>
                           <small class="d-block text-muted"><?= htmlspecialchars($tx['category'] ?? '') ?></small>
                         </td>
+                        </td>
                         <td class="text-end"><span class="<?= $isIncome ? 'text-success' : 'text-warning' ?> fw-bold"><?= $isIncome ? '+' : '-' ?>฿<?= nf($tx['amount']) ?></span></td>
-                        <td class="d-none d-xl-table-cell"><?= htmlspecialchars($tx['created_by']) ?></td>
-                        <td class="text-end pe-3">
+                        <td class="d-none d-lg-table-cell"><?= htmlspecialchars($tx['created_by']) ?></td> <td class="text-end pe-3">
                           <button class="btn btn-sm btn-outline-secondary btnReceipt" title="ดูใบเสร็จ"><i class="bi bi-receipt"></i></button>
                         </td>
                       </tr>
