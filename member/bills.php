@@ -286,7 +286,7 @@ sort($pay_methods);
         <a href="member_dashboard.php"><i class="fa-solid fa-id-card"></i>แดชบอร์ด</a>
         <a class="active" href="bills.php"><i class="fa-solid fa-receipt"></i> ประวัติการซื้อ</a>
         <a href="points.php"><i class="fa-solid fa-star"></i> คะแนนสะสม</a>
-        <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
+        <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผลและเฉลี่ยคืน</a>
         <a href="profile.php"><i class="fa-solid fa-user-gear"></i> โปรไฟล์</a>
       </nav>
       <a class="logout mt-auto" href="../index.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
@@ -301,7 +301,7 @@ sort($pay_methods);
           <a href="member_dashboard.php"><i class="fa-solid fa-id-card"></i>แดชบอร์ด</a>
           <a class="active" href="bills.php"><i class="fa-solid fa-receipt"></i> ประวัติการซื้อ</a>
           <a href="points.php"><i class="fa-solid fa-star"></i> คะแนนสะสม</a>
-          <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
+          <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผลและเฉลี่ยคืน</a>
           <a href="profile.php"><i class="fa-solid fa-user-gear"></i> โปรไฟล์</a>
         </nav>
         <a class="logout" href="../index.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
