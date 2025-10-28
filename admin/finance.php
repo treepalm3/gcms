@@ -316,7 +316,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
   <div class="offcanvas-body sidebar">
     <div class="side-brand mb-2"><h3><span>Admin</span></h3></div>
     <nav class="sidebar-menu">
-      <a href="admin_dashboard.php"><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
+      <a href="admin_dashboard.php"><i class="fa-solid fa-border-all"></i>แดชบอร์ด</a>
       <a href="inventory.php"><i class="bi bi-fuel-pump-fill"></i>จัดการน้ำมัน</a>
       <a href="manager.php"><i class="bi bi-shield-lock-fill"></i> ผู้บริหาร</a>
       <a href="committee.php"><i class="fas fa-users-cog"></i> กรรมการ</a>
@@ -335,7 +335,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     <aside class="col-lg-2 d-none d-lg-flex flex-column sidebar py-4">
       <div class="side-brand mb-3"><h3><span>Admin</span></h3></div>
       <nav class="sidebar-menu flex-grow-1">
-        <a href="admin_dashboard.php"><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
+        <a href="admin_dashboard.php"><i class="fa-solid fa-border-all"></i>แดชบอร์ด</a>
         <a href="inventory.php"><i class="bi bi-fuel-pump-fill"></i>จัดการน้ำมัน</a>
         <a href="manager.php"><i class="bi bi-shield-lock-fill"></i> ผู้บริหาร</a>
         <a href="committee.php"><i class="fas fa-users-cog"></i> กรรมการ</a>
@@ -475,8 +475,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                       <tr>
                         <th>วันที่</th><th>รหัส</th><th>ประเภท</th><th>รายละเอียด</th>
                         <th class="text-end">จำนวนเงิน</th>
-                        <th class="d-none d-xl-table-cell">ผู้บันทึก</th>
-                        <th class="text-end">จัดการ</th>
+                        <th class="d-none d-lg-table-cell">ผู้บันทึก</th> <th class="text-end">ใบเสร็จ</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -521,9 +520,9 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
                           <?= htmlspecialchars($tx['description']) ?>
                           <small class="d-block text-muted"><?= htmlspecialchars($tx['category'] ?? '') ?></small>
                         </td>
+                        </td>
                         <td class="text-end"><span class="<?= $isIncome ? 'text-success' : 'text-warning' ?> fw-bold"><?= $isIncome ? '+' : '-' ?>฿<?= nf($tx['amount']) ?></span></td>
-                        <td class="d-none d-xl-table-cell"><?= htmlspecialchars($tx['created_by']) ?></td>
-                        <td class="text-end pe-3">
+                        <td class="d-none d-lg-table-cell"><?= htmlspecialchars($tx['created_by']) ?></td> <td class="text-end pe-3">
                           <button class="btn btn-sm btn-outline-secondary btnReceipt" title="ดูใบเสร็จ"><i class="bi bi-receipt"></i></button>
                         </td>
                       </tr>
