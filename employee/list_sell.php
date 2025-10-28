@@ -344,7 +344,6 @@ if ($db_ok) {
         </div>
       <?php endif; ?>
 
-      <!-- ค้นหา/กรอง -->
       <form class="card card-body mb-3" method="get">
         <div class="row g-2 align-items-end">
           <div class="col-sm-6 col-md-4 col-lg-3">
@@ -383,7 +382,6 @@ if ($db_ok) {
         </div>
       </form>
 
-      <!-- ตาราง -->
       <div class="table-responsive">
         <table class="table table-bordered table-hover align-middle">
           <thead>
@@ -416,7 +414,6 @@ if ($db_ok) {
               $canEdit = empty($sale['is_edited']);
               $payload = [
                 'id'               => (int)$sale['id'],
-                'id'               => (int)$sale['id'],
                 'sale_code'        => $sale['sale_code'],
                 'fuel_type'        => $sale['fuel_type'] ?? '',
                 'liters'           => (float)($sale['liters'] ?? 0),
@@ -427,13 +424,14 @@ if ($db_ok) {
                 'sale_date'        => $sale['sale_date'],
                 'employee_name'    => $sale['employee_name'] ?? null,
               ];
+              // [!! แก้ไข !!]
               $receipt_url = 'sales_receipt.php?code=' . urlencode($sale['sale_code']);
             ?>
               <tr id="sale-<?= (int)$sale['id'] ?>"
                     data-receipt-type="sale"
                     data-receipt-code="<?= htmlspecialchars($sale['sale_code']) ?>"
                     data-receipt-url="<?= htmlspecialchars($receipt_url) ?>">
-            <tr id="sale-<?= (int)$sale['id'] ?>">
+              
               <td><strong><?= htmlspecialchars($sale['sale_code']) ?></strong></td>
               <td><?= htmlspecialchars($sale['employee_name'] ?: 'ไม่ระบุ') ?></td>
               <td><?= htmlspecialchars($sale['fuel_type'] ?? '-') ?></td>
@@ -444,7 +442,6 @@ if ($db_ok) {
               <td><span class="badge bg-<?= $pm['c'] ?>-subtle text-<?= $pm['c'] ?>-emphasis"><?= htmlspecialchars($pm['l']) ?></span></td>
               <td><?= htmlspecialchars(date('d/m/Y H:i', strtotime($sale['sale_date']))) ?></td>
               <td class="text-center">
-                <div class="btn-group">
                 <div class="btn-group">
                   <button class="btn btn-outline-secondary btn-sm receipt-btn btnReceipt"
                           title="พิมพ์ใบเสร็จ">
@@ -472,7 +469,6 @@ if ($db_ok) {
   </div>
 </div>
 
-<!-- Edit Modal -->
 <div class="modal fade" id="editSaleModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg"><div class="modal-content">
     <form method="post" id="editSaleForm">
@@ -543,7 +539,6 @@ if ($db_ok) {
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-// ===== Print Receipt =====
 // ===== [ใหม่] ตรรกะการเปิดลิงก์ใบเสร็จ (เหมือน committee/finance.php) =====
 const receiptRoutes = {
   sale: code => `sales_receipt.php?code=${encodeURIComponent(code)}`
