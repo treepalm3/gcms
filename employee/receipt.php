@@ -1,21 +1,16 @@
 <?php
-// employee/receipt.php — Template แสดงใบเสร็จ/เอกสารเดี่ยว
+// employee/receipt.php — Template แสดงใบเสร็จ/เอกสารเดี่ยว (ปรับปรุงตาม committee/receipt.php และ รูปภาพ)
 // ไฟล์นี้ถูกออกแบบมาให้ถูก include/require โดยไฟล์อื่น
-// (เช่น sales_receipt.php, lot_view.php)
-// session_start(); // เซสชันควรถูกเริ่มโดยไฟล์ที่ include หน้านี้เข้ามาแล้ว
 
 date_default_timezone_set('Asia/Bangkok');
 
 // ===== ตรวจสอบการล็อกอินและสิทธิ์ =====
 if (!isset($_SESSION['user_id'])) {
-    // โดยทั่วไป ไฟล์ที่ include หน้านี้ควรจะเช็ค login แล้ว
-    // แต่ถ้าไม่, อาจจะ redirect หรือแสดงข้อผิดพลาด
     header('HTTP/1.1 403 Forbidden');
     die('โปรดเข้าสู่ระบบก่อน (Template Error)');
 }
 
 // ===== เชื่อมต่อฐานข้อมูล =====
-// $pdo ควรถูกส่งต่อมาจากไฟล์ที่ include เข้ามา
 if (!isset($pdo) || !($pdo instanceof PDO)) {
     die('ไม่พบการเชื่อมต่อฐานข้อมูล ($pdo)');
 }
@@ -72,9 +67,11 @@ if (isset($tx) && isset($tx['site_name'])) {
        }
        // ถ้ายังไม่มี ให้ลอง settings (เผื่อเป็นระบบเก่า)
        if (empty($site_address) && table_exists($pdo,'settings')) {
-         $row = $pdo->query("SELECT setting_value FROM settings WHERE setting_name='station_id' LIMIT 1")->fetch(PDO::FETCH_ASSOC);
-         if ($row) $stationId = (int)$row['setting_value'];
-         $sn = $pdo->query("SELECT comment FROM settings WHERE setting_name='station_id' LIMIT 1")->fetchColumn();
+         // ใช้ $stationId ที่ได้จาก session ก่อน ถ้าไม่มีค่อย query
+         $currentStationId = (int)($_SESSION['station_id'] ?? $stationId);
+         $st_settings = $pdo->prepare("SELECT comment FROM settings WHERE setting_name='station_id' AND setting_value = :sid LIMIT 1");
+         $st_settings->execute([':sid' => $currentStationId]);
+         $sn = $st_settings->fetchColumn();
          if ($sn) $site_name = $sn;
        }
     } catch (Throwable $e) { /* ใช้ค่า default */ }
@@ -117,21 +114,16 @@ if ($data === null && !empty($t)) {
         switch ($t) {
             case 'sale':
                 if ($code === '') { $notFoundMsg = 'ไม่พบเลขที่บิลขาย (code)'; break; }
-                // ดึงชื่อพนักงานจาก 3 แหล่ง (created_by, employee_user_id, หรือ user_id จาก fuel_moves)
+                // ใช้ SQL Query เดียวกับ committee/receipt.php
                 $sql = "
                     SELECT s.*,
-                           COALESCE(u_cr.full_name, u_emp.full_name, u_fm.full_name, 'ไม่ระบุ') AS cashier_name
+                           (SELECT u.full_name
+                            FROM fuel_moves fm
+                            JOIN users u ON u.id=fm.user_id
+                            WHERE fm.type='sale_out' AND fm.sale_id = s.id
+                            ORDER BY fm.id ASC LIMIT 1
+                           ) AS cashier_name
                     FROM sales s
-                    LEFT JOIN users u_cr ON u_cr.id = s.created_by
-                    LEFT JOIN users u_emp ON u_emp.id = s.employee_user_id
-                    LEFT JOIN (
-                        SELECT fm.sale_id, fm.user_id
-                        FROM fuel_moves fm
-                        WHERE fm.sale_id = (SELECT s_inner.id FROM sales s_inner WHERE s_inner.sale_code = :code LIMIT 1)
-                          AND fm.is_sale_out = 1
-                        ORDER BY fm.id ASC LIMIT 1
-                    ) fm_join ON fm_join.sale_id = s.id
-                    LEFT JOIN users u_fm ON u_fm.id = fm_join.user_id
                     WHERE s.sale_code = :code AND s.station_id = :sid
                     LIMIT 1
                 ";
@@ -141,18 +133,34 @@ if ($data === null && !empty($t)) {
 
                 if (!$data) { $notFoundMsg = 'ไม่พบบิลขายเลขที่ ' . htmlspecialchars($code); break; }
 
+                // Query รายการสินค้า
                 $sti = $pdo->prepare("
                     SELECT fuel_type, liters, price_per_liter, (liters*price_per_liter) AS line_amount
                     FROM sales_items
-                    WHERE sale_id = :sid ORDER BY id
+                    WHERE sale_id = :sid_item ORDER BY id
                 ");
-                $sti->execute([':sid' => $data['id']]);
+                $sti->execute([':sid_item' => $data['id']]);
                 $items = $sti->fetchAll(PDO::FETCH_ASSOC) ?: [];
                 $title = 'ใบเสร็จรับเงิน (ขายน้ำมัน)';
                 break;
 
-            // (เคส 'receive', 'lot', 'transaction' อาจจะไม่จำเป็นสำหรับ Employee)
-            // (แต่ใส่ไว้เผื่อก็ได้)
+            case 'receive':
+                 if ($id === '' || !ctype_digit($id)) { $notFoundMsg = 'พารามิเตอร์ id ไม่ถูกต้อง'; break; }
+                $sql = "SELECT fr.*, fp.fuel_name, s2.supplier_name, u.full_name AS created_by_name FROM fuel_receives fr LEFT JOIN fuel_prices fp ON fp.fuel_id = fr.fuel_id AND fp.station_id = :sid LEFT JOIN suppliers s2 ON s2.supplier_id = fr.supplier_id LEFT JOIN users u ON u.id = fr.created_by WHERE fr.id = :id AND fr.station_id = :sid LIMIT 1";
+                $st = $pdo->prepare($sql); $st->execute([':sid' => $currentStationId, ':id' => $id]);
+                $data = $st->fetch(PDO::FETCH_ASSOC);
+                if (!$data) { $notFoundMsg = 'ไม่พบใบรับเข้าคลัง #' . htmlspecialchars($id); break; }
+                $title = 'ใบรับเข้าคลัง (Fuel Receive)';
+                break;
+
+            case 'lot':
+                if ($code === '') { $notFoundMsg = 'ไม่พบ Lot Code (code)'; break; }
+                $sql = "SELECT l.*, t.code AS tank_code, t.name AS tank_name, fp.fuel_name, u.full_name AS created_by_name FROM fuel_lots l JOIN fuel_tanks t ON t.id = l.tank_id LEFT JOIN fuel_prices fp ON fp.fuel_id = l.fuel_id LEFT JOIN users u ON u.id = l.created_by WHERE l.lot_code = :code AND l.station_id = :sid LIMIT 1";
+                $st = $pdo->prepare($sql); $st->execute([':code' => $code, ':sid' => $currentStationId]);
+                $data = $st->fetch(PDO::FETCH_ASSOC);
+                if (!$data) { $notFoundMsg = 'ไม่พบ LOT ' . htmlspecialchars($code); break; }
+                $title = 'ใบรับเข้าถัง (LOT)';
+                break;
 
             case 'transaction':
                 if (!table_exists($pdo,'financial_transactions')) { $notFoundMsg='ระบบยังไม่มีตาราง financial_transactions'; break; }
@@ -166,16 +174,17 @@ if ($data === null && !empty($t)) {
                          u.full_name AS created_by_name
                   FROM financial_transactions ft
                   LEFT JOIN users u ON u.id = ft.user_id
-                  WHERE (ft.id = :id OR ft.transaction_code = :code)
+                  WHERE (ft.id = :id OR ft.transaction_code = :code) AND ft.station_id = :sid
                   LIMIT 1
                 ";
-                
+
                 $st = $pdo->prepare($sql);
                 $st->execute([
                     ':id' => ctype_digit($lookupValue) ? (int)$lookupValue : 0,
-                    ':code' => $lookupValue
+                    ':code' => $lookupValue,
+                    ':sid' => $currentStationId
                 ]);
-                
+
                 $data = $st->fetch(PDO::FETCH_ASSOC);
                 if (!$data) { $notFoundMsg = 'ไม่พบรายการการเงิน ' . htmlspecialchars($lookupValue); break; }
                 $title = 'ใบรายการการเงิน';
@@ -214,181 +223,157 @@ $pay_map = [
   <meta charset="utf-8">
   <title><?= htmlspecialchars($title) ?> | <?= htmlspecialchars($display_site_name) ?></title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
-  <style>
-    body {
-        font-family: 'Sarabun', 'monospace', sans-serif;
-        width: 300px; /* 80mm */
-        margin: 0 auto;
-        padding: 10px;
-        color: #000;
-        font-size: 14px;
-        line-height: 1.6;
-        background: #fff;
-    }
-    .header { text-align: center; margin-bottom: 8px; }
-    .header h3, .header p { margin: 0; padding: 0; }
-    .header h3 { font-size: 1.1rem; font-weight: 700; }
-    .header p { font-size: 0.9rem; }
-    hr.dashed { border: none; border-top: 1px dashed #000; margin: 8px 0; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 2px 0; }
-    
-    .meta-info td:last-child { text-align: right; }
-    
-    .items-table thead th { text-align: left; border-bottom: 1px solid #000; font-size: 0.9rem; }
-    .items-table tbody td { font-size: 0.9rem; }
-    .items-table .item-line td { padding-top: 5px; }
-    .items-table .item-detail td { font-size: 0.85rem; padding-top: 0; padding-bottom: 5px; color: #333; }
-    .items-table .col-qty, .items-table .col-price, .items-table .col-total { text-align: right; width: 60px; }
-    .items-table .col-item { width: auto; }
-
-    .summary-table td:last-child { text-align: right; }
-    .summary-table .total { font-weight: 700; font-size: 1.1rem; }
-    .footer { text-align: center; margin-top: 10px; font-size: 0.9rem; }
-    .no-print { display: none; } /* ซ่อนปุ่มเวลาพิมพ์ */
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"> <style>
+    body { background:#f7f7f7; font-family: 'Prompt', sans-serif; } /* เพิ่ม Font */
+    .receipt { max-width: 80mm; margin:24px auto; background:#fff; border:1px solid #dee2e6; box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075); font-size: 10pt; line-height: 1.5; color: #000;} /* ปรับขนาดและความละเอียด */
+    .receipt-header, .receipt-body, .receipt-footer { padding: 10px; }
+    .receipt-header { text-align: center; border-bottom: 1px dashed #ccc; }
+    .receipt-body { border-bottom: 1px dashed #ccc; padding-bottom: 5px; margin-bottom: 5px;}
+    .receipt-footer { text-align: center; font-size: 9pt; color: #555; padding-top: 5px;}
+    .brand { font-weight:600; font-size:11pt; margin-bottom: 2px;}
+    .address-info { font-size: 9pt; line-height: 1.3; margin-bottom: 5px; }
+    .muted { color:#6c757d; font-size: 9pt; }
+    .table-tight th, .table-tight td { padding: 2px 4px; font-size: 10pt; vertical-align: top;}
+    .text-end { text-align: right;}
+    .fw-bold { font-weight: bold; }
+    .totals th { border-top: 1px dashed #ccc; padding-top: 5px !important;}
+    .totals th, .totals td { font-weight: bold; }
+    .subtle { font-size: 9pt; color: #444;}
+    hr.dashed { border-top: 1px dashed #ccc; margin: 8px 0;}
 
     @media print {
-      body { width: 100%; margin: 0; padding: 0; }
-      @page { margin: 2mm; size: 80mm auto; }
-      .no-print { display:none; }
+      .no-print { display:none !important; }
+      body { background:#fff; margin: 0; padding: 0;}
+      .receipt { border:none; box-shadow: none; margin:0; max-width: 100%; width: 100%; font-size: 10pt; /* อาจจะต้องปรับขนาด Font สำหรับเครื่องพิมพ์ */ }
+      @page { margin: 5mm; size: 80mm auto; /* ตั้งค่าหน้ากระดาษสลิป */ }
     }
   </style>
 </head>
-<body onload="window.print();">
-
+<body>
   <div class="receipt">
     <div class="receipt-header">
         <div class="brand"><?= htmlspecialchars($display_site_name) ?></div>
-        <div class="address-info" style="font-size: 0.9rem; line-height: 1.3;">
+        <div class="address-info">
             <?= htmlspecialchars($site_address ?? '-') ?><br>
             โทร: <?= htmlspecialchars($site_phone ?? '-') ?> เลขผู้เสียภาษี: <?= htmlspecialchars($site_tax_id ?? '-') ?>
         </div>
-        <p style="font-size: 0.8rem; color: #555;">พิมพ์เมื่อ <?= dt('now','d/m/Y H:i') ?></p>
+        <div class="muted">พิมพ์เมื่อ <?= dt('now','d/m/Y H:i') ?></div>
     </div>
 
     <div class="receipt-body">
       <?php if ($errorMessage): ?>
-        <div style="color: red; border: 1px solid red; padding: 10px;"><b>เกิดข้อผิดพลาด:</b><br><?= htmlspecialchars($errorMessage) ?></div>
+        <div class="alert alert-danger mb-0 small"><i class="bi bi-exclamation-octagon-fill"></i> เกิดข้อผิดพลาดทางเทคนิค: <?= htmlspecialchars($errorMessage) ?></div>
       <?php elseif ($notFoundMsg): ?>
-        <div style="color: #856404; border: 1px solid #ffeeba; padding: 10px;"><?= htmlspecialchars($notFoundMsg) ?></div>
+        <div class="alert alert-warning mb-0 small"><i class="bi bi-exclamation-triangle"></i> <?= htmlspecialchars($notFoundMsg) ?></div>
       <?php elseif ($data): ?>
 
         <?php if ($t==='sale'): ?>
-          <h5 style="text-align: center; font-weight: 700; margin: 5px 0; font-size: 1.1rem;">ใบเสร็จรับเงิน/ใบกำกับภาษีอย่างย่อ</h5>
-          
-          <table class="meta-info" style="font-size: 0.9rem;">
-              <tr>
-                  <td>เลขที่:</td>
-                  <td><?= htmlspecialchars($data['sale_code']) ?></td>
-              </tr>
-              <tr>
-                  <td>วันที่:</td>
-                  <td><?= dt($data['sale_date']) ?></td>
-              </tr>
-              <tr>
-                  <td>พนักงาน:</td>
-                  <td><?= htmlspecialchars($data['cashier_name'] ?? ($_SESSION['full_name'] ?? '-')) ?></td>
-              </tr>
-          </table>
-          
-          <hr class="dashed">
-          
-          <table class="items-table">
+          <h5 class="text-center fw-bold mb-1" style="font-size: 11pt;">ใบเสร็จรับเงิน/ใบกำกับภาษีอย่างย่อ</h5>
+          <div class="d-flex justify-content-between subtle mb-1">
+             <span>เลขที่: <?= htmlspecialchars($data['sale_code']) ?></span>
+             <span>วันที่: <?= dt($data['sale_date']) ?></span>
+          </div>
+           <div class="subtle mb-2">แคชเชียร์: <?= htmlspecialchars($data['cashier_name'] ?? ($_SESSION['full_name'] ?? '-')) ?></div>
+          <table class="table table-borderless table-tight mb-1">
             <thead>
-                <tr>
-                    <th class="col-item">รายการ</th>
-                    <th class="col-price">ราคา</th>
-                    <th class="col-total">รวม</th>
+                <tr style="border-bottom: 1px dashed #ccc;">
+                    <th>รายการ</th>
+                    <th class="text-end">จำนวน</th>
+                    <th class="text-end">ราคา</th>
+                    <th class="text-end">รวม</th>
                 </tr>
             </thead>
             <tbody>
               <?php foreach ($items as $it): ?>
-                <tr class="item-line">
+                <tr>
                   <td><?= htmlspecialchars($it['fuel_type']) ?></td>
-                  <td></td>
-                  <td class="col-total"><?= nf($it['line_amount'],2) ?></td>
-                </tr>
-                <tr class="item-detail">
-                  <td>&nbsp;&nbsp;&nbsp;<?= nf($it['liters'],2) ?> ลิตร @ <?= nf($it['price_per_liter'],2) ?></td>
-                  <td></td>
-                  <td></td>
+                  <td class="text-end"><?= nf($it['liters'],2) ?></td>
+                  <td class="text-end"><?= nf($it['price_per_liter'],2) ?></td>
+                  <td class="text-end"><?= nf($it['line_amount'],2) ?></td>
                 </tr>
               <?php endforeach; ?>
             </tbody>
+            <tfoot class="totals">
+               <tr>
+                 <td colspan="3" class="text-end fw-bold">รวมทั้งสิ้น</td>
+                 <td class="text-end fw-bold"><?= nf($data['total_amount'],2) ?></td>
+               </tr>
+                <tr>
+                 <td colspan="3" class="text-end">ชำระโดย:</td>
+                 <td class="text-end"><?= htmlspecialchars(ucfirst($data['payment_method'] ?? 'เงินสด')) ?></td>
+               </tr>
+            </tfoot>
           </table>
 
+        <?php elseif ($t==='receive'): ?>
+          <h5 class="text-center fw-bold mb-2">เอกสารรับเข้าคลัง</h5>
+          <div class="d-flex justify-content-between subtle mb-1">
+              <span>เลขที่: #<?= htmlspecialchars($data['id']) ?></span>
+              <span>วันที่: <?= dt($data['received_date']) ?></span>
+          </div>
+          <div class="subtle mb-2">ผู้บันทึก: <?= htmlspecialchars($data['created_by_name'] ?? '-') ?></div>
           <hr class="dashed">
-          
-          <table class="summary-table">
-            <tr>
-                <td>ยอดรวม</td>
-                <td><?= nf($data['total_amount'],2) ?></td>
-            </tr>
-            <tr>
-                <td>ส่วนลด</td>
-                <td><?= nf($data['discount_amount'] ?? 0, 2) ?></td>
-            </tr>
-            <tr class="total">
-                <td>ยอดสุทธิ</td>
-                <td><?= nf($data['net_amount'],2) ?> บาท</td>
-            </tr>
+          <table class="table table-borderless table-tight mb-1">
+            <tbody>
+              <tr><td class="fw-bold" style="width: 35%;">ซัพพลายเออร์:</td><td><?= htmlspecialchars($data['supplier_name'] ?? '-') ?></td></tr>
+              <tr><td class="fw-bold">เชื้อเพลิง:</td><td><?= htmlspecialchars($data['fuel_name'] ?? '-') ?></td></tr>
+              <tr><td class="fw-bold">จำนวน (ลิตร):</td><td class="text-end"><?= nf($data['amount'] ?? 0, 2) ?></td></tr>
+              <tr><td class="fw-bold">ราคา/ลิตร:</td><td class="text-end"><?= nf($data['cost'] ?? 0, 2) ?></td></tr>
+              <tr style="border-top: 1px dashed #ccc;"><td class="fw-bold">รวมเป็นเงิน:</td><td class="text-end fw-bold"><?= nf(($data['amount']??0) * ($data['cost']??0), 2) ?></td></tr>
+               <tr><td class="fw-bold">หมายเหตุ:</td><td><?= nl2br(htmlspecialchars($data['notes'] ?? '-')) ?></td></tr>
+            </tbody>
           </table>
 
-          <hr class="dashed">
-
-          <table class="meta-info" style="font-size: 0.9rem;">
-            <tr>
-                <td>ชำระโดย:</td>
-                <td><?= htmlspecialchars($pay_map[strtolower($data['payment_method'] ?? '')] ?? 'เงินสด') ?></td>
-            </tr>
-          </table>
+        <?php elseif ($t==='lot'): ?>
+           <h5 class="text-center fw-bold mb-2">เอกสารรับเข้าถัง (LOT)</h5>
+           <div class="d-flex justify-content-between subtle mb-1">
+              <span>LOT Code: <?= htmlspecialchars($data['lot_code']) ?></span>
+              <span>วันที่: <?= dt($data['received_at']) ?></span>
+           </div>
+           <div class="subtle mb-2">ผู้บันทึก: <?= htmlspecialchars($data['created_by_name'] ?? '-') ?></div>
+           <hr class="dashed">
+           <table class="table table-borderless table-tight mb-1">
+               <tbody>
+                  <tr><td class="fw-bold" style="width: 40%;">ถัง:</td><td><?= htmlspecialchars(($data['tank_code'] ?? '').' '.($data['tank_name'] ?? '')) ?></td></tr>
+                  <tr><td class="fw-bold">เชื้อเพลิง:</td><td><?= htmlspecialchars($data['fuel_name'] ?? '-') ?></td></tr>
+                  <tr><td class="fw-bold">Observed (ลิตร):</td><td class="text-end"><?= nf($data['observed_liters'] ?? 0, 2) ?></td></tr>
+                  <tr><td class="fw-bold">Corrected (ลิตร):</td><td class="text-end"><?= nf($data['corrected_liters'] ?? 0, 2) ?></td></tr>
+                  <tr><td class="fw-bold">Initial Liters:</td><td class="text-end"><?= nf($data['initial_liters'] ?? 0, 2) ?></td></tr>
+                  <tr><td class="fw-bold">Unit Cost:</td><td class="text-end"><?= nf($data['unit_cost'] ?? 0, 4) ?></td></tr>
+                  <tr><td class="fw-bold">Tax/Liter:</td><td class="text-end"><?= nf($data['tax_per_liter'] ?? 0, 4) ?></td></tr>
+                  <tr><td class="fw-bold">Other Costs:</td><td class="text-end"><?= nf($data['other_costs'] ?? 0, 2) ?></td></tr>
+                  <tr style="border-top: 1px dashed #ccc;"><td class="fw-bold">Initial Total Cost:</td><td class="text-end fw-bold"><?= nf($data['initial_total_cost'] ?? 0, 2) ?></td></tr>
+                  <tr><td class="fw-bold">หมายเหตุ:</td><td><?= nl2br(htmlspecialchars($data['notes'] ?? '-')) ?></td></tr>
+               </tbody>
+           </table>
 
         <?php elseif ($t==='transaction'): ?>
-           <h5 style="text-align: center; font-weight: 700; margin: 5px 0; font-size: 1.1rem;">รายการการเงิน</h5>
-           <table class="meta-info" style="font-size: 0.9rem;">
-               <tr>
-                  <td>รหัส:</td>
-                  <td><?= htmlspecialchars($data['display_code'] ?? ($data['transaction_code'] ?? ($data['id'] ?? '—'))) ?></td>
-               </tr>
-               <tr>
-                  <td>วันที่:</td>
-                  <td><?= dt($data['transaction_date'] ?? '') ?></td>
-               </tr>
-               <tr>
-                  <td>ผู้บันทึก:</td>
-                  <td><?= htmlspecialchars($data['created_by_name'] ?? '-') ?></td>
-               </tr>
-           </table>
+          <h5 class="text-center fw-bold mb-2">รายการการเงิน</h5>
+           <div class="d-flex justify-content-between subtle mb-1">
+              <span>รหัส: <?= htmlspecialchars($data['display_code'] ?? ($data['transaction_code'] ?? ($data['id'] ?? '—'))) ?></span>
+              <span>วันที่: <?= dt($data['transaction_date'] ?? '') ?></span>
+           </div>
+           <div class="subtle mb-2">ผู้บันทึก: <?= htmlspecialchars($data['created_by_name'] ?? '-') ?></div>
            <hr class="dashed">
-           <table class="summary-table" style="font-size: 1rem;">
+            <table class="table table-borderless table-tight mb-1">
                  <tbody>
-                    <tr><td style="width: 30%;">ประเภท:</td><td><?= htmlspecialchars(ucfirst($data['type'] ?? '-')) ?></td></tr>
-                    <tr><td>หมวดหมู่:</td><td><?= htmlspecialchars($data['category'] ?? '-') ?></td></tr>
-                    <tr><td>รายละเอียด:</td><td><?= htmlspecialchars($data['description'] ?? '-') ?></td></tr>
-                    <tr><td>อ้างอิง:</td><td><?= htmlspecialchars($data['reference_id'] ?? '-') ?></td></tr>
-                    <tr class="total" style="border-top: 1px dashed #ccc; padding-top: 5px;">
-                        <td>จำนวนเงิน:</td>
-                        <td style="text-align: right; color: <?= ($data['type']??'')==='income' ? '#198754' : '#dc3545' ?>;">
-                            <?= nf($data['amount'] ?? 0,2) ?>
-                        </td>
-                    </tr>
+                    <tr><td class="fw-bold" style="width: 30%;">ประเภท:</td><td><?= htmlspecialchars(ucfirst($data['type'] ?? '-')) ?></td></tr>
+                    <tr><td class="fw-bold">หมวดหมู่:</td><td><?= htmlspecialchars($data['category'] ?? '-') ?></td></tr>
+                    <tr><td class="fw-bold">รายละเอียด:</td><td><?= htmlspecialchars($data['description'] ?? '-') ?></td></tr>
+                    <tr><td class="fw-bold">อ้างอิง:</td><td><?= htmlspecialchars($data['reference_id'] ?? '-') ?></td></tr>
+                    <tr style="border-top: 1px dashed #ccc;"><td class="fw-bold">จำนวนเงิน:</td><td class="text-end fw-bold <?= ($data['type']??'')==='income' ? 'text-success' : 'text-danger' ?>"><?= nf($data['amount'] ?? 0,2) ?></td></tr>
                  </tbody>
             </table>
-            
-        <?php endif; // (จบ if $t === 'sale' / 'transaction') ?>
+        <?php endif; ?>
 
-      <?php endif; // (จบ if $data) ?>
+      <?php endif; // end if ($data) ?>
     </div>
 
-    <div class="receipt-footer">
-      <p>** ขอบคุณที่ใช้บริการ **</p>
+    <div class="receipt-footer no-print">
+      <a href="javascript:window.print()" class="btn btn-sm btn-outline-primary"><i class="bi bi-printer"></i> พิมพ์เอกสารนี้</a>
+      <a href="javascript:history.back()" class="btn btn-sm btn-secondary">ย้อนกลับ</a>
     </div>
-  </div>
-
-  <div style="text-align: center; margin-top: 20px;" class="no-print">
-      <a href="javascript:window.print()" style="padding: 10px 15px; background-color: #0d6efd; color: white; text-decoration: none; border-radius: 5px;">พิมพ์เอกสารนี้</a>
-      <a href="javascript:history.back()" style="padding: 10px 15px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 5px;">ย้อนกลับ</a>
   </div>
 
 </body>
