@@ -353,7 +353,11 @@ sort($pay_methods);
                   <tr><td colspan="9" class="text-center text-muted">ยังไม่มีประวัติการซื้อ</td></tr>
                 <?php else: ?>
                   <?php foreach($recent_bills as $r): ?>
-                    <tr data-fuel="<?= htmlspecialchars($r['fuel_keys']) ?>" data-pay="<?= htmlspecialchars($r['pay']) ?>">
+                    <tr data-fuel="<?= htmlspecialchars($r['fuel_keys']) ?>" 
+                        data-pay="<?= htmlspecialchars($r['pay']) ?>"
+                        data-receipt-type="sale"
+                        data-receipt-code="<?= htmlspecialchars($r['bill']) ?>"
+                        data-receipt-url="sales_receipt.php?code=<?= urlencode($r['bill']) ?>">
                       <td><?= htmlspecialchars($r['date']) ?></td>
                       <td><?= htmlspecialchars($r['time']) ?></td>
                       <td><b><?= htmlspecialchars($r['bill']) ?></b></td>
@@ -363,7 +367,7 @@ sort($pay_methods);
                       <td class="text-end"><b><?= number_format($r['total'],2) ?></b></td>
                       <td><span class="badge ok-badge"><?= htmlspecialchars($r['pay']) ?></span></td>
                       <td class="text-end">
-                        <button class="btn btn-sm btn-outline-primary btnPrintOne" data-bill="<?= htmlspecialchars($r['bill']) ?>"><i class="fa-solid fa-print"></i></button>
+                        <button class="btn btn-sm btn-outline-primary btnReceipt" title="ดู/พิมพ์ใบเสร็จ"><i class="fa-solid fa-print"></i></button>
                       </td>
                     </tr>
                   <?php endforeach; ?>
@@ -391,7 +395,37 @@ sort($pay_methods);
       const noResults = document.getElementById('noResults');
       const btnPrint = document.getElementById('btnPrintBills');
       const btnExport = document.getElementById('btnExportCSV');
+// --- [!! ใหม่ !!] ตรรกะการเปิดลิงก์ใบเสร็จ (เหมือน committee/finance.php) ---
+const receiptRoutes = {
+    sale: code => `sales_receipt.php?code=${encodeURIComponent(code)}`
+    // หน้านี้ต้องการแค่ 'sale'
+  };
 
+  // ใช้ tableBody listener ที่มีอยู่แล้ว หรือจะใช้ document.body ก็ได้
+  tableBody.addEventListener('click', function(e) {
+      const receiptBtn = e.target.closest('.btnReceipt'); // ค้นหาปุ่มใหม่
+      if (!receiptBtn) return; // ถ้าไม่ได้คลิกปุ่มพิมพ์ ก็ไม่ต้องทำอะไร
+
+      const tr = receiptBtn.closest('tr');
+      if (!tr) return;
+
+      const type = tr.dataset.receiptType;
+      const code = tr.dataset.receiptCode;
+      let url = (tr.dataset.receiptUrl || '').trim();
+
+      // ตรรกะสำรอง (เผื่อ data-receipt-url ไม่ได้ตั้งค่า)
+      if (!url && type && code && receiptRoutes[type]) {
+         url = receiptRoutes[type](code);
+      }
+
+      if (url && url !== '') {
+          window.open(url, '_blank'); // เปิดในแท็บใหม่
+      } else {
+          console.warn('Could not determine receipt URL for this row', tr);
+          alert('ไม่พบ URL ใบเสร็จสำหรับรายการนี้');
+      }
+  });
+  // --- [!! สิ้นสุดส่วนใหม่ !!] ---
       function visibleRows() {
         return Array.from(document.querySelectorAll('#tblBills tbody tr'))
           .filter(row => row.querySelectorAll('td').length > 1); // ตัดแถว "ยังไม่มีประวัติ" ออก
@@ -469,54 +503,12 @@ sort($pay_methods);
         URL.revokeObjectURL(url);
       }
 
-      // --- Print Single Bill ---
-      function printSingleBill(e) {
-        const btn = e.target.closest('.btnPrintOne');
-        if (!btn) return;
-
-        const row = btn.closest('tr');
-        const cells = row.querySelectorAll('td');
-        const billData = {
-          date: cells[0].textContent.trim(), time: cells[1].textContent.trim(),
-          bill: cells[2].textContent.trim(), fuel: cells[3].textContent.trim(),
-          liters: cells[4].textContent.trim(), price: cells[5].textContent.trim(),
-          total: cells[6].textContent.trim(), pay: cells[7].textContent.trim(),
-        };
-
-        const receiptHTML = `
-          <html><head><title>ใบเสร็จ ${billData.bill}</title>
-          <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;700&display=swap" rel="stylesheet">
-          <style>
-            body { font-family: 'Noto Sans Thai', sans-serif; width: 300px; margin: 0 auto; padding: 1rem; color: #000; }
-            h3, h4 { margin: 0; text-align: center; } h4 { font-weight: normal; }
-            hr { border: none; border-top: 1px dashed #000; margin: .5rem 0; }
-            .row { display: flex; justify-content: space-between; margin-bottom: .25rem; }
-            .total .row { font-weight: bold; }
-          </style></head><body>
-            <h3><?= htmlspecialchars($site_name) ?></h3><h4>ใบเสร็จรับเงิน</h4><hr>
-            <div class="row"><span>วันที่:</span> <span>${billData.date} ${billData.time}</span></div>
-            <div class="row"><span>เลขที่บิล:</span> <span>${billData.bill}</span></div><hr>
-            <div class="row"><span>${billData.fuel}</span> <span>${billData.liters} ลิตร</span></div>
-            <div class="row"><span>@ ${billData.price} / ลิตร</span> <span></span></div><hr>
-            <div class="total"><div class="row"><span>รวมเป็นเงิน</span> <span>${billData.total} บาท</span></div></div><hr>
-            <div class="row"><span>ชำระโดย:</span> <span>${billData.pay}</span></div><hr>
-            <h4 style="margin-top: 1rem;">ขอบคุณที่ใช้บริการ</h4>
-          </body></html>`;
-
-        const printWindow = window.open('', '_blank');
-        printWindow.document.write(receiptHTML);
-        printWindow.document.close();
-        printWindow.focus();
-        setTimeout(() => { printWindow.print(); printWindow.close(); }, 250);
-      }
-
       billSearch.addEventListener('input', applyFilters);
       filterFuel.addEventListener('change', applyFilters);
       filterPay.addEventListener('change', applyFilters);
       btnReset.addEventListener('click', resetFilters);
       btnExport.addEventListener('click', exportToCSV);
       btnPrint.addEventListener('click', () => window.print());
-      tableBody.addEventListener('click', printSingleBill);
     });
   </script>
 </body>
