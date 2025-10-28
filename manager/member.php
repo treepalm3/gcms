@@ -188,7 +188,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
       </div>
 
       <nav class="sidebar-menu">
-        <a href="manager_dashboard.php" ><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
+        <a href="manager_dashboard.php" ><i class="fa-solid fa-border-all"></i>แดชบอร์ด</a>
         <a href="inventory.php"><i class="bi bi-fuel-pump-fill"></i>จัดการน้ำมัน</a>
         <a href="committee.php"><i class="fas fa-users-cog"></i> กรรมการ</a>
         <a href="employee.php"><i class="bi bi-person-badge-fill"></i>พนักงาน</a>
@@ -208,7 +208,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
       <aside class="col-lg-2 d-none d-lg-flex flex-column sidebar py-4">
         <div class="side-brand mb-3"><h3><span>Manager</span></h3></div>
         <nav class="sidebar-menu flex-grow-1">
-          <a href="manager_dashboard.php" ><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
+          <a href="manager_dashboard.php" ><i class="fa-solid fa-border-all"></i>แดชบอร์ด</a>
           <a href="inventory.php"><i class="bi bi-fuel-pump-fill"></i>จัดการน้ำมัน</a>
           <a href="committee.php"><i class="fas fa-users-cog"></i> กรรมการ</a>
           <a href="employee.php"><i class="bi bi-person-badge-fill"></i>พนักงาน</a>
