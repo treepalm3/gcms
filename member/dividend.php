@@ -286,7 +286,7 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
           <a href="member_dashboard.php"><i class="fa-solid fa-id-card"></i>แดชบอร์ด</a>
           <a href="bills.php"><i class="fa-solid fa-receipt"></i> ประวัติการซื้อ</a>
           <a href="points.php"><i class="fa-solid fa-star"></i> คะแนนสะสม</a>
-          <a class="active" href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล & เฉลี่ยคืน</a>
+          <a class="active" href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผลและเฉลี่ยคืน</a>
           <a href="profile.php"><i class="fa-solid fa-user-gear"></i> โปรไฟล์</a>
         </nav>
         <a class="logout" href="../index.php"><i class="fa-solid fa-right-from-bracket"></i>ออกจากระบบ</a>
@@ -294,7 +294,7 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
       <main class="col-lg-10 p-4">
         <div class="main-header">
-          <h2><i class="fa-solid fa-gift me-2"></i>ปันผล & เฉลี่ยคืน</h2>
+          <h2><i class="fa-solid fa-gift me-2"></i> ปันผลและเฉลี่ยคืน</h2>
         </div>
 
         <?php if (!$db_ok): ?>
