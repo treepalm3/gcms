@@ -178,7 +178,7 @@ $avg_salary   = ($has_salary && $total>0) ? $total_salary / $total : 0.0;
         <h3><span>Manager</span></h3>
       </div>
       <nav class="sidebar-menu">
-        <a href="manager_dashboard.php" ><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
+        <a href="manager_dashboard.php" ><i class="fa-solid fa-border-all"></i>แดชบอร์ด</a>
         <a href="inventory.php"><i class="bi bi-fuel-pump-fill"></i>จัดการน้ำมัน</a>
         <a href="committee.php"><i class="fas fa-users-cog"></i> กรรมการ</a>
         <a href="employee.php" class="active"><i class="bi bi-person-badge-fill"></i>พนักงาน</a>
@@ -197,7 +197,7 @@ $avg_salary   = ($has_salary && $total>0) ? $total_salary / $total : 0.0;
       <aside class="col-lg-2 d-none d-lg-flex flex-column sidebar py-4">
         <div class="side-brand mb-3"><h3><span>Manager</span></h3></div>
         <nav class="sidebar-menu flex-grow-1">
-          <a href="manager_dashboard.php" ><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
+          <a href="manager_dashboard.php" ><i class="fa-solid fa-border-all"></i>แดชบอร์ด</a>
           <a href="inventory.php"><i class="bi bi-fuel-pump-fill"></i>จัดการน้ำมัน</a>
           <a href="committee.php"><i class="fas fa-users-cog"></i> กรรมการ</a>
           <a href="employee.php" class="active"><i class="bi bi-person-badge-fill"></i>พนักงาน</a>
