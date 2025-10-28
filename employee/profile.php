@@ -283,7 +283,6 @@ $current_user = [
     .device-icon{width:40px;height:40px;border-radius:50%;background:var(--primary-light);display:flex;align-items:center;justify-content:center;color:var(--primary)}
     .status-success{color:var(--success)} .status-failed{color:var(--danger)}
     .nav-tabs .nav-link{border:1px solid transparent;color:var(--steel);font-weight:500}
-    .nav-tabs .nav-link.active{background:var(--primary);color:#fff;border-color:var(--primary)}
   </style>
 </head>
 <body>
