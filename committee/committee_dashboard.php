@@ -257,7 +257,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     <div class="offcanvas-body sidebar">
       <div class="side-brand mb-2"><h3><span>Committee</span></h3></div>
       <nav class="sidebar-menu">
-        <a href="committee_dashboard.php" class="active"><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
+        <a href="committee_dashboard.php" class="active"><i class="fa-solid fa-border-all"></i>แดชบอร์ด</a>
         <a href="finance.php"><i class="fa-solid fa-wallet"></i> การเงินและบัญชี</a>
         <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
         <a href="member.php"><i class="bi bi-people-fill"></i> สมาชิก</a>
@@ -273,7 +273,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
       <aside class="col-lg-2 d-none d-lg-flex flex-column sidebar py-4">
         <div class="side-brand mb-3"><h3><span>Committee</span></h3></div>
         <nav class="sidebar-menu flex-grow-1">
-          <a href="committee_dashboard.php" class="active"><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
+          <a href="committee_dashboard.php" class="active"><i class="fa-solid fa-border-all"></i>แดชบอร์ด</a>
           <a href="finance.php"><i class="fa-solid fa-wallet"></i> การเงินและบัญชี</a>
           <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
           <a href="member.php"><i class="bi bi-people-fill"></i> สมาชิก</a>
@@ -285,7 +285,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
       <!-- Content -->
       <main class="col-lg-10 p-4 fade-in">
         <div class="main-header">
-          <h2><i class="fa-solid fa-border-all"></i> ภาพรวม</h2>
+          <h2><i class="fa-solid fa-border-all"></i>แดชบอร์ดภาพรวม</h2>
         </div>
 
         <?php if ($error_message): ?>
@@ -312,12 +312,6 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
             <a href="profit_report.php" class="btn btn-sm btn-outline-warning mt-2 stretched-link" style="max-width: 160px;">
               ดูรายละเอียด Lot <i class="bi bi-arrow-right-short"></i>
             </a>
-          </div>
-
-          <div class="stat-card">
-            <h5><i class="bi bi-people-fill text-secondary"></i> สมาชิก/หุ้น</h5>
-            <h3 class="text-secondary mb-0"><?= nf($stats['total_members'], 0) ?> <small>คน</small></h3>
-            <p>รวม <?= nf($stats['total_shares'], 0) ?> หุ้น</p>
           </div>
         </div>
 
