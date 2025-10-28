@@ -279,7 +279,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
 
       <main class="col-lg-10 p-4 fade-in">
         <div class="main-header">
-            <h2><i class="fa-solid fa-border-all"></i>แดชบอร์ดภาพรวม</h2>
+            <h2><i class="fa-solid fa-border-all"></i> แดชบอร์ดภาพรวม</h2>
         </div>
 
         <?php if ($error_message): ?>
