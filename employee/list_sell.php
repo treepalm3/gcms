@@ -416,6 +416,7 @@ if ($db_ok) {
               $canEdit = empty($sale['is_edited']);
               $payload = [
                 'id'               => (int)$sale['id'],
+                'id'               => (int)$sale['id'],
                 'sale_code'        => $sale['sale_code'],
                 'fuel_type'        => $sale['fuel_type'] ?? '',
                 'liters'           => (float)($sale['liters'] ?? 0),
@@ -426,7 +427,12 @@ if ($db_ok) {
                 'sale_date'        => $sale['sale_date'],
                 'employee_name'    => $sale['employee_name'] ?? null,
               ];
-          ?>
+              $receipt_url = 'sales_receipt.php?code=' . urlencode($sale['sale_code']);
+            ?>
+              <tr id="sale-<?= (int)$sale['id'] ?>"
+                    data-receipt-type="sale"
+                    data-receipt-code="<?= htmlspecialchars($sale['sale_code']) ?>"
+                    data-receipt-url="<?= htmlspecialchars($receipt_url) ?>">
             <tr id="sale-<?= (int)$sale['id'] ?>">
               <td><strong><?= htmlspecialchars($sale['sale_code']) ?></strong></td>
               <td><?= htmlspecialchars($sale['employee_name'] ?: 'ไม่ระบุ') ?></td>
@@ -439,8 +445,9 @@ if ($db_ok) {
               <td><?= htmlspecialchars(date('d/m/Y H:i', strtotime($sale['sale_date']))) ?></td>
               <td class="text-center">
                 <div class="btn-group">
-                  <button class="btn btn-outline-secondary btn-sm receipt-btn"
-                          onclick='printReceipt(<?= json_encode($payload, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) ?>)'>
+                <div class="btn-group">
+                  <button class="btn btn-outline-secondary btn-sm receipt-btn btnReceipt"
+                          title="พิมพ์ใบเสร็จ">
                     <i class="bi bi-printer"></i> พิมพ์
                   </button>
                   <?php if ($canEdit): ?>
@@ -537,35 +544,37 @@ if ($db_ok) {
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 // ===== Print Receipt =====
-function printReceipt(sale){
-  const saleDate = new Date(sale.sale_date).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' });
-  const payMap = { cash:'เงินสด', qr:'QR Code', transfer:'โอนเงิน', card:'บัตรเครดิต' };
-  const payLabel = payMap[(sale.payment_method||'').toLowerCase()] || 'ไม่ระบุ';
+// ===== [ใหม่] ตรรกะการเปิดลิงก์ใบเสร็จ (เหมือน committee/finance.php) =====
+const receiptRoutes = {
+  sale: code => `sales_receipt.php?code=${encodeURIComponent(code)}`
+  // หน้านี้ต้องการแค่ 'sale'
+};
 
-  const html = `
-  <html><head><title>ใบเสร็จ ${sale.sale_code}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
-  <style>
-    body{font-family:'Sarabun',sans-serif;width:300px;margin:0 auto;padding:10px;color:#000;font-size:14px}
-    h3,h4,p{margin:0;text-align:center} h3{font-size:1.1rem} h4{font-weight:normal;font-size:.9rem}
-    hr{border:none;border-top:1px dashed #000;margin:6px 0}
-    .row{display:flex;justify-content:space-between;margin-bottom:2px}
-    .total{font-weight:700;font-size:1.05rem}
-  </style></head><body>
-    <h3><?= htmlspecialchars($site_name) ?></h3><h4>ใบเสร็จรับเงิน</h4><hr>
-    <div class="row"><span>เลขที่:</span><span>${sale.sale_code}</span></div>
-    <div class="row"><span>วันที่:</span><span>${saleDate}</span></div><hr>
-    <div class="row"><span>${(sale.fuel_type||'-')}</span></div>
-    <div class="row"><span>${parseFloat(sale.liters).toFixed(2)} L @ ${parseFloat(sale.price_per_liter).toFixed(2)}</span><span>${parseFloat(sale.total_amount).toFixed(2)}</span></div>
-    <hr>
-    <div class="row total"><span>รวมทั้งสิ้น</span><span>${parseFloat(sale.net_amount).toFixed(2)} บาท</span></div><hr>
-    <div class="row"><span>ชำระโดย:</span><span>${payLabel}</span></div>
-    <div class="row"><span>พนักงาน:</span><span>${sale.employee_name || 'ไม่ระบุ'}</span></div>
-    <p style="margin-top:10px;">** ขอบคุณที่ใช้บริการ **</p>
-  </body></html>`;
-  const w = window.open('', '_blank'); w.document.write(html); w.document.close(); w.focus();
-  setTimeout(()=>{ w.print(); w.close(); }, 250);
-}
+document.body.addEventListener('click', function(e) {
+    // ใช้ .receipt-btn (คลาสเดิม) หรือ .btnReceipt (คลาสใหม่) ก็ได้
+    const receiptBtn = e.target.closest('.receipt-btn, .btnReceipt'); 
+    
+    if (receiptBtn) {
+        const tr = receiptBtn.closest('tr');
+        if (!tr) return; 
+
+        const type = tr.dataset.receiptType; // 'sale'
+        const code = tr.dataset.receiptCode;
+        let url = (tr.dataset.receiptUrl || '').trim();
+        
+        // ตรรกะสำรอง (เผื่อ data-receipt-url ไม่ได้ตั้งค่า)
+        if (!url && type && code && receiptRoutes[type]) {
+           url = receiptRoutes[type](code);
+        }
+        
+        if (url) {
+            window.open(url, '_blank'); // เปิดในแท็บใหม่
+        } else {
+            console.warn('ไม่พบ URL ใบเสร็จสำหรับแถวนี้', tr);
+            alert('ไม่พบ URL ใบเสร็จ');
+        }
+    }
+});
 
 // ===== Edit Modal logic =====
 const editModal = new bootstrap.Modal(document.getElementById('editSaleModal'));
