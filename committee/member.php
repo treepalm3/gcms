@@ -207,7 +207,7 @@ foreach ($members as $m) {
   <div class="offcanvas-body sidebar">
     <div class="side-brand mb-2"><h3><span>Committee</span></h3></div>
     <nav class="sidebar-menu">
-      <a href="committee_dashboard.php"><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
+      <a href="committee_dashboard.php"><i class="fa-solid fa-border-all"></i>แดชบอร์ด</a>
       <a href="finance.php"><i class="fa-solid fa-wallet"></i> การเงินและบัญชี</a>
       <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
       <a href="member.php" class="active"><i class="bi bi-people-fill"></i> สมาชิก</a>
@@ -223,7 +223,7 @@ foreach ($members as $m) {
     <aside class="col-lg-2 d-none d-lg-flex flex-column sidebar py-4">
       <div class="side-brand mb-3"><h3><span>Committee</span></h3></div>
       <nav class="sidebar-menu flex-grow-1">
-        <a href="committee_dashboard.php"><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
+        <a href="committee_dashboard.php"><i class="fa-solid fa-border-all"></i>แดชบอร์ด</a>
         <a href="finance.php"><i class="fa-solid fa-wallet"></i> การเงินและบัญชี</a>
         <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
         <a href="member.php" class="active"><i class="bi bi-people-fill"></i> สมาชิก</a>
