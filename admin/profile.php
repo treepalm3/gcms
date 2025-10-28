@@ -333,7 +333,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
     <div class="offcanvas-body sidebar">
       <div class="side-brand mb-2"><h3><span>Admin</span></h3></div>
       <nav class="sidebar-menu">
-        <a href="admin_dashboard.php"><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
+        <a href="admin_dashboard.php"><i class="fa-solid fa-border-all"></i>แดชบอร์ด</a>
         <a href="inventory.php"><i class="bi bi-fuel-pump-fill"></i>จัดการน้ำมัน</a>
         <a href="manager.php"><i class="bi bi-shield-lock-fill"></i> ผู้บริหาร</a>
         <a href="committee.php"><i class="fas fa-users-cog"></i> กรรมการ</a>
@@ -353,7 +353,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
       <div class="col-md-3 col-lg-2 d-none d-md-flex flex-column sidebar py-4">
         <div class="side-brand mb-3"><h3><span>Admin</span></h3></div>
         <nav class="sidebar-menu flex-grow-1">
-          <a href="admin_dashboard.php"><i class="fa-solid fa-border-all"></i>ภาพรวม</a>
+          <a href="admin_dashboard.php"><i class="fa-solid fa-border-all"></i>แดชบอร์ด</a>
           <a href="inventory.php"><i class="bi bi-fuel-pump-fill"></i>จัดการน้ำมัน</a>
           <a href="manager.php"><i class="bi bi-shield-lock-fill"></i> ผู้บริหาร</a>
           <a href="committee.php"><i class="fas fa-users-cog"></i> กรรมการ</a>
