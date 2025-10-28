@@ -324,7 +324,7 @@ $pay_th = ['cash'=>'เงินสด','qr'=>'QR Code','transfer'=>'โอน�
     <div class="offcanvas-body sidebar">
       <div class="side-brand mb-2"><h3><span>Member</span></h3></div>
       <nav class="sidebar-menu">
-        <a class="active" href="member_dashboard.php"><i class="fa-solid fa-id-card"></i>ภาพรวม</a>
+        <a class="active" href="member_dashboard.php"><i class="fa-solid fa-id-card"></i>แดชบอร์ด</a>
         <a href="bills.php"><i class="fa-solid fa-receipt"></i> ประวัติการซื้อ</a>
         <a href="points.php"><i class="fa-solid fa-star"></i> คะแนนสะสม</a>
         <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
@@ -339,7 +339,7 @@ $pay_th = ['cash'=>'เงินสด','qr'=>'QR Code','transfer'=>'โอน�
       <aside class="col-lg-2 d-none d-lg-flex flex-column sidebar py-4">
         <div class="side-brand mb-3"><h3><span>Member</span></h3></div>
         <nav class="sidebar-menu flex-grow-1">
-          <a class="active" href="member_dashboard.php"><i class="fa-solid fa-id-card"></i>ภาพรวม</a>
+          <a class="active" href="member_dashboard.php"><i class="fa-solid fa-id-card"></i>แดชบอร์ด</a>
           <a href="bills.php"><i class="fa-solid fa-receipt"></i> ประวัติการซื้อ</a>
           <a href="points.php"><i class="fa-solid fa-star"></i> คะแนนสะสม</a>
           <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
