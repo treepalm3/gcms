@@ -327,11 +327,11 @@ $utilization    = $total_capacity > 0 ? ($total_stock / $total_capacity) * 100 :
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#lots-panel" type="button" role="tab"><i class="bi bi-box-seam me-2"></i>ประวัติ Lot ต้นทุน</button>
                 </li>
-                <li class="nav-item" role="presentation">
+                <!-- <li class="nav-item" role="presentation">
                     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#price-panel" type="button" role="tab">
                         <i class="fa-solid fa-tags me-2"></i>จัดการราคา
                     </button>
-                </li>
+                </li> -->
             </ul>
 
             <div class="tab-content" id="inventoryTabContent">
