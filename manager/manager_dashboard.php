@@ -257,7 +257,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
         <a href="employee.php" ><i class="bi bi-person-badge-fill"></i>พนักงาน</a>
         <a href="member.php"><i class="bi bi-people-fill"></i> สมาชิก</a>
         <a href="finance.php"><i class="bi bi-wallet2"></i> การเงินและบัญชี</a>
-        <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
+        <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผลและเฉลี่ยคืน</a>
         <a href="report.php"><i class="fa-solid fa-chart-line"></i>รายงาน</a>
         <a href="setting.php"><i class="bi bi-gear-fill"></i> ตั้งค่า</a>
       </nav>
@@ -277,7 +277,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
           <a href="employee.php" ><i class="bi bi-person-badge-fill"></i>พนักงาน</a>
           <a href="member.php"><i class="bi bi-people-fill"></i> สมาชิก</a>
           <a href="finance.php"><i class="fa-solid fa-wallet"></i> การเงินและบัญชี</a>
-          <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
+          <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผลและเฉลี่ยคืน</a>
           <a href="setting.php"><i class="bi bi-gear-fill"></i> ตั้งค่า</a>
         </nav>
         <a class="logout" href="../index.php"><i class="fa-solid fa-right-from-bracket me-1"></i>ออกจากระบบ</a>

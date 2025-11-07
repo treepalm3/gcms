@@ -259,7 +259,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
       <nav class="sidebar-menu">
         <a href="committee_dashboard.php" class="active"><i class="fa-solid fa-border-all"></i>แดชบอร์ด</a>
         <a href="finance.php"><i class="fa-solid fa-wallet"></i> การเงินและบัญชี</a>
-        <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
+        <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผลและเฉลี่ยคืน</a>
         <a href="member.php"><i class="bi bi-people-fill"></i> สมาชิก</a>
         <a href="profile.php"><i class="fa-solid fa-user-gear"></i> โปรไฟล์</a>
       </nav>
@@ -275,7 +275,7 @@ $avatar_text = mb_substr($current_name, 0, 1, 'UTF-8');
         <nav class="sidebar-menu flex-grow-1">
           <a href="committee_dashboard.php" class="active"><i class="fa-solid fa-border-all"></i>แดชบอร์ด</a>
           <a href="finance.php"><i class="fa-solid fa-wallet"></i> การเงินและบัญชี</a>
-          <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผล</a>
+          <a href="dividend.php"><i class="fa-solid fa-gift"></i> ปันผลและเฉลี่ยคืน</a>
           <a href="member.php"><i class="bi bi-people-fill"></i> สมาชิก</a>
           <a href="profile.php"><i class="fa-solid fa-user-gear"></i> โปรไฟล์</a>
         </nav>
